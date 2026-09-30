@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Personal Tracker</title>
+<style>
+  :root { --bg:#f6f5f2; --card:#fff; --text:#222; --muted:#777; --accent:#3b6fd8; --border:#e3e1dc; --error:#c0392b; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1b1b1d; --card:#252528; --text:#eee; --muted:#999; --accent:#7aa2f7; --border:#38383c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
+  h1 { margin: 0 0 4px; }
+  h2 { font-size: 1.1rem; margin: 28px 0 10px; }
+  .muted { color: var(--muted); font-size: .9rem; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .title { font-weight: 600; flex: 1; min-width: 160px; }
+  input, select, button { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
+  input[type=number] { width: 90px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #error { color: var(--error); min-height: 1.2em; }
+  summary { cursor: pointer; margin: 16px 0 8px; font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Leeslijst</h1>
+  <p class="muted" id="week"></p>
+  <p id="error"></p>
+
+  <h2>Nieuwe serie</h2>
+  <form id="add-form" class="card row">
+    <input name="title" placeholder="Titel" required>
+    <select name="kind">
+      <option value="manhwa">Manhwa</option>
+      <option value="novel">Novel</option>
+    </select>
+    <input name="source" placeholder="Site" required>
+    <input name="start_chapter" type="number" step="0.1" min="0" value="0">
+    <button class="primary">Toevoegen</button>
+  </form>
+
+  <h2>Aan het lezen</h2>
+  <div id="reading"></div>
+
+  <details><summary>On-Hold</summary><div id="on_hold"></div></details>
+  <details><summary>Completed</summary><div id="completed"></div></details>
+  <details><summary>Dropped</summary><div id="dropped"></div></details>
+</main>
+
+<script>
+const STATUSES = { reading: "Reading", on_hold: "On-Hold", completed: "Completed", dropped: "Dropped" };
+
+// ---- Praten met de API ----
+
+async function api(path, body) {
+  const options = body
+    ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+    : {};
+  const response = await fetch(path, options);
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Ongeldige invoer");
+  }
+  return data;
+}
+
+async function run(action) {
+  document.getElementById("error").textContent = "";
+  try {
+    await action();
+    await refresh();
+  } catch (err) {
+    document.getElementById("error").textContent = err.message;
+  }
+}
+
+// ---- Onderdelen van de pagina bouwen ----
+
+function el(tag, props = {}, ...children) {
+  const node = Object.assign(document.createElement(tag), props);
+  node.append(...children);
+  return node;
+}
+
+function seriesCard(s) {
+  const base = `/reading/series/${s.series_id}`;
+  const chapter = el("input", { type: "number", step: "0.1", min: "0", value: s.current_chapter });
+  const status = el("select", {},
+    ...Object.entries(STATUSES).map(([value, label]) =>
+      el("option", { value, textContent: label, selected: value === s.status })));
+  status.onchange = () => run(() => api(`${base}/status`, { status: status.value }));
+
+  return el("div", { className: "card row" },
+    el("span", { className: "title", textContent: s.title }),
+    el("span", { className: "muted", textContent: `${s.kind} · ${s.source}` }),
+    el("button", {
+      textContent: "+1",
+      onclick: () => run(() => api(`${base}/progress`, { chapter: Math.floor(s.current_chapter) + 1 })),
+    }),
+    chapter,
+    el("button", {
+      textContent: "Opslaan",
+      onclick: () => run(() => api(`${base}/progress`, { chapter: Number(chapter.value) })),
+    }),
+    status,
+  );
+}
+
+function fill(id, items, emptyText) {
+  const children = items.length
+    ? items.map(seriesCard)
+    : [el("p", { className: "muted", textContent: emptyText })];
+  document.getElementById(id).replaceChildren(...children);
+}
+
+// ---- Alles opnieuw ophalen en tonen ----
+
+async function refresh() {
+  const [current, library, activity] = await Promise.all([
+    api("/reading/current"),
+    api("/reading/library"),
+    api("/reading/activity"),
+  ]);
+
+  fill("reading", current, "Je bent op dit moment niets aan het lezen.");
+  for (const status of ["on_hold", "completed", "dropped"]) {
+    const items = library.filter((s) => s.status === status);
+    fill(status, items, "Leeg.");
+    document.getElementById(status).previousElementSibling.textContent =
+      `${STATUSES[status]} (${items.length})`;
+  }
+
+  const cutoff = new Date(Date.now() - 6 * 864e5).toLocaleDateString("sv");
+  const lastWeek = Object.entries(activity.per_day)
+    .filter(([day]) => day >= cutoff)
+    .reduce((sum, [, n]) => sum + n, 0);
+  document.getElementById("week").textContent =
+    `${lastWeek} hoofdstukken gelezen in de laatste 7 dagen`;
+}
+
+document.getElementById("add-form").onsubmit = (event) => {
+  event.preventDefault();
+  const form = event.target;
+  const data = Object.fromEntries(new FormData(form));
+  data.start_chapter = Number(data.start_chapter);
+  run(async () => {
+    await api("/reading/series", data);
+    form.reset();
+  });
+};
+
+refresh();
+</script>
+</body>
+</html>

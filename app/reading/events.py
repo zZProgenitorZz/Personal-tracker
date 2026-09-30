@@ -1,0 +1,44 @@
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from enum import Enum
+
+
+class Status(str, Enum):
+    READING = "reading"
+    ON_HOLD = "on_hold"
+    COMPLETED = "completed"
+    DROPPED = "dropped"
+
+
+class Kind(str, Enum):
+    NOVEL = "novel"
+    MANHWA = "manhwa"
+
+def now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+@dataclass(frozen=True)
+class SeriesStarted:
+    series_id: str
+    title: str
+    kind: Kind
+    source: str
+    start_chapter: int
+    at: datetime = field(default_factory=now)
+
+
+@dataclass(frozen=True)
+class ProgressLogged:
+    series_id: str
+    chapter: int
+    previous_chapter: int
+    at: datetime = field(default_factory=now)
+
+
+@dataclass(frozen=True)
+class StatusChanged:
+    series_id: str
+    from_status: Status
+    to_status: Status
+    at: datetime = field(default_factory=now)
