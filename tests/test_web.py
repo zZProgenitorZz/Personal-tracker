@@ -76,4 +76,4 @@ def test_removing_series_via_web():
     response = client.delete(f"/ui/series/{series_id(client)}")
     assert response.headers["HX-Trigger"] == "reading-changed"
     assert "Solo Leveling" not in client.get("/ui/library/grid").text
-    assert "toast-error" in add_series(client).text
+    assert "toast-error" not in add_series(client).text  # na verwijderen mag hij terug

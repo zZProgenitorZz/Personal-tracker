@@ -44,10 +44,7 @@ class ReadingCommandHandler:
 
     def handle(self, command) -> list:
         if isinstance(command, StartSeries):
-            existing = self._library.find_by_title(command.title)
-            if existing and self._library.get(existing.series_id) is None:
-                raise DomainError(f"'{existing.title}' is eerder verwijderd en kan niet opnieuw worden toegevoegd")
-            if existing:
+            if self._library.find_by_title(command.title):
                 raise DomainError(f"'{command.title.strip()}' staat al in je bibliotheek")
             series = ReadingSeries([])
             events = series.start(

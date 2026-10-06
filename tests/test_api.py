@@ -1,3 +1,5 @@
+import os
+
 from fastapi.testclient import TestClient
 
 from app.main import create_app
@@ -63,3 +65,21 @@ def test_remove_series():
     assert client.delete(f"/reading/series/{series_id}").status_code == 204
     assert client.get("/reading/library").json() == []
     assert client.delete(f"/reading/series/{series_id}").status_code == 404
+
+
+def test_settings_are_read_from_env_file(tmp_path, monkeypatch):
+    # Eerst zetten en dan weghalen, zodat monkeypatch de oude toestand na de test terugzet.
+    monkeypatch.setenv("GOOGLE_BOOKS_API_KEY", "tijdelijk")
+    monkeypatch.delenv("GOOGLE_BOOKS_API_KEY")
+    env_file = tmp_path / ".env"
+    env_file.write_text("GOOGLE_BOOKS_API_KEY=uit-bestand\n", encoding="utf-8")
+    create_app(":memory:", env_file=env_file)
+    assert os.environ["GOOGLE_BOOKS_API_KEY"] == "uit-bestand"
+
+
+def test_real_environment_wins_over_env_file(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOOGLE_BOOKS_API_KEY", "uit-terminal")
+    env_file = tmp_path / ".env"
+    env_file.write_text("GOOGLE_BOOKS_API_KEY=uit-bestand\n", encoding="utf-8")
+    create_app(":memory:", env_file=env_file)
+    assert os.environ["GOOGLE_BOOKS_API_KEY"] == "uit-terminal"

@@ -2,6 +2,7 @@ import tempfile
 from pathlib import Path
 
 import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -17,6 +18,9 @@ from .reading.projections import LibraryProjection, ReadingActivityProjection
 from .reading.web import create_reading_web_router
 from .web import STATIC, create_settings_router
 
+# Instellingen zoals GOOGLE_BOOKS_API_KEY. Staat niet in git (.gitignore).
+ENV_FILE = Path(__file__).parent.parent / ".env"
+
 EVENT_TYPES = [SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved]
 
 
@@ -24,9 +28,12 @@ def create_app(
     db_path: str = "data/tracker.db",
     covers_dir: str | Path | None = None,
     http_client: httpx.Client | None = None,
+    env_file: Path = ENV_FILE,
 ) -> FastAPI:
     """covers_dir staat standaard naast de database (data/covers). Tests geven
-    een eigen map en een nep-http_client mee, zodat er niets naar buiten gaat."""
+    een eigen map en een nep-http_client mee, zodat er niets naar buiten gaat.
+    Instellingen uit env_file gelden alleen als ze niet al in de omgeving staan."""
+    load_dotenv(env_file, override=False)
     store = EventStore(db_path, EVENT_TYPES)
     scratch = None
     if covers_dir is None and db_path == ":memory:":

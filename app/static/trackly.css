@@ -98,14 +98,24 @@ code {
   letter-spacing: -.02em;
 }
 .brand-mark {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--purple), var(--teal));
-  box-shadow: 0 6px 20px -6px rgba(139, 92, 246, .8);
+  display: block;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  overflow: hidden;
+  border-radius: 22%;  /* zelfde ronding als het icoon zelf */
+  background: #0d0717;
+  box-shadow: 0 6px 20px -6px rgba(139, 92, 246, .8), 0 0 0 1px rgba(226, 180, 83, .18);
 }
+/* Inzoomen op de ring: klein weergegeven is de rand van het icoon vooral achtergrond. */
+.brand-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: scale(1.32);
+  transition: transform .4s var(--ease);
+}
+.brand:hover .brand-mark img { transform: scale(1.32) rotate(-12deg); }
 
 .nav-links { display: flex; gap: 4px; margin: 0 auto; }
 .nav-links a {

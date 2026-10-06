@@ -32,6 +32,9 @@ def fake_internet(request: httpx.Request) -> httpx.Response:
                  "synonyms": ["Solo Levelling"], "coverImage": {"extraLarge": SOLO_2}},
             ]
         return httpx.Response(200, json={"data": {"Page": {"media": found}}})
+    if request.url.host == "openlibrary.org":
+        found = [{"title": "Shadow Slave, Book 1", "cover_i": 151}] if "shadow" in request.url.params["title"].lower() else []
+        return httpx.Response(200, json={"docs": found})
     if request.url.path.endswith(".jpg") or request.url.path.endswith(".png"):
         return httpx.Response(200, content=png(), headers={"Content-Type": "image/png"})
     return httpx.Response(200, text="<html>geen plaatje</html>", headers={"Content-Type": "text/html"})
@@ -64,6 +67,18 @@ def test_search_shows_first_match(client):
     assert SOLO_1 in response.text
     assert "1 of 2" in response.text
     assert 'alt="Cover of Solo Leveling"' in response.text
+
+
+def test_search_finds_webnovel_in_another_source(client):
+    # Niet op AniList, wel op Open Library; de andere bronnen falen hier.
+    response = client.get("/ui/covers/search", params={"title": "Shadow Slave"})
+    assert "https://covers.openlibrary.org/b/id/151-L.jpg" in response.text
+    assert "Open Library · 1 of 1" in response.text
+
+
+def test_saving_a_cover_from_another_source(client):
+    add(client, title="Shadow Slave", cover_url="https://covers.openlibrary.org/b/id/151-L.jpg")
+    assert library(client)[0]["cover"].endswith(".webp")
 
 
 def test_search_cycles_through_results(client):

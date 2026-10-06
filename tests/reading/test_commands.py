@@ -54,11 +54,23 @@ def test_unknown_series_is_rejected():
         handler.handle(LogProgress("bestaat-niet", 5))
     assert store.load_all() == []
 
-def test_removed_title_cannot_be_added_again():
+def test_removed_title_can_be_added_again_as_new_series():
     handler, store = make_handler()
-    series_id = start_solo_leveling(handler)
-    handler.handle(RemoveSeries(series_id))
+    old_id = start_solo_leveling(handler)
+    handler.handle(RemoveSeries(old_id))
+
+    [started] = handler.handle(StartSeries(" solo leveling", Kind.MANHWA, "asura", 1))
+
+    assert started.series_id != old_id
+    assert [type(e) for e in store.load_all()] == [SeriesStarted, SeriesRemoved, SeriesStarted]
+    assert ReadingSeries(store.load_stream(old_id)).removed  # de oude blijft verwijderd
+
+
+def test_title_in_library_still_cannot_be_added_twice():
+    handler, _ = make_handler()
+    old_id = start_solo_leveling(handler)
+    handler.handle(RemoveSeries(old_id))
+    start_solo_leveling(handler)
 
     with pytest.raises(DomainError):
-        handler.handle(StartSeries(" solo leveling", Kind.MANHWA, "asura", 1))
-    assert [type(e) for e in store.load_all()] == [SeriesStarted, SeriesRemoved]
+        start_solo_leveling(handler)

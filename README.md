@@ -17,6 +17,8 @@ pip install -r requirements.txt
 uvicorn app.main:create_app --factory --reload
 ```
 
+Instellingen staan in `.env` in de projectmap (niet in git; `.env.example` laat zien wat erin kan). Optioneel is `GOOGLE_BOOKS_API_KEY`, voor betere covers uit Google Books; zonder sleutel geldt een krap gedeeld quotum en valt Google vaak af. Een waarde die al in de omgeving staat, gaat voor op `.env`.
+
 - Webpagina: http://127.0.0.1:8000
 - API-documentatie (Swagger): http://127.0.0.1:8000/docs
 - Tests draaien: `python -m pytest`
@@ -67,7 +69,8 @@ app/
     aggregate.py       ReadingSeries + DomainError
     commands.py        StartSeries, LogProgress, ChangeStatus, RemoveSeries + ReadingCommandHandler
     projections.py     LibraryProjection, ReadingActivityProjection
-    cover_search.py    covers zoeken bij AniList, met fuzzy matching op titel
+    cover_search.py    covers zoeken bij alle bronnen tegelijk, fuzzy matching, cache
+    cover_sources.py   de bronnen: AniList, MangaUpdates, Open Library, Google Books
     api.py             /reading endpoints (JSON)
     web.py             /ui endpoints (HTML-fragmenten voor htmx)
 tests/
@@ -95,15 +98,23 @@ Regels:
 3. Een lager hoofdstuk loggen mag (correctie of herlezen), maar telt niet mee in ReadingActivity.
 4. Een negatief hoofdstuk wordt geweigerd.
 5. Een status wijzigen naar dezelfde status wordt geweigerd.
-6. Een verwijderde serie krijgt geen voortgang of status meer, en haar titel kan niet opnieuw worden toegevoegd. Gelezen hoofdstukken blijven meetellen in de statistieken.
+6. Een verwijderde serie krijgt geen voortgang of status meer. Haar titel is daarna weer vrij: opnieuw toevoegen maakt een nieuwe serie (nieuwe `series_id`) die opnieuw begint. Gelezen hoofdstukken van de oude serie blijven meetellen in de statistieken.
 7. Een cover is optioneel. Een cover die niet lukt (geen afbeelding, te groot, netwerkfout) blokkeert het opslaan van de serie nooit.
 
 Hoofdstukken zijn `float`, zodat hoofdstukken als 45.5 mogelijk zijn.
 
 ### Covers
 
-- Bij "Add series" kun je een cover zoeken bij [AniList](https://anilist.co) (type MANGA, dus ook manhwa en light novels), zelf een afbeelding uploaden of een link plakken. Zoeken is een hulp-endpoint (`GET /ui/covers/search`), geen command of event.
-- Zoeken gebeurt in drie stappen: de titel zoals getypt, dan genormaliseerd, dan op de langste losse woorden (AniList zelf vindt niets bij een typfout). De resultaten worden lokaal vergeleken met alle titels van AniList (rapidfuzz). De drempel `COVER_MATCH_THRESHOLD` en `FALLBACK_WORDS` staan bovenaan `app/reading/cover_search.py`. Resultaten worden 10 minuten per titel in het geheugen bewaard.
+- Bij "Add series" kun je een cover zoeken, zelf een afbeelding uploaden of een link plakken. Zoeken is een hulp-endpoint (`GET /ui/covers/search`), geen command of event.
+- Bronnen (`app/reading/cover_sources.py`), allemaal tegelijk bevraagd:
+  - [AniList](https://anilist.co): manga, manhwa, light novels
+  - [MangaUpdates](https://www.mangaupdates.com): ook webnovels (type "Novel")
+  - [Open Library](https://openlibrary.org): boeken, ook webnovels in print (bijvoorbeeld Shadow Slave)
+  - [Google Books](https://books.google.com): optioneel met `GOOGLE_BOOKS_API_KEY` in `.env`; te kleine thumbnails (onder `MIN_SOURCE_SIZE`) worden overgeslagen
+- Een bron is een functie `bron(client, zoekterm) -> list[SourceResult]` met `@cover_source("Naam")` erboven. Toevoegen of weghalen = de lijst `SOURCES` aanpassen.
+- Elke bron zoekt in drie stappen en stopt zodra iets past: de titel zoals getypt, genormaliseerd, en de langste losse woorden (bronnen vinden zelf niets bij een typfout). Alle resultaten worden samen vergeleken met rapidfuzz, waarbij achtervoegsels als "(Novel)" of ", Book 1" niet meetellen, en gesorteerd op beste match; dubbele URL's verdwijnen.
+- Faalt of hangt een bron (deadline `SOURCE_DEADLINE`), dan tonen we de andere. Alleen als alle bronnen falen, volgt een foutmelding.
+- Instelbaar bovenaan `app/reading/cover_search.py`: `COVER_MATCH_THRESHOLD`, `FALLBACK_WORDS`, `SOURCE_DEADLINE`, `MIN_SOURCE_SIZE`. Resultaten worden 10 minuten per titel bewaard, maar maar 1 minuut als een bron faalde.
 - Bij het opslaan wordt de cover gedownload en met Pillow gecontroleerd, rechtgezet (EXIF), vanuit het midden bijgesneden tot 300×450 (2:3) en als WebP met een UUID-naam in `data/covers/` gezet. Alleen http/https, maximaal 5 MB, timeout 10 s. Alleen de bestandsnaam staat in het event.
 - Een cover van een bestaande serie wijzigen kan nog niet; daar is een apart event voor nodig (bijvoorbeeld `SeriesCoverChanged`).
 

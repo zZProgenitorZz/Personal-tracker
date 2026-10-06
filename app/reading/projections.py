@@ -20,8 +20,6 @@ class LibraryEntry:
 class LibraryProjection:
     def __init__(self):
         self._entries: dict[str, LibraryEntry] = {}
-        # Verwijderde series blijven bewaard, zodat hun titel bezet blijft.
-        self._removed: dict[str, LibraryEntry] = {}
 
     def apply(self, event) -> None:
         if isinstance(event, SeriesStarted):
@@ -38,7 +36,7 @@ class LibraryProjection:
             entry.status = event.to_status
             entry.updated_at = event.at
         elif isinstance(event, SeriesRemoved):
-            self._removed[event.series_id] = self._entries.pop(event.series_id)
+            del self._entries[event.series_id]  # de titel is daarmee weer vrij
 
     def all(self) -> list[LibraryEntry]:
         return sorted(self._entries.values(), key=lambda e: e.title.lower())
@@ -52,8 +50,7 @@ class LibraryProjection:
 
     def find_by_title(self, title: str) -> LibraryEntry | None:
         wanted = title.strip().lower()
-        everything = [*self._entries.values(), *self._removed.values()]
-        return next((e for e in everything if e.title.lower() == wanted), None)
+        return next((e for e in self._entries.values() if e.title.lower() == wanted), None)
 
     def get(self, series_id: str) -> LibraryEntry | None:
         return self._entries.get(series_id)

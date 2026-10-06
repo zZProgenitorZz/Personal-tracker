@@ -8,6 +8,6 @@
 <div id="cover-caption" class="cover-caption{% if error %} is-error{% endif %}" hx-swap-oob="true" aria-live="polite">
   {%- if pick %}
   <b title="{{ pick.title }}">{{ pick.title }}</b>
-  <span>{{ position }} of {{ total }} · {{ pick.score|round|int }}% match{% if total > 1 %} · click again for the next{% endif %}</span>
+  <span>{{ pick.source }} · {{ position }} of {{ total }} · {{ pick.score|round|int }}% match{% if total > 1 %} · click again for the next{% endif %}</span>
   {%- else %}{{ error }}{% endif -%}
 </div>

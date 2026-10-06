@@ -117,8 +117,28 @@ def test_removed_series_leaves_library_but_keeps_activity():
 
     assert library.all() == []
     assert library.get(series_id) is None
-    assert library.find_by_title("solo leveling") is not None
+    assert library.find_by_title("solo leveling") is None  # titel is weer vrij
     assert activity.total_chapters() == 10
+
+
+def test_re_added_series_starts_fresh_but_history_still_counts():
+    handler, library, store = make_app()
+    activity = ReadingActivityProjection()
+    store.subscribe(activity.apply)
+    old_id = start(handler, "Solo Leveling")
+    handler.handle(LogProgress(old_id, 11))
+    handler.handle(RemoveSeries(old_id))
+
+    new_id = start(handler, "Solo Leveling")
+
+    [entry] = library.all()
+    assert entry.series_id == new_id and entry.current_chapter == 1
+    assert activity.total_chapters() == 10
+
+    rebuilt = LibraryProjection()
+    for event in store.load_all():
+        rebuilt.apply(event)
+    assert rebuilt.all() == library.all()
 
 
 def test_old_series_started_without_cover_still_loads():
