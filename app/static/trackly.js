@@ -185,18 +185,35 @@ document.addEventListener("keydown", (event) => {
 });
 
 
-// ---- Bevestigen voor iets onomkeerbaars ----
+// ---- Bevestigen voor iets ingrijpends ----
 // Een knop met hx-confirm="<naam>" vraagt eerst om bevestiging in een eigen
-// venster. Annuleren is de standaard: Enter of Escape verwijdert niets.
+// venster; data-confirm-kind kiest de tekst. Annuleren is de standaard:
+// Enter of Escape doet niets.
+
+const CONFIRM_TEXTS = {
+  remove: {
+    title: (name) => `Remove ${name}?`,
+    body: "The series leaves your library, <strong>including its progress</strong>. You can add it again later, but it starts over as a new series. Chapters you've read still count in your stats.",
+    action: "Remove",
+  },
+  restore: {
+    title: (date) => `Restore the backup from ${date}?`,
+    body: "Your library goes back to how it was then. <strong>Anything you logged after that disappears from the app.</strong> Progen first saves a backup of how things are now, so you can always go back.",
+    action: "Restore",
+  },
+};
 
 let confirmed = null;
 
 document.addEventListener("htmx:confirm", (event) => {
   if (!event.detail.question) return;
   event.preventDefault();
-  const d = document.getElementById("confirm-dialog");
-  d.querySelector("[data-confirm-name]").textContent = event.detail.question;
+  const text = CONFIRM_TEXTS[event.detail.elt.dataset.confirmKind] || CONFIRM_TEXTS.remove;
+  el("confirm-title").textContent = text.title(event.detail.question);
+  el("confirm-body").innerHTML = text.body;  // vaste tekst hierboven, geen invoer van buiten
+  el("confirm-action").textContent = text.action;
   confirmed = () => event.detail.issueRequest(true);
+  const d = el("confirm-dialog");
   d.returnValue = "";
   d.showModal();
 });

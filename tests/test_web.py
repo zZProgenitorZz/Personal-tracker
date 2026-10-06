@@ -77,3 +77,26 @@ def test_removing_series_via_web():
     assert response.headers["HX-Trigger"] == "reading-changed"
     assert "Solo Leveling" not in client.get("/ui/library/grid").text
     assert "toast-error" not in add_series(client).text  # na verwijderen mag hij terug
+
+
+def test_backup_and_restore_via_settings(tmp_path):
+    client = TestClient(create_app(":memory:", backup_dir=tmp_path / "backups"))
+    add_series(client, "Shadow Slave")
+
+    response = client.post("/ui/backups")
+    assert "toast-error" not in response.text
+    assert "backups-changed" in response.headers["HX-Trigger"]
+    [name] = [p.name for p in (tmp_path / "backups").iterdir()]
+
+    add_series(client, "Later toegevoegd")
+    page = client.get("/ui/settings").text
+    assert name in page and "Back up now" in page
+
+    response = client.post(f"/ui/backups/{name}/restore")
+    assert "reading-changed" in response.headers["HX-Trigger"]
+    assert [s["title"] for s in client.get("/reading/library").json()] == ["Shadow Slave"]
+
+
+def test_restoring_unknown_backup_gives_error_toast(tmp_path):
+    client = TestClient(create_app(":memory:", backup_dir=tmp_path / "backups"))
+    assert "toast-error" in client.post("/ui/backups/bestaat-niet/restore").text

@@ -19,6 +19,10 @@ class LibraryEntry:
 
 class LibraryProjection:
     def __init__(self):
+        self.reset()
+
+    def reset(self) -> None:
+        """Leeg beginnen, bijvoorbeeld om opnieuw op te bouwen na het terugzetten van een back-up."""
         self._entries: dict[str, LibraryEntry] = {}
 
     def apply(self, event) -> None:
@@ -58,6 +62,9 @@ class LibraryProjection:
 
 class ReadingActivityProjection:
     def __init__(self):
+        self.reset()
+
+    def reset(self) -> None:
         self._per_day: dict[date, float] = defaultdict(float)
 
     def apply(self, event) -> None:

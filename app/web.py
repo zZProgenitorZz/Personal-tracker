@@ -11,7 +11,10 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.templating import Jinja2Templates
 
+from .backup import KEEP_BACKUPS, BackupError, Backups, is_cloud_synced
+
 STATIC = Path(__file__).parent / "static"
+BACKUPS_CHANGED = "backups-changed"
 templates = Jinja2Templates(directory=STATIC / "templates")
 
 
@@ -42,7 +45,13 @@ def initials(title: str) -> str:
     return "".join(w[0] for w in main[:2]).upper() or "?"
 
 
-templates.env.filters.update(chapter=chapter, ago=ago, hue=hue, initials=initials)
+def nice_date(moment: datetime, seconds: bool = False) -> str:
+    """'Mon 6 Oct 2026 · 21:05' (of '21:05:33' met seconds=True)"""
+    time = f"{moment:%H:%M:%S}" if seconds else f"{moment:%H:%M}"
+    return f"{moment:%a} {moment.day} {moment:%b %Y} · {time}"
+
+
+templates.env.filters.update(chapter=chapter, ago=ago, hue=hue, initials=initials, nice_date=nice_date)
 
 # Lijn-iconen (stijl van Lucide), te gebruiken via de macro ui.icon(naam).
 ICONS = {
@@ -88,12 +97,41 @@ def toast(request: Request, message: str, *, error: bool = False, changed: str |
 
 # ---- Pagina's die niet bij één domein horen ----
 
-def create_settings_router(db_path: str, series_count) -> APIRouter:
+def create_settings_router(db_path: str, series_count, backups: Backups) -> APIRouter:
     router = APIRouter(prefix="/ui", include_in_schema=False)
+
+    def backup_context() -> dict:
+        return {
+            "backups": backups.list(), "backup_dir": str(backups.directory),
+            "synced": is_cloud_synced(backups.directory), "keep": KEEP_BACKUPS,
+        }
 
     @router.get("/settings")
     def settings(request: Request):
         location = db_path if db_path == ":memory:" else str(Path(db_path).resolve())
-        return render(request, "settings.html", db_path=location, series_count=series_count())
+        return render(request, "settings.html", db_path=location, series_count=series_count(), **backup_context())
+
+    @router.get("/backups")
+    def backup_overview(request: Request):
+        return render(request, "_backups.html", **backup_context())
+
+    @router.post("/backups")
+    def make_backup(request: Request):
+        try:
+            info = backups.create()
+        except BackupError as exc:
+            return toast(request, f"Backup failed: {exc}", error=True)
+        return toast(request, f"Backup made · {info.events} events, {info.covers} covers", changed=BACKUPS_CHANGED)
+
+    @router.post("/backups/{name}/restore")
+    def restore_backup(request: Request, name: str):
+        try:
+            info = backups.restore(name)
+        except BackupError as exc:
+            return toast(request, f"Restore failed: {exc}", error=True)
+        return toast(
+            request, f"Restored the backup from {nice_date(info.created)}",
+            changed=f"reading-changed, {BACKUPS_CHANGED}",
+        )
 
     return router

@@ -17,13 +17,29 @@ pip install -r requirements.txt
 uvicorn app.main:create_app --factory --reload
 ```
 
-Instellingen staan in `.env` in de projectmap (niet in git; `.env.example` laat zien wat erin kan). Optioneel is `GOOGLE_BOOKS_API_KEY`, voor betere covers uit Google Books; zonder sleutel geldt een krap gedeeld quotum en valt Google vaak af. Een waarde die al in de omgeving staat, gaat voor op `.env`.
+Instellingen staan in `.env` in de projectmap (niet in git). Begin met een kopie van `.env.example`: `copy .env.example .env`. Beide instellingen zijn optioneel:
+
+```
+GOOGLE_BOOKS_API_KEY=...          # betere covers uit Google Books (zonder sleutel valt Google vaak af)
+PROGEN_BACKUP_DIR=D:\Backups\Progen  # andere back-upmap dan OneDrive\Progen-backups
+```
+
+Paden zonder aanhalingstekens schrijven. Een waarde die al in de omgeving staat, gaat voor op `.env`.
 
 - Webpagina: http://127.0.0.1:8000
 - API-documentatie (Swagger): http://127.0.0.1:8000/docs
 - Tests draaien: `python -m pytest`
 
-Data staat in `data/tracker.db`. **Dit bestand is de enige bron van waarheid**: alle read models worden er bij het opstarten uit opgebouwd. Covers staan ernaast in `data/covers/`. Maak van allebei regelmatig een back-up.
+Data staat in `data/tracker.db`. **Dit bestand is de enige bron van waarheid**: alle read models worden er bij het opstarten uit opgebouwd. Covers staan ernaast in `data/covers/`. Geen van beide staat in git; maak dus back-ups (zie hieronder).
+
+### Back-ups
+
+- **Maken:** Settings > *Back up now*, of `python -m app.backup` (werkt ook als de app niet draait; `--list` toont de back-ups).
+- **Waar:** standaard `OneDrive\Progen-backups\`, zodat er ook een kopie in de cloud staat. Een andere map kies je met `PROGEN_BACKUP_DIR` in `.env`.
+- **Wat:** per back-up een map met datum en tijd als naam (`2026-10-06_21-05-33`) met `tracker.db`, `covers/` en `info.json`. De kopie wordt gemaakt met de back-up-API van SQLite (veilig terwijl de server draait) en daarna gecontroleerd; een mislukte back-up laat niets achter.
+- **Hoeveel:** de 10 nieuwste blijven (`KEEP_BACKUPS` in `app/backup.py`); oudere worden verwijderd.
+- **Terugzetten:** Settings > *Restore* bij de gewenste back-up. Progen maakt eerst automatisch een back-up van de huidige stand ("saved automatically before a restore"), zodat ook terugzetten terug te draaien is. Daarna worden de events vervangen, ontbrekende covers teruggezet en de read models opnieuw opgebouwd.
+- **Met de hand terugzetten** (als de app niet start): stop de server, kopieer `tracker.db` en `covers/` uit de back-upmap naar `data/` en start de server opnieuw.
 
 ---
 
@@ -58,6 +74,7 @@ Principes:
 app/
   main.py              koppelt alles: event store, projecties, handlers, routers
   eventstore.py        SQLite event store (append, load_stream, load_all, subscribe)
+  backup.py            back-ups maken, bewaren (10 nieuwste) en terugzetten; ook los te draaien
   covers.py            covers downloaden, controleren en als 300×450 WebP bewaren (gedeeld)
   web.py               gedeeld voor de webpagina: templates, filters, toasts
   static/
@@ -162,7 +179,7 @@ Eerst handmatig invoeren; automatisch importeren komt later (zie punt 5).
 
 - [ ] Een API-key of wachtwoord toevoegen voordat de app buiten het thuisnetwerk bereikbaar wordt.
 - [ ] Een plek kiezen om hem te laten draaien (Raspberry Pi thuis, of een kleine VPS).
-- [ ] Automatische back-up van `data/tracker.db`.
+- [x] Back-ups van `data/tracker.db` en covers, met terugzetten (Settings).
 
 ### Ideeën voor later
 

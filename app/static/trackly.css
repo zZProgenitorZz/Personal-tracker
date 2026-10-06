@@ -868,6 +868,41 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
 }
 .badge-on { color: var(--teal-hi); background: rgba(45, 212, 191, .1); box-shadow: inset 0 0 0 1px rgba(45, 212, 191, .3); }
 
+/* Back-ups */
+.backup-where { margin: -6px 0 18px; line-height: 1.6; }
+.backup-where code { font-size: 12px; }
+.warn { color: var(--amber); }
+.backup-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.backup {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 12px 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .02);
+  transition: border-color .2s, background .2s;
+}
+.backup:hover { border-color: var(--border-strong); background: rgba(255, 255, 255, .035); }
+.backup-icon {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .05);
+  color: var(--faint);
+}
+.backup.is-latest .backup-icon { background: rgba(45, 212, 191, .12); color: var(--teal); }
+.backup-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.backup-text b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.backup-text span { color: var(--faint); font-size: 13px; }
+@media (max-width: 520px) {
+  .backup { flex-wrap: wrap; }
+  .backup .btn { margin-left: 50px; }
+}
+
 
 /* ---- Toasts ---- */
 

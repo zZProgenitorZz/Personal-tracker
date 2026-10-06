@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .backup import Backups, default_backup_dir
 from .covers import CoverStore
 from .eventstore import EventStore
 from .reading.aggregate import DomainError
@@ -29,18 +30,22 @@ def create_app(
     covers_dir: str | Path | None = None,
     http_client: httpx.Client | None = None,
     env_file: Path = ENV_FILE,
+    backup_dir: str | Path | None = None,
 ) -> FastAPI:
     """covers_dir staat standaard naast de database (data/covers). Tests geven
     een eigen map en een nep-http_client mee, zodat er niets naar buiten gaat.
     Instellingen uit env_file gelden alleen als ze niet al in de omgeving staan."""
     load_dotenv(env_file, override=False)
     store = EventStore(db_path, EVENT_TYPES)
-    scratch = None
-    if covers_dir is None and db_path == ":memory:":
-        scratch = tempfile.TemporaryDirectory(prefix="progen-covers-")  # weg zodra de app weg is
-        covers_dir = scratch.name
-    elif covers_dir is None:
-        covers_dir = Path(db_path).parent / "covers"
+    if db_path == ":memory:":
+        # Tests: covers en back-ups in een tijdelijke map, nooit in data/ of je OneDrive.
+        scratch = tempfile.TemporaryDirectory(prefix="progen-")  # weg zodra de app weg is
+        covers_dir = covers_dir or Path(scratch.name) / "covers"
+        backup_dir = backup_dir or Path(scratch.name) / "backups"
+    else:
+        scratch = None
+        covers_dir = covers_dir or Path(db_path).parent / "covers"
+        backup_dir = backup_dir or default_backup_dir()
     http = http_client or httpx.Client(headers={"User-Agent": "Progen personal tracker"})
     covers = CoverStore(Path(covers_dir), http)
     cover_search = CoverSearch(http)
@@ -49,11 +54,18 @@ def create_app(
     activity = ReadingActivityProjection()
     projections = [library, activity]
 
-    for event in store.load_all():
+    def rebuild() -> None:
+        """Read models opnieuw opbouwen uit alle events (bij start en na terugzetten)."""
         for projection in projections:
-            projection.apply(event)
+            projection.reset()
+        for event in store.load_all():
+            for projection in projections:
+                projection.apply(event)
+
+    rebuild()
     for projection in projections:
         store.subscribe(projection.apply)
+    backups = Backups(store, covers.directory, Path(backup_dir), on_restored=rebuild)
 
     handler = ReadingCommandHandler(store, library)
 
@@ -61,7 +73,7 @@ def create_app(
     app.state.scratch_covers = scratch
     app.include_router(create_reading_router(handler, library, activity, covers))
     app.include_router(create_reading_web_router(handler, library, activity, covers, cover_search))
-    app.include_router(create_settings_router(db_path, lambda: len(library.all())))
+    app.include_router(create_settings_router(db_path, lambda: len(library.all()), backups))
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     app.mount("/covers", StaticFiles(directory=covers.directory), name="covers")
 

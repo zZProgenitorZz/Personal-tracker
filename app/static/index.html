@@ -131,12 +131,12 @@
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
     </span>
     <div class="confirm-text">
-      <h2 id="confirm-title">Remove <span data-confirm-name></span>?</h2>
-      <p>The series leaves your library, <strong>including its progress</strong>. You can add it again later, but it starts over as a new series. Chapters you've read still count in your stats.</p>
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-body"></p>
     </div>
     <div class="dialog-actions">
       <button class="btn btn-ghost" value="cancel" autofocus>Cancel</button>
-      <button class="btn btn-danger" value="confirm">Remove</button>
+      <button class="btn btn-danger" id="confirm-action" value="confirm"></button>
     </div>
   </form>
 </dialog>

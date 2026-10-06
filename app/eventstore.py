@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import threading
 from dataclasses import asdict, fields
 from datetime import datetime
 from enum import Enum
@@ -21,6 +22,7 @@ class EventStore:
         self._subscribers = []
         self._types = {t.__name__: t for t in event_types}
         self._conn = sqlite3.connect(path, check_same_thread=False)
+        self._lock = threading.RLock()  # schrijven, kopiëren en terugzetten nooit door elkaar
         self._conn.execute(
             """CREATE TABLE IF NOT EXISTS events (
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,7 +38,7 @@ class EventStore:
         self._subscribers.append(callback)
 
     def append(self, stream_id: str, events: list) -> None:
-        with self._conn:
+        with self._lock, self._conn:
             for event in events:
                 self._conn.execute(
                     "INSERT INTO events (stream_id, type, data, at) VALUES (?, ?, ?, ?)",
@@ -50,6 +52,31 @@ class EventStore:
         for event in events:
             for callback in self._subscribers:
                 callback(event)
+
+    def count(self) -> int:
+        with self._lock:
+            return self._conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+
+    # ---- Back-up ----
+    # Via de back-up-API van SQLite: altijd een complete, kloppende kopie,
+    # ook als er op hetzelfde moment iets wordt weggeschreven.
+
+    def copy_to(self, path) -> None:
+        target = sqlite3.connect(str(path))
+        try:
+            with self._lock:
+                self._conn.backup(target)
+        finally:
+            target.close()
+
+    def restore_from(self, path) -> None:
+        """Vervang alle events door die uit de kopie op `path`."""
+        source = sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True)
+        try:
+            with self._lock:
+                source.backup(self._conn)
+        finally:
+            source.close()
 
     def load_stream(self, stream_id: str) -> list:
         rows = self._conn.execute(
