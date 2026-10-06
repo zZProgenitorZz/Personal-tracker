@@ -56,3 +56,10 @@ def test_homepage_is_served():
     response = client.get("/")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
+
+def test_remove_series():
+    client = make_client()
+    series_id = start_solo_leveling(client)
+    assert client.delete(f"/reading/series/{series_id}").status_code == 204
+    assert client.get("/reading/library").json() == []
+    assert client.delete(f"/reading/series/{series_id}").status_code == 404

@@ -1,0 +1,70 @@
+{% import "_macros.html" as ui %}
+<div class="page">
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Progress</p>
+      <h1>How your reading <span class="grad-text">adds up</span></h1>
+      <p class="lede">A chapter counts when you log a higher chapter than before. Corrections and re-reads don't count.</p>
+    </div>
+  </header>
+
+  <section class="stats" aria-label="Progress summary">
+    {{ ui.stat('trending', 'purple', stats.this_week|chapter, 'Chapters, last 7 days') }}
+    {{ ui.stat('layers', 'teal', (avg_week|round(1))|chapter, 'Average per week', 'last 4 wks') }}
+    {{ ui.stat('trophy', 'amber', best[1]|chapter if best else '–', 'Best day' ~ (' · ' ~ best[0].strftime('%d %b') if best else '')) }}
+    {{ ui.stat('calendar', 'green', active_days, 'Active days', 'of 30') }}
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Chapters per week</h2>
+      <span class="muted">Last 12 weeks</span>
+    </div>
+    <div class="bars">
+      {% for w in weeks %}
+      <div class="bar{% if loop.last %} is-current{% endif %}" title="Week of {{ w.start.strftime('%d %b') }}: {{ w.value|chapter }} chapters">
+        <span class="bar-value">{{ w.value|chapter if w.value else '' }}</span>
+        <div class="bar-track"><div class="bar-fill" style="height: {{ w.height }}%"></div></div>
+        <span class="bar-label">{{ w.label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <div class="two-col spaced">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Activity</h2>
+        <span class="muted">Last 26 weeks</span>
+      </div>
+      <div class="heatmap">
+        <div class="heat-days" aria-hidden="true"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span>Sun</span></div>
+        <div class="heat-grid">
+          {% for column in heatmap %}
+          <div class="heat-col">
+            {% for c in column %}<span class="heat-cell l{{ c.level }}{% if c.future %} future{% endif %}" title="{{ c.day.strftime('%a %d %b') }} · {{ c.value|chapter }} ch"></span>{% endfor %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="heat-legend" aria-hidden="true">Less <span class="heat-cell l0"></span><span class="heat-cell l1"></span><span class="heat-cell l2"></span><span class="heat-cell l3"></span><span class="heat-cell l4"></span> More</div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Library breakdown</h2>
+        <span class="muted">{{ library_size }} series</span>
+      </div>
+      <div class="seg-bar">
+        {% for c in counts if c.count %}<span class="seg seg-{{ c.status.value }}" style="flex: {{ c.count }}"></span>{% endfor %}
+      </div>
+      <ul class="legend">
+        {% for c in counts %}<li><i class="dot dot-{{ c.status.value }}"></i>{{ c.label }}<b>{{ c.count }}</b></li>{% endfor %}
+      </ul>
+      <div class="divider"></div>
+      <ul class="legend">
+        {% for k in kinds %}<li>{{ ui.icon('book' if k.label == 'Novel' else 'image', 15) }}{{ k.label }}<b>{{ k.count }}</b></li>{% endfor %}
+      </ul>
+    </section>
+  </div>
+</div>

@@ -1,8 +1,8 @@
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
-from .events import Kind, ProgressLogged, SeriesStarted, Status, StatusChanged
+from .events import Kind, ProgressLogged, SeriesRemoved, SeriesStarted, Status, StatusChanged
 
 
 @dataclass
@@ -19,6 +19,8 @@ class LibraryEntry:
 class LibraryProjection:
     def __init__(self):
         self._entries: dict[str, LibraryEntry] = {}
+        # Verwijderde series blijven bewaard, zodat hun titel bezet blijft.
+        self._removed: dict[str, LibraryEntry] = {}
 
     def apply(self, event) -> None:
         if isinstance(event, SeriesStarted):
@@ -34,6 +36,8 @@ class LibraryProjection:
             entry = self._entries[event.series_id]
             entry.status = event.to_status
             entry.updated_at = event.at
+        elif isinstance(event, SeriesRemoved):
+            self._removed[event.series_id] = self._entries.pop(event.series_id)
 
     def all(self) -> list[LibraryEntry]:
         return sorted(self._entries.values(), key=lambda e: e.title.lower())
@@ -47,7 +51,8 @@ class LibraryProjection:
 
     def find_by_title(self, title: str) -> LibraryEntry | None:
         wanted = title.strip().lower()
-        return next((e for e in self._entries.values() if e.title.lower() == wanted), None)
+        everything = [*self._entries.values(), *self._removed.values()]
+        return next((e for e in everything if e.title.lower() == wanted), None)
 
     def get(self, series_id: str) -> LibraryEntry | None:
         return self._entries.get(series_id)
@@ -65,6 +70,19 @@ class ReadingActivityProjection:
 
     def per_day(self) -> dict[date, float]:
         return dict(sorted(self._per_day.items()))
+
+    def total_chapters(self) -> float:
+        return sum(self._per_day.values())
+
+    def streak(self, today: date) -> int:
+        """Aantal dagen op rij met gelezen hoofdstukken. Vandaag telt pas mee
+        als er gelezen is, maar breekt de reeks ook niet zolang de dag nog loopt."""
+        day = today if self._per_day.get(today) else today - timedelta(days=1)
+        days = 0
+        while self._per_day.get(day, 0) > 0:
+            days += 1
+            day -= timedelta(days=1)
+        return days
 
     def per_week(self) -> dict[str, float]:
         weeks = defaultdict(float)

@@ -1,16 +1,17 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from .eventstore import EventStore
 from .reading.aggregate import DomainError
 from .reading.api import create_reading_router
 from .reading.commands import ReadingCommandHandler
-from .reading.events import ProgressLogged, SeriesStarted, StatusChanged
+from .reading.events import ProgressLogged, SeriesRemoved, SeriesStarted, StatusChanged
 from .reading.projections import LibraryProjection, ReadingActivityProjection
-from pathlib import Path
+from .reading.web import create_reading_web_router
+from .web import STATIC, create_settings_router
 
-STATIC = Path(__file__).parent / "static"
-EVENT_TYPES = [SeriesStarted, ProgressLogged, StatusChanged]
+EVENT_TYPES = [SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved]
 
 
 def create_app(db_path: str = "data/tracker.db") -> FastAPI:
@@ -30,6 +31,9 @@ def create_app(db_path: str = "data/tracker.db") -> FastAPI:
 
     app = FastAPI(title="Personal Tracker")
     app.include_router(create_reading_router(handler, library, activity))
+    app.include_router(create_reading_web_router(handler, library, activity))
+    app.include_router(create_settings_router(db_path, lambda: len(library.all())))
+    app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
     @app.exception_handler(DomainError)
     def handle_domain_error(request: Request, exc: DomainError):
@@ -38,4 +42,5 @@ def create_app(db_path: str = "data/tracker.db") -> FastAPI:
     @app.get("/", include_in_schema=False)
     def index():
         return FileResponse(STATIC / "index.html")
+
     return app

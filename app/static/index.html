@@ -1,160 +1,119 @@
 <!DOCTYPE html>
-<html lang="nl">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Personal Tracker</title>
-<style>
-  :root { --bg:#f6f5f2; --card:#fff; --text:#222; --muted:#777; --accent:#3b6fd8; --border:#e3e1dc; --error:#c0392b; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#1b1b1d; --card:#252528; --text:#eee; --muted:#999; --accent:#7aa2f7; --border:#38383c; }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
-  main { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
-  h1 { margin: 0 0 4px; }
-  h2 { font-size: 1.1rem; margin: 28px 0 10px; }
-  .muted { color: var(--muted); font-size: .9rem; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
-  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .title { font-weight: 600; flex: 1; min-width: 160px; }
-  input, select, button { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
-  input[type=number] { width: 90px; }
-  button { cursor: pointer; }
-  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-  #error { color: var(--error); min-height: 1.2em; }
-  summary { cursor: pointer; margin: 16px 0 8px; font-weight: 600; }
-</style>
+<meta name="theme-color" content="#07060c">
+<title>Progen</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b5cf6'/%3E%3Cstop offset='1' stop-color='%232dd4bf'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='9' fill='url(%23g)'/%3E%3Cpath d='M9 17.5l4.5 4.5L23 11' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/trackly.css">
+<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
+<script src="/static/trackly.js" defer></script>
 </head>
 <body>
-<main>
-  <h1>Leeslijst</h1>
-  <p class="muted" id="week"></p>
-  <p id="error"></p>
+<div class="bg-glow" aria-hidden="true"></div>
 
-  <h2>Nieuwe serie</h2>
-  <form id="add-form" class="card row">
-    <input name="title" placeholder="Titel" required>
-    <select name="kind">
-      <option value="manhwa">Manhwa</option>
-      <option value="novel">Novel</option>
-    </select>
-    <input name="source" placeholder="Site" required>
-    <input name="start_chapter" type="number" step="0.1" min="0" value="0">
-    <button class="primary">Toevoegen</button>
-  </form>
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#dashboard">
+      <span class="brand-mark">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>
+      </span>
+      Progen
+    </a>
 
-  <h2>Aan het lezen</h2>
-  <div id="reading"></div>
+    <nav class="nav-links" aria-label="Main">
+      <a href="#dashboard" data-page="dashboard">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+        <span>Dashboard</span>
+      </a>
+      <a href="#library" data-page="library">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/></svg>
+        <span>Library</span>
+      </a>
+      <a href="#progress" data-page="progress">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+        <span>Progress</span>
+      </a>
+      <a href="#settings" data-page="settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></svg>
+        <span>Settings</span>
+      </a>
+    </nav>
 
-  <details><summary>On-Hold</summary><div id="on_hold"></div></details>
-  <details><summary>Completed</summary><div id="completed"></div></details>
-  <details><summary>Dropped</summary><div id="dropped"></div></details>
+    <button class="btn btn-primary btn-sm nav-add" type="button" data-open-add>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+      <span>Add series</span>
+    </button>
+  </div>
+</header>
+
+<main id="page" class="container" aria-live="polite">
+  <div class="loading" aria-label="Loading"></div>
 </main>
 
-<script>
-const STATUSES = { reading: "Reading", on_hold: "On-Hold", completed: "Completed", dropped: "Dropped" };
+<div id="toasts" class="toasts"></div>
 
-// ---- Praten met de API ----
+<dialog id="add-dialog" class="dialog" aria-labelledby="add-title">
+  <form class="dialog-form" hx-post="/ui/series" hx-target="#toasts" hx-swap="beforeend">
+    <div class="dialog-head">
+      <div>
+        <p class="eyebrow">New</p>
+        <h2 id="add-title">Add a series</h2>
+      </div>
+      <button class="btn-close" type="button" data-close aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
 
-async function api(path, body) {
-  const options = body
-    ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
-    : {};
-  const response = await fetch(path, options);
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(typeof data.detail === "string" ? data.detail : "Ongeldige invoer");
-  }
-  return data;
-}
+    <label class="field">
+      <span>Title</span>
+      <input class="input" name="title" required autocomplete="off" placeholder="Solo Leveling">
+    </label>
 
-async function run(action) {
-  document.getElementById("error").textContent = "";
-  try {
-    await action();
-    await refresh();
-  } catch (err) {
-    document.getElementById("error").textContent = err.message;
-  }
-}
+    <div class="field">
+      <span>Type</span>
+      <div class="segmented" role="radiogroup" aria-label="Type">
+        <label><input type="radio" name="kind" value="manhwa" checked><span>Manhwa</span></label>
+        <label><input type="radio" name="kind" value="novel"><span>Novel</span></label>
+      </div>
+    </div>
 
-// ---- Onderdelen van de pagina bouwen ----
+    <div class="field-row">
+      <label class="field">
+        <span>Where you read it</span>
+        <input class="input" name="source" autocomplete="off" placeholder="asuracomic.net">
+      </label>
+      <label class="field">
+        <span>Start at chapter</span>
+        <input class="input" name="start_chapter" type="number" step="any" min="0" value="0">
+      </label>
+    </div>
 
-function el(tag, props = {}, ...children) {
-  const node = Object.assign(document.createElement(tag), props);
-  node.append(...children);
-  return node;
-}
+    <div class="dialog-actions">
+      <button class="btn btn-ghost" type="button" data-close>Cancel</button>
+      <button class="btn btn-primary">Add series</button>
+    </div>
+  </form>
+</dialog>
 
-function seriesCard(s) {
-  const base = `/reading/series/${s.series_id}`;
-  const chapter = el("input", { type: "number", step: "0.1", min: "0", value: s.current_chapter });
-  const status = el("select", {},
-    ...Object.entries(STATUSES).map(([value, label]) =>
-      el("option", { value, textContent: label, selected: value === s.status })));
-  status.onchange = () => run(() => api(`${base}/status`, { status: status.value }));
-
-  return el("div", { className: "card row" },
-    el("span", { className: "title", textContent: s.title }),
-    el("span", { className: "muted", textContent: `${s.kind} · ${s.source}` }),
-    el("button", {
-      textContent: "+1",
-      onclick: () => run(() => api(`${base}/progress`, { chapter: Math.floor(s.current_chapter) + 1 })),
-    }),
-    chapter,
-    el("button", {
-      textContent: "Opslaan",
-      onclick: () => run(() => api(`${base}/progress`, { chapter: Number(chapter.value) })),
-    }),
-    status,
-  );
-}
-
-function fill(id, items, emptyText) {
-  const children = items.length
-    ? items.map(seriesCard)
-    : [el("p", { className: "muted", textContent: emptyText })];
-  document.getElementById(id).replaceChildren(...children);
-}
-
-// ---- Alles opnieuw ophalen en tonen ----
-
-async function refresh() {
-  const [current, library, activity] = await Promise.all([
-    api("/reading/current"),
-    api("/reading/library"),
-    api("/reading/activity"),
-  ]);
-
-  fill("reading", current, "Je bent op dit moment niets aan het lezen.");
-  for (const status of ["on_hold", "completed", "dropped"]) {
-    const items = library.filter((s) => s.status === status);
-    fill(status, items, "Leeg.");
-    document.getElementById(status).previousElementSibling.textContent =
-      `${STATUSES[status]} (${items.length})`;
-  }
-
-  const cutoff = new Date(Date.now() - 6 * 864e5).toLocaleDateString("sv");
-  const lastWeek = Object.entries(activity.per_day)
-    .filter(([day]) => day >= cutoff)
-    .reduce((sum, [, n]) => sum + n, 0);
-  document.getElementById("week").textContent =
-    `${lastWeek} hoofdstukken gelezen in de laatste 7 dagen`;
-}
-
-document.getElementById("add-form").onsubmit = (event) => {
-  event.preventDefault();
-  const form = event.target;
-  const data = Object.fromEntries(new FormData(form));
-  data.start_chapter = Number(data.start_chapter);
-  run(async () => {
-    await api("/reading/series", data);
-    form.reset();
-  });
-};
-
-refresh();
-</script>
+<dialog id="confirm-dialog" class="dialog dialog-confirm" aria-labelledby="confirm-title">
+  <form method="dialog" class="dialog-form">
+    <span class="danger-icon">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+    </span>
+    <div class="confirm-text">
+      <h2 id="confirm-title">Remove <span data-confirm-name></span>?</h2>
+      <p>The series leaves your library for good and <strong>can't be added again</strong> under this title. Chapters you've read still count in your stats.</p>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn btn-ghost" value="cancel" autofocus>Cancel</button>
+      <button class="btn btn-danger" value="confirm">Remove</button>
+    </div>
+  </form>
+</dialog>
 </body>
 </html>

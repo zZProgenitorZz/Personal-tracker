@@ -1,7 +1,7 @@
 import pytest
 
 from app.reading.aggregate import DomainError, ReadingSeries
-from app.reading.events import Kind, ProgressLogged, SeriesStarted, Status, StatusChanged
+from app.reading.events import Kind, ProgressLogged, SeriesRemoved, SeriesStarted, Status, StatusChanged
 
 STARTED = SeriesStarted("1", "Solo Leveling", Kind.MANHWA, "asura", 1)
 
@@ -52,3 +52,29 @@ def test_cannot_change_to_same_status():
     series = ReadingSeries([STARTED])
     with pytest.raises(DomainError):
         series.change_status(Status.READING)
+
+def test_remove_series():
+    series = ReadingSeries([STARTED])
+    events = series.remove()
+    assert [type(e) for e in events] == [SeriesRemoved]
+    assert events[0].title == "Solo Leveling"
+    assert series.removed
+
+
+def test_cannot_remove_unknown_series():
+    with pytest.raises(DomainError):
+        ReadingSeries([]).remove()
+
+
+def test_cannot_remove_twice():
+    series = ReadingSeries([STARTED, SeriesRemoved("1", "Solo Leveling")])
+    with pytest.raises(DomainError):
+        series.remove()
+
+
+def test_removed_series_takes_no_progress_or_status():
+    series = ReadingSeries([STARTED, SeriesRemoved("1", "Solo Leveling")])
+    with pytest.raises(DomainError):
+        series.log_progress(10)
+    with pytest.raises(DomainError):
+        series.change_status(Status.COMPLETED)

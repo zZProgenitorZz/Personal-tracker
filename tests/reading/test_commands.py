@@ -2,13 +2,13 @@ import pytest
 
 from app.eventstore import EventStore
 from app.reading.aggregate import DomainError, ReadingSeries
-from app.reading.commands import ChangeStatus, LogProgress, ReadingCommandHandler, StartSeries
-from app.reading.events import Kind, ProgressLogged, SeriesStarted, Status, StatusChanged
+from app.reading.commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, StartSeries
+from app.reading.events import Kind, ProgressLogged, SeriesRemoved, SeriesStarted, Status, StatusChanged
 from app.reading.projections import LibraryProjection
 
 
 def make_handler():
-    store = EventStore(":memory:", [SeriesStarted, ProgressLogged, StatusChanged])
+    store = EventStore(":memory:", [SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved])
     library = LibraryProjection()
     store.subscribe(library.apply)
     return ReadingCommandHandler(store, library), store
@@ -53,3 +53,12 @@ def test_unknown_series_is_rejected():
     with pytest.raises(DomainError):
         handler.handle(LogProgress("bestaat-niet", 5))
     assert store.load_all() == []
+
+def test_removed_title_cannot_be_added_again():
+    handler, store = make_handler()
+    series_id = start_solo_leveling(handler)
+    handler.handle(RemoveSeries(series_id))
+
+    with pytest.raises(DomainError):
+        handler.handle(StartSeries(" solo leveling", Kind.MANHWA, "asura", 1))
+    assert [type(e) for e in store.load_all()] == [SeriesStarted, SeriesRemoved]

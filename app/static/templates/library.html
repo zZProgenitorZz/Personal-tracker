@@ -1,0 +1,33 @@
+{% import "_macros.html" as ui %}
+<div class="page">
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Library</p>
+      <h1>Everything you <span class="grad-text">read</span></h1>
+      <p class="lede">Every novel and manhwa you've started, whatever its status.</p>
+    </div>
+  </header>
+
+  <form id="library-filters" class="filters" hx-get="/ui/library/grid" hx-target="#library-grid" hx-swap="outerHTML"
+        hx-trigger="change, submit, input changed delay:250ms from:#library-q">
+    <label class="search">
+      {{ ui.icon('search', 16) }}
+      <input id="library-q" type="search" name="q" placeholder="Search titles" autocomplete="off" aria-label="Search titles">
+    </label>
+    <div class="chips" role="radiogroup" aria-label="Status">
+      <label class="chip"><input type="radio" name="status" value="" checked><span>All</span></label>
+      {% for s, label in STATUS_LABELS.items() %}
+      <label class="chip"><input type="radio" name="status" value="{{ s.value }}"><span><i class="dot dot-{{ s.value }}"></i>{{ label }}</span></label>
+      {% endfor %}
+    </div>
+    <span class="chip-divider" aria-hidden="true"></span>
+    <div class="chips" role="radiogroup" aria-label="Type">
+      <label class="chip"><input type="radio" name="kind" value="" checked><span>All types</span></label>
+      {% for k, label in KIND_LABELS.items() %}
+      <label class="chip"><input type="radio" name="kind" value="{{ k.value }}"><span>{{ label }}</span></label>
+      {% endfor %}
+    </div>
+  </form>
+
+  {% include "_library_grid.html" %}
+</div>

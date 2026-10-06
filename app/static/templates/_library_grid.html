@@ -1,0 +1,13 @@
+{% import "_macros.html" as ui %}
+<div id="library-grid" hx-get="/ui/library/grid" hx-include="#library-filters" hx-trigger="reading-changed from:body" hx-swap="outerHTML">
+  {% if entries %}
+  <p class="result-count">{{ entries|length }} series</p>
+  <div class="card-grid">
+    {% for e in entries %}{{ ui.series_card(e) }}{% endfor %}
+  </div>
+  {% elif status or kind or q %}
+  {{ ui.empty('search', 'No matches', 'Nothing in your library fits these filters.', cta=false) }}
+  {% else %}
+  {{ ui.empty('grid', 'Your library is empty', 'Add the first novel or manhwa you are reading.') }}
+  {% endif %}
+</div>

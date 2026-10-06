@@ -42,3 +42,10 @@ class StatusChanged:
     from_status: Status
     to_status: Status
     at: datetime = field(default_factory=now)
+
+
+@dataclass(frozen=True)
+class SeriesRemoved:
+    series_id: str
+    title: str
+    at: datetime = field(default_factory=now)

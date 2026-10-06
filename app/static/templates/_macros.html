@@ -1,0 +1,83 @@
+{% macro icon(name, size=18) -%}
+<svg class="icon" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ ICONS[name]|safe }}</svg>
+{%- endmacro %}
+
+{% macro status_pill(status) -%}
+<span class="pill pill-{{ status.value }}"><i></i>{{ STATUS_LABELS[status] }}</span>
+{%- endmacro %}
+
+{% macro cover(title, kind) -%}
+<div class="cover" style="--hue: {{ title|hue }}" aria-hidden="true">
+  <span class="cover-initials">{{ title|initials }}</span>
+  <span class="cover-kind">{{ icon('book' if kind.value == 'novel' else 'image', 13) }}</span>
+</div>
+{%- endmacro %}
+
+{% macro stat(icon_name, accent, value, label, unit='') -%}
+<div class="stat accent-{{ accent }}">
+  <span class="stat-icon">{{ icon(icon_name, 18) }}</span>
+  <div class="stat-value">{{ value }}{% if unit %}<small>{{ unit }}</small>{% endif %}</div>
+  <div class="stat-label">{{ label }}</div>
+</div>
+{%- endmacro %}
+
+{% macro series_card(e) -%}
+{% set base = "/ui/series/" ~ e.series_id %}
+{% set next = (e.current_chapter // 1 + 1)|int %}
+<article class="series-card">
+  {{ cover(e.title, e.kind) }}
+  <div class="series-body">
+    <div class="series-head">
+      <span class="kind-tag">{{ KIND_LABELS[e.kind] }}</span>
+      <div class="series-head-end">
+        {{ status_pill(e.status) }}
+        <details class="card-menu">
+          <summary aria-label="More options for {{ e.title }}" title="More options">{{ icon('more', 16) }}</summary>
+          <div class="menu" role="menu">
+            {# hx-confirm opent het bevestigingsvenster uit index.html (zie trackly.js) #}
+            <button class="menu-item danger" type="button" role="menuitem"
+                    hx-delete="{{ base }}" hx-swap="none" hx-confirm="{{ e.title }}">
+              {{ icon('trash', 15) }}Remove from library
+            </button>
+          </div>
+        </details>
+      </div>
+    </div>
+    <h3 class="series-title" title="{{ e.title }}">{{ e.title }}</h3>
+    <p class="series-meta">
+      {%- if e.source %}<span class="series-source">{{ icon('link', 12) }}<span>{{ e.source }}</span></span><span aria-hidden="true">·</span>{% endif -%}
+      <span>{{ e.updated_at|ago }}</span>
+    </p>
+    <div class="chapter-line">
+      <div>
+        <span class="mini-label">Chapter</span>
+        <span class="chapter-num">{{ e.current_chapter|chapter }}</span>
+      </div>
+      <button class="btn-plus" type="button" hx-post="{{ base }}/progress" hx-vals='{"chapter": {{ next }}}'
+              hx-swap="none" title="Log chapter {{ next }}">{{ icon('plus', 14) }}1</button>
+    </div>
+    <div class="series-actions">
+      <form class="chapter-form" hx-post="{{ base }}/progress" hx-swap="none">
+        <input type="number" name="chapter" step="any" min="0" required
+               value="{{ e.current_chapter|chapter }}" aria-label="Set chapter for {{ e.title }}">
+        <button class="btn-icon" title="Save chapter">{{ icon('check', 15) }}</button>
+      </form>
+      <select class="select" name="status" hx-post="{{ base }}/status" hx-trigger="change" hx-swap="none"
+              aria-label="Status of {{ e.title }}">
+        {%- for s, label in STATUS_LABELS.items() %}
+        <option value="{{ s.value }}"{% if s == e.status %} selected{% endif %}>{{ label }}</option>
+        {%- endfor %}
+      </select>
+    </div>
+  </div>
+</article>
+{%- endmacro %}
+
+{% macro empty(icon_name, title, text, cta=true) -%}
+<div class="empty">
+  <div class="empty-icon">{{ icon(icon_name, 22) }}</div>
+  <h3>{{ title }}</h3>
+  <p>{{ text }}</p>
+  {% if cta %}<button class="btn btn-primary" type="button" data-open-add>{{ icon('plus', 16) }}Add series</button>{% endif %}
+</div>
+{%- endmacro %}

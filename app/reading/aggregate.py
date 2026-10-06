@@ -1,4 +1,4 @@
-from .events import Kind, ProgressLogged, SeriesStarted, Status, StatusChanged
+from .events import Kind, ProgressLogged, SeriesRemoved, SeriesStarted, Status, StatusChanged
 
 
 class DomainError(Exception):
@@ -11,6 +11,7 @@ class ReadingSeries:
         self.title = None
         self.status = None
         self.current_chapter = None
+        self.removed = False
         for event in events:
             self._apply(event)
 
@@ -30,6 +31,8 @@ class ReadingSeries:
             self.current_chapter = event.chapter
         elif isinstance(event, StatusChanged):
             self.status = event.to_status
+        elif isinstance(event, SeriesRemoved):
+            self.removed = True
 
     # ---- Beslissingen: regels checken, nieuwe events teruggeven ----
 
@@ -39,8 +42,7 @@ class ReadingSeries:
         return self._record(SeriesStarted(series_id, title, kind, source, start_chapter))
 
     def log_progress(self, chapter: float) -> list:
-        if not self.exists:
-            raise DomainError("Onbekende serie")
+        self._require_active()
         if chapter < 0:
             raise DomainError("Hoofdstuk kan niet negatief zijn")
         events = []
@@ -50,11 +52,20 @@ class ReadingSeries:
         return events
 
     def change_status(self, new_status: Status) -> list:
-        if not self.exists:
-            raise DomainError("Onbekende serie")
+        self._require_active()
         if new_status is self.status:
             raise DomainError(f"Status is al {new_status.value}")
         return self._record(StatusChanged(self.series_id, self.status, new_status))
+
+    def remove(self) -> list:
+        self._require_active()
+        return self._record(SeriesRemoved(self.series_id, self.title))
+
+    def _require_active(self) -> None:
+        if not self.exists:
+            raise DomainError("Onbekende serie")
+        if self.removed:
+            raise DomainError(f"'{self.title}' is verwijderd")
 
     def _record(self, event) -> list:
         self._apply(event)

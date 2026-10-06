@@ -1,0 +1,70 @@
+{% import "_macros.html" as ui %}
+<div class="page" hx-get="/ui/dashboard" hx-trigger="reading-changed from:body" hx-swap="outerHTML">
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">{{ greeting }}</p>
+      <h1>Your reading, <span class="grad-text">at a glance</span></h1>
+      <p class="lede">
+        {%- if stats.this_week %}You've read {{ stats.this_week|chapter }} chapter{{ '' if stats.this_week == 1 else 's' }} in the last 7 days.
+        {%- else %}Nothing logged in the last 7 days. A good moment to pick something up.{% endif -%}
+      </p>
+    </div>
+  </header>
+
+  <section class="stats" aria-label="Overview">
+    {{ ui.stat('book', 'purple', stats.reading, 'Currently reading') }}
+    {{ ui.stat('check-circle', 'green', stats.completed, 'Completed') }}
+    {{ ui.stat('flame', 'amber', stats.streak, 'Reading streak', 'day' if stats.streak == 1 else 'days') }}
+    {{ ui.stat('layers', 'teal', stats.total|chapter, 'Chapters read') }}
+  </section>
+
+  <div class="dash-grid">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Currently reading</h2>
+        {% if library_size %}<a class="link" href="#library">View library {{ ui.icon('arrow-right', 15) }}</a>{% endif %}
+      </div>
+      {% if current %}
+      <div class="card-grid">
+        {% for e in current %}{{ ui.series_card(e) }}{% endfor %}
+      </div>
+      {% elif library_size %}
+      {{ ui.empty('book', 'Nothing in progress', 'Log a chapter on any series in your library and it shows up here.', cta=false) }}
+      {% else %}
+      {{ ui.empty('book', 'Your library is empty', 'Add the first novel or manhwa you are reading.') }}
+      {% endif %}
+    </section>
+
+    <aside class="side">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Last 7 days</h2>
+          <span class="muted">{{ stats.this_week|chapter }} ch</span>
+        </div>
+        <div class="mini-bars">
+          {% for b in week %}
+          <div class="mini-bar{% if loop.last %} is-today{% endif %}" title="{{ b.day.strftime('%a %d %b') }}: {{ b.value|chapter }} chapters">
+            <div class="mini-bar-track"><div class="mini-bar-fill" style="height: {{ b.height }}%"></div></div>
+            <span>{{ b.label }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Library</h2>
+          <span class="muted">{{ library_size }} series</span>
+        </div>
+        <div class="seg-bar">
+          {% for c in counts if c.count %}<span class="seg seg-{{ c.status.value }}" style="flex: {{ c.count }}"></span>{% endfor %}
+        </div>
+        <ul class="legend">
+          {% for c in counts %}
+          <li><i class="dot dot-{{ c.status.value }}"></i>{{ c.label }}<b>{{ c.count }}</b></li>
+          {% endfor %}
+        </ul>
+      </section>
+    </aside>
+  </div>
+</div>

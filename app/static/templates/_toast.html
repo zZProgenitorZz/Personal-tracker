@@ -1,0 +1,5 @@
+{% import "_macros.html" as ui %}
+<div class="toast{% if error %} toast-error{% endif %}" role="{{ 'alert' if error else 'status' }}">
+  <span class="toast-icon">{{ ui.icon('alert' if error else 'check', 15) }}</span>
+  <span>{{ message }}</span>
+</div>

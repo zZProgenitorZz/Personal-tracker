@@ -1,0 +1,41 @@
+{% import "_macros.html" as ui %}
+<div class="page">
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Settings</p>
+      <h1>Your data, <span class="grad-text">your rules</span></h1>
+      <p class="lede">Progen runs on your own machine. Every change is stored as an event and never overwritten.</p>
+    </div>
+  </header>
+
+  <div class="two-col">
+    <section class="panel">
+      <div class="panel-head"><h2>Data</h2><span class="muted">{{ ui.icon('database', 18) }}</span></div>
+      <dl class="kv">
+        <div><dt>Database</dt><dd><code>{{ db_path }}</code></dd></div>
+        <div><dt>Series in library</dt><dd>{{ series_count }}</dd></div>
+        <div><dt>Storage</dt><dd>Event sourced, append-only</dd></div>
+      </dl>
+      <p class="muted note">This file is the only source of truth. Back it up now and then.</p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>API</h2><span class="muted">{{ ui.icon('code', 18) }}</span></div>
+      <p class="muted">Everything on these pages also works through the JSON API, for scripts and importers.</p>
+      <div class="link-list">
+        <a class="link" href="/docs" target="_blank" rel="noopener">API documentation {{ ui.icon('arrow-right', 15) }}</a>
+        <a class="link" href="/reading/library" target="_blank" rel="noopener">Library as JSON {{ ui.icon('arrow-right', 15) }}</a>
+        <a class="link" href="/reading/activity" target="_blank" rel="noopener">Activity as JSON {{ ui.icon('arrow-right', 15) }}</a>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel spaced">
+    <div class="panel-head"><h2>Tracking</h2><span class="muted">What Progen keeps track of</span></div>
+    <ul class="domain-list">
+      <li><span class="domain-icon is-on">{{ ui.icon('book', 18) }}</span><div><b>Reading</b><span>Novels and manhwa</span></div><span class="badge badge-on">Active</span></li>
+      <li><span class="domain-icon">{{ ui.icon('image', 18) }}</span><div><b>Series &amp; anime</b><span>Episodes and seasons</span></div><span class="badge">Planned</span></li>
+      <li><span class="domain-icon">{{ ui.icon('trending', 18) }}</span><div><b>Gym</b><span>Workouts and sessions</span></div><span class="badge">Planned</span></li>
+    </ul>
+  </section>
+</div>

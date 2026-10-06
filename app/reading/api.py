@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from .commands import ChangeStatus, LogProgress, ReadingCommandHandler, StartSeries
+from .commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, StartSeries
 from .events import Kind, Status
 from .projections import LibraryProjection, ReadingActivityProjection
 
@@ -77,5 +77,10 @@ def create_reading_router(
         entry_or_404(series_id)
         handler.handle(ChangeStatus(series_id, body.status))
         return entry_or_404(series_id)
+
+    @router.delete("/series/{series_id}", status_code=204)
+    def remove_series(series_id: str):
+        entry_or_404(series_id)
+        handler.handle(RemoveSeries(series_id))
 
     return router
