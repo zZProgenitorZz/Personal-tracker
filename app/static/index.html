@@ -58,7 +58,7 @@
 <div id="toasts" class="toasts"></div>
 
 <dialog id="add-dialog" class="dialog" aria-labelledby="add-title">
-  <form class="dialog-form" hx-post="/ui/series" hx-target="#toasts" hx-swap="beforeend">
+  <form class="dialog-form" hx-post="/ui/series" hx-target="#toasts" hx-swap="beforeend" hx-encoding="multipart/form-data">
     <div class="dialog-head">
       <div>
         <p class="eyebrow">New</p>
@@ -71,8 +71,35 @@
 
     <label class="field">
       <span>Title</span>
-      <input class="input" name="title" required autocomplete="off" placeholder="Solo Leveling">
+      <input class="input" id="series-title" name="title" required autocomplete="off" placeholder="Solo Leveling">
     </label>
+
+    <div class="field">
+      <span>Cover <small>optional</small></span>
+      <div class="cover-picker" id="cover-picker">
+        <div class="cover-frame" id="cover-preview" aria-label="Cover preview"></div>
+        <div class="cover-controls">
+          <div class="cover-buttons">
+            <button class="btn btn-ghost btn-sm" id="find-cover" type="button"
+                    hx-get="/ui/covers/search" hx-include="#series-title, #cover-index"
+                    hx-target="#cover-preview" hx-indicator="#cover-picker"
+                    hx-on:htmx:before-request="coverSkips = 0">
+              <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <span class="spinner" aria-hidden="true"></span>
+              Find cover
+            </button>
+            <label class="btn btn-ghost btn-sm">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>
+              Upload
+              <input type="file" id="cover-file" name="cover_file" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp" class="sr-only">
+            </label>
+            <button class="btn-link" type="button" id="cover-clear" hidden>Remove</button>
+          </div>
+          <input class="input input-sm" id="cover-link" name="cover_link" type="url" inputmode="url" autocomplete="off" placeholder="…or paste an image URL">
+          <div id="cover-caption" class="cover-caption" aria-live="polite">Search AniList by title, upload an image, or paste a link.</div>
+        </div>
+      </div>
+    </div>
 
     <div class="field">
       <span>Type</span>

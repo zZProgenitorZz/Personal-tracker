@@ -15,6 +15,7 @@ class StartSeries:
     kind: Kind
     source: str
     start_chapter: float = 0
+    cover: str | None = None
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,7 @@ class ReadingCommandHandler:
                 command.kind,
                 command.source,
                 command.start_chapter,
+                command.cover,
             )
         elif isinstance(command, LogProgress):
             series = self._load(command.series_id)

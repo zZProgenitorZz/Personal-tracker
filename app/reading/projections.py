@@ -14,6 +14,7 @@ class LibraryEntry:
     status: Status
     current_chapter: float
     updated_at: datetime
+    cover: str | None = None
 
 
 class LibraryProjection:
@@ -26,7 +27,7 @@ class LibraryProjection:
         if isinstance(event, SeriesStarted):
             self._entries[event.series_id] = LibraryEntry(
                 event.series_id, event.title, event.kind, event.source,
-                Status.READING, event.start_chapter, event.at,
+                Status.READING, event.start_chapter, event.at, event.cover,
             )
         elif isinstance(event, ProgressLogged):
             entry = self._entries[event.series_id]

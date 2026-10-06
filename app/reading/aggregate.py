@@ -36,10 +36,11 @@ class ReadingSeries:
 
     # ---- Beslissingen: regels checken, nieuwe events teruggeven ----
 
-    def start(self, series_id: str, title: str, kind: Kind, source: str, start_chapter: float) -> list:
+    def start(self, series_id: str, title: str, kind: Kind, source: str, start_chapter: float,
+              cover: str | None = None) -> list:
         if self.exists:
             raise DomainError("Deze serie bestaat al")
-        return self._record(SeriesStarted(series_id, title, kind, source, start_chapter))
+        return self._record(SeriesStarted(series_id, title, kind, source, start_chapter, cover=cover))
 
     def log_progress(self, chapter: float) -> list:
         self._require_active()

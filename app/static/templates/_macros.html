@@ -6,10 +6,12 @@
 <span class="pill pill-{{ status.value }}"><i></i>{{ STATUS_LABELS[status] }}</span>
 {%- endmacro %}
 
-{% macro cover(title, kind) -%}
-<div class="cover" style="--hue: {{ title|hue }}" aria-hidden="true">
-  <span class="cover-initials">{{ title|initials }}</span>
-  <span class="cover-kind">{{ icon('book' if kind.value == 'novel' else 'image', 13) }}</span>
+{# Zonder cover, of als de afbeelding niet laadt, blijft de gekleurde placeholder met initialen zichtbaar. #}
+{% macro cover(title, kind, file=None) -%}
+<div class="cover" style="--hue: {{ title|hue }}">
+  <span class="cover-initials" aria-hidden="true">{{ title|initials }}</span>
+  {% if file %}<img class="cover-img" src="/covers/{{ file }}" alt="Cover of {{ title }}" loading="lazy" onerror="this.remove()">{% endif %}
+  <span class="cover-kind" aria-hidden="true">{{ icon('book' if kind.value == 'novel' else 'image', 13) }}</span>
 </div>
 {%- endmacro %}
 
@@ -25,7 +27,7 @@
 {% set base = "/ui/series/" ~ e.series_id %}
 {% set next = (e.current_chapter // 1 + 1)|int %}
 <article class="series-card">
-  {{ cover(e.title, e.kind) }}
+  {{ cover(e.title, e.kind, e.cover) }}
   <div class="series-body">
     <div class="series-head">
       <span class="kind-tag">{{ KIND_LABELS[e.kind] }}</span>

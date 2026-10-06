@@ -1,0 +1,13 @@
+{# Gaat in #cover-preview van het formulier; het onderschrift wordt via hx-swap-oob bijgewerkt. #}
+{% if pick %}
+<img class="cover-img" src="{{ pick.image_url }}" alt="Cover of {{ pick.title }}"
+     data-cover-total="{{ total }}" onload="coverLoaded(this)" onerror="coverFailed(this)">
+<input type="hidden" name="cover_url" value="{{ pick.image_url }}">
+<input type="hidden" id="cover-index" name="index" value="{{ next_index }}">
+{% endif %}
+<div id="cover-caption" class="cover-caption{% if error %} is-error{% endif %}" hx-swap-oob="true" aria-live="polite">
+  {%- if pick %}
+  <b title="{{ pick.title }}">{{ pick.title }}</b>
+  <span>{{ position }} of {{ total }} · {{ pick.score|round|int }}% match{% if total > 1 %} · click again for the next{% endif %}</span>
+  {%- else %}{{ error }}{% endif -%}
+</div>

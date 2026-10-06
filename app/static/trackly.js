@@ -51,8 +51,120 @@ document.addEventListener("reading-changed", () => {
   if (d.open) {
     d.close();
     d.querySelector("form").reset();
+    resetCover();
   }
 });
+
+
+// ---- Cover kiezen in het formulier ----
+// Drie bronnen: zoeken bij AniList (htmx vult #cover-preview), een upload of
+// een geplakte link. Er is altijd maar één bron actief. De server doet de echte
+// controle en het opslaan; dit is alleen de preview.
+
+const MAX_COVER_BYTES = 5 * 1024 * 1024;
+const COVER_HINT = "Search AniList by title, upload an image, or paste a link.";
+const el = (id) => document.getElementById(id);
+let coverSkips = 0;   // hoeveel zoekresultaten op rij niet laadden
+let objectUrl = null;
+
+function setCaption(text, isError = false) {
+  const caption = el("cover-caption");
+  caption.textContent = text;
+  caption.classList.toggle("is-error", isError);
+}
+
+function showPreview(src, alt) {
+  const img = document.createElement("img");
+  img.className = "cover-img";
+  img.alt = alt;
+  img.onerror = () => {
+    img.remove();
+    setCaption("No preview for this link. Progen will still try to download it when you save.", true);
+  };
+  img.src = src;
+  el("cover-preview").replaceChildren(img);
+  el("cover-clear").hidden = false;
+}
+
+function clearSearch() {
+  el("cover-preview").replaceChildren();
+}
+
+function resetCover() {
+  clearSearch();
+  el("cover-file").value = "";
+  el("cover-link").value = "";
+  el("cover-clear").hidden = true;
+  if (objectUrl) URL.revokeObjectURL(objectUrl);
+  objectUrl = null;
+  setCaption(COVER_HINT);
+}
+
+function coverTitle() {
+  return el("series-title").value.trim() || "this series";
+}
+
+// Zoekresultaat geladen: deze telt.
+function coverLoaded() {
+  coverSkips = 0;
+  el("cover-file").value = "";
+  el("cover-link").value = "";
+  el("cover-clear").hidden = false;
+}
+
+// Zoekresultaat laadt niet: sla hem over, maar ga hooguit één ronde rond.
+function coverFailed(img) {
+  const total = Number(img.dataset.coverTotal);
+  img.remove();
+  if (coverSkips < total - 1) {
+    coverSkips += 1;
+    htmx.ajax("GET", "/ui/covers/search", {
+      target: "#cover-preview",
+      values: { title: el("series-title").value, index: el("cover-index").value },
+    });
+  } else {
+    clearSearch();
+    setCaption("None of the covers found could be loaded. Try uploading one instead.", true);
+  }
+}
+
+el("cover-file").addEventListener("change", (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (file.size > MAX_COVER_BYTES) {
+    event.target.value = "";
+    setCaption("That file is larger than 5 MB. Pick a smaller image.", true);
+    return;
+  }
+  el("cover-link").value = "";
+  if (objectUrl) URL.revokeObjectURL(objectUrl);
+  objectUrl = URL.createObjectURL(file);
+  showPreview(objectUrl, `Cover of ${coverTitle()}`);
+  setCaption(`Uploading ${file.name} when you save.`);
+});
+
+el("cover-link").addEventListener("change", (event) => {
+  const url = event.target.value.trim();
+  if (!url) return resetCover();
+  if (!/^https?:\/\//i.test(url)) {
+    setCaption("Use a link that starts with http:// or https://", true);
+    return;
+  }
+  el("cover-file").value = "";
+  showPreview(url, `Cover of ${coverTitle()}`);
+  setCaption("Downloading this image when you save.");
+});
+
+// Een andere titel betekent andere zoekresultaten: de oude vervallen.
+el("series-title").addEventListener("input", () => {
+  if (el("cover-preview").querySelector("[name=cover_url]")) {
+    clearSearch();
+    el("cover-clear").hidden = true;
+    setCaption(COVER_HINT);
+  }
+});
+
+el("cover-clear").addEventListener("click", resetCover);
 
 
 // ---- Optiemenu op een kaart ----

@@ -21,7 +21,7 @@ uvicorn app.main:create_app --factory --reload
 - API-documentatie (Swagger): http://127.0.0.1:8000/docs
 - Tests draaien: `python -m pytest`
 
-Data staat in `data/tracker.db`. **Dit bestand is de enige bron van waarheid**: alle read models worden er bij het opstarten uit opgebouwd. Maak er regelmatig een back-up van.
+Data staat in `data/tracker.db`. **Dit bestand is de enige bron van waarheid**: alle read models worden er bij het opstarten uit opgebouwd. Covers staan ernaast in `data/covers/`. Maak van allebei regelmatig een back-up.
 
 ---
 
@@ -56,18 +56,25 @@ Principes:
 app/
   main.py              koppelt alles: event store, projecties, handlers, routers
   eventstore.py        SQLite event store (append, load_stream, load_all, subscribe)
-  static/index.html    de webpagina
+  covers.py            covers downloaden, controleren en als 300×450 WebP bewaren (gedeeld)
+  web.py               gedeeld voor de webpagina: templates, filters, toasts
+  static/
+    index.html         de schil van de webpagina (Progen)
+    trackly.css/.js    stijl, navigatie, dialogen, coverkiezer
+    templates/         HTML-fragmenten voor htmx
   reading/
-    events.py          SeriesStarted, ProgressLogged, StatusChanged
+    events.py          SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved
     aggregate.py       ReadingSeries + DomainError
-    commands.py        StartSeries, LogProgress, ChangeStatus + ReadingCommandHandler
+    commands.py        StartSeries, LogProgress, ChangeStatus, RemoveSeries + ReadingCommandHandler
     projections.py     LibraryProjection, ReadingActivityProjection
-    api.py             /reading endpoints
+    cover_search.py    covers zoeken bij AniList, met fuzzy matching op titel
+    api.py             /reading endpoints (JSON)
+    web.py             /ui endpoints (HTML-fragmenten voor htmx)
 tests/
-  test_eventstore.py
-  test_api.py
+  test_eventstore.py, test_api.py, test_web.py
+  test_covers.py, test_cover_flow.py
   reading/             given/when/then-tests per regel
-data/tracker.db        (niet in git)
+data/                  tracker.db en covers/ (niet in git)
 ```
 
 ---
@@ -77,8 +84,8 @@ data/tracker.db        (niet in git)
 | Onderdeel   | Inhoud                                                          |
 | ----------- | --------------------------------------------------------------- |
 | Statussen   | Reading, On-Hold, Completed, Dropped                            |
-| Events      | `SeriesStarted`, `ProgressLogged`, `StatusChanged`              |
-| Commands    | `StartSeries`, `LogProgress`, `ChangeStatus`                    |
+| Events      | `SeriesStarted` (optioneel `cover`), `ProgressLogged`, `StatusChanged`, `SeriesRemoved` |
+| Commands    | `StartSeries`, `LogProgress`, `ChangeStatus`, `RemoveSeries`    |
 | Read models | CurrentlyReading, Library, ReadingActivity (per dag / per week) |
 
 Regels:
@@ -88,8 +95,17 @@ Regels:
 3. Een lager hoofdstuk loggen mag (correctie of herlezen), maar telt niet mee in ReadingActivity.
 4. Een negatief hoofdstuk wordt geweigerd.
 5. Een status wijzigen naar dezelfde status wordt geweigerd.
+6. Een verwijderde serie krijgt geen voortgang of status meer, en haar titel kan niet opnieuw worden toegevoegd. Gelezen hoofdstukken blijven meetellen in de statistieken.
+7. Een cover is optioneel. Een cover die niet lukt (geen afbeelding, te groot, netwerkfout) blokkeert het opslaan van de serie nooit.
 
 Hoofdstukken zijn `float`, zodat hoofdstukken als 45.5 mogelijk zijn.
+
+### Covers
+
+- Bij "Add series" kun je een cover zoeken bij [AniList](https://anilist.co) (type MANGA, dus ook manhwa en light novels), zelf een afbeelding uploaden of een link plakken. Zoeken is een hulp-endpoint (`GET /ui/covers/search`), geen command of event.
+- Zoeken gebeurt in drie stappen: de titel zoals getypt, dan genormaliseerd, dan op de langste losse woorden (AniList zelf vindt niets bij een typfout). De resultaten worden lokaal vergeleken met alle titels van AniList (rapidfuzz). De drempel `COVER_MATCH_THRESHOLD` en `FALLBACK_WORDS` staan bovenaan `app/reading/cover_search.py`. Resultaten worden 10 minuten per titel in het geheugen bewaard.
+- Bij het opslaan wordt de cover gedownload en met Pillow gecontroleerd, rechtgezet (EXIF), vanuit het midden bijgesneden tot 300×450 (2:3) en als WebP met een UUID-naam in `data/covers/` gezet. Alleen http/https, maximaal 5 MB, timeout 10 s. Alleen de bestandsnaam staat in het event.
+- Een cover van een bestaande serie wijzigen kan nog niet; daar is een apart event voor nodig (bijvoorbeeld `SeriesCoverChanged`).
 
 ---
 

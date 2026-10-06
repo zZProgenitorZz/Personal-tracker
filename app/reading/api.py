@@ -1,6 +1,10 @@
+from dataclasses import asdict
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from ..covers import CoverError, CoverStore
+from .aggregate import DomainError
 from .commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, StartSeries
 from .events import Kind, Status
 from .projections import LibraryProjection, ReadingActivityProjection
@@ -13,6 +17,7 @@ class StartSeriesBody(BaseModel):
     kind: Kind
     source: str
     start_chapter: float = 0
+    cover_url: str | None = None
 
 
 class ProgressBody(BaseModel):
@@ -29,6 +34,7 @@ def create_reading_router(
     handler: ReadingCommandHandler,
     library: LibraryProjection,
     activity: ReadingActivityProjection,
+    covers: CoverStore,
 ) -> APIRouter:
     router = APIRouter(prefix="/reading", tags=["reading"])
 
@@ -61,10 +67,23 @@ def create_reading_router(
 
     @router.post("/series", status_code=201)
     def start_series(body: StartSeriesBody):
-        events = handler.handle(
-            StartSeries(body.title, body.kind, body.source, body.start_chapter)
-        )
-        return entry_or_404(events[0].series_id)
+        # Een mislukte cover blokkeert het opslaan niet; de reden staat in cover_error.
+        cover, cover_error = None, None
+        if body.cover_url:
+            try:
+                cover = covers.save_from_url(body.cover_url)
+            except CoverError as exc:
+                cover_error = str(exc)
+        try:
+            events = handler.handle(
+                StartSeries(body.title, body.kind, body.source, body.start_chapter, cover)
+            )
+        except DomainError:
+            if cover:
+                covers.delete(cover)
+            raise
+        entry = entry_or_404(events[0].series_id)
+        return {**asdict(entry), "cover_error": cover_error} if cover_error else entry
 
     @router.post("/series/{series_id}/progress")
     def log_progress(series_id: str, body: ProgressBody):

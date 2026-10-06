@@ -6,10 +6,12 @@ dezelfde commands als de JSON-API en antwoorden met een toast plus het event
 """
 from datetime import date, datetime, timedelta
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, File, Form, Request, UploadFile
 
+from ..covers import MAX_BYTES, CoverError, CoverStore, too_large
 from ..web import render, toast, templates
 from .aggregate import DomainError
+from .cover_search import CoverSearch
 from .commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, StartSeries
 from .events import Kind, Status, StatusChanged
 from .projections import LibraryEntry, LibraryProjection, ReadingActivityProjection
@@ -73,8 +75,21 @@ def create_reading_web_router(
     handler: ReadingCommandHandler,
     library: LibraryProjection,
     activity: ReadingActivityProjection,
+    covers: CoverStore,
+    cover_search: CoverSearch,
 ) -> APIRouter:
     router = APIRouter(prefix="/ui", include_in_schema=False)
+
+    def save_cover(upload: UploadFile | None, link: str, found: str) -> str | None:
+        """Bewaar de gekozen cover lokaal. Volgorde: upload, geplakte link, zoekresultaat."""
+        if upload is not None and upload.filename:
+            data = upload.file.read(MAX_BYTES + 1)
+            if len(data) > MAX_BYTES:
+                raise too_large()
+            if data:
+                return covers.save(data)
+        url = link.strip() or found.strip()
+        return covers.save_from_url(url) if url else None
 
     def overview(today: date) -> dict:
         per_day = activity.per_day()
@@ -155,6 +170,26 @@ def create_reading_web_router(
 
     # Schrijven
 
+    @router.get("/covers/search")
+    def find_cover(request: Request, title: str = "", index: int = 0):
+        """Hulp bij het formulier: toont één zoekresultaat tegelijk. Slaat niets op."""
+        if not title.strip():
+            return render(request, "_cover_pick.html", error="Type a title first, then search for its cover.")
+        try:
+            results = cover_search.search(title)
+        except CoverError as exc:
+            return render(request, "_cover_pick.html", error=str(exc))
+        if not results:
+            return render(
+                request, "_cover_pick.html",
+                error=f"No covers found for “{title.strip()}”. Try the official title, or add one yourself.",
+            )
+        i = index % len(results)
+        return render(
+            request, "_cover_pick.html",
+            pick=results[i], position=i + 1, total=len(results), next_index=(i + 1) % len(results),
+        )
+
     @router.post("/series")
     def start_series(
         request: Request,
@@ -162,11 +197,29 @@ def create_reading_web_router(
         kind: Kind = Form(),
         source: str = Form(""),
         start_chapter: float = Form(0),
+        cover_file: UploadFile | None = File(None),
+        cover_link: str = Form(""),
+        cover_url: str = Form(""),
     ):
+        # Eerst de cover. Mislukt die, dan wordt de serie toch opgeslagen.
+        cover, cover_problem = None, None
         try:
-            handler.handle(StartSeries(title, kind, source.strip(), start_chapter))
+            cover = save_cover(cover_file, cover_link, cover_url)
+        except CoverError as exc:
+            cover_problem = str(exc)
+
+        try:
+            handler.handle(StartSeries(title, kind, source.strip(), start_chapter, cover))
         except DomainError as exc:
+            if cover:
+                covers.delete(cover)  # geen losse bestanden achterlaten
             return toast(request, str(exc), error=True)
+
+        if cover_problem:
+            return toast(
+                request, f"Added {title.strip()}, but the cover couldn't be used: {cover_problem}",
+                error=True, changed=CHANGED,
+            )
         return toast(request, f"Added {title.strip()} to your library", changed=CHANGED)
 
     @router.post("/series/{series_id}/progress")

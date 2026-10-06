@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime, time, timedelta
 
 import pytest
@@ -118,3 +119,29 @@ def test_removed_series_leaves_library_but_keeps_activity():
     assert library.get(series_id) is None
     assert library.find_by_title("solo leveling") is not None
     assert activity.total_chapters() == 10
+
+
+def test_old_series_started_without_cover_still_loads():
+    # Zo staan events in de database van vóór de cover-functie: zonder "cover".
+    store = EventStore(":memory:", EVENT_TYPES)
+    old = {"series_id": "1", "title": "Solo Leveling", "kind": "manhwa", "source": "asura",
+           "start_chapter": 1.0, "at": "2026-09-30T13:29:33+00:00"}
+    store._conn.execute(
+        "INSERT INTO events (stream_id, type, data, at) VALUES (?, ?, ?, ?)",
+        ("1", "SeriesStarted", json.dumps(old), old["at"]),
+    )
+
+    [event] = store.load_all()
+    assert event.cover is None
+
+    library = LibraryProjection()
+    library.apply(event)
+    assert library.get("1").cover is None
+
+
+def test_cover_survives_storage_and_reaches_library():
+    handler, library, store = make_app()
+    [started] = handler.handle(StartSeries("Solo Leveling", Kind.MANHWA, "asura", 1, cover="abc.webp"))
+
+    assert store.load_all()[0].cover == "abc.webp"
+    assert library.get(started.series_id).cover == "abc.webp"

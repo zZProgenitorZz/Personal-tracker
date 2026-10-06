@@ -26,6 +26,8 @@ class SeriesStarted:
     source: str
     start_chapter: int
     at: datetime = field(default_factory=now)
+    # Bestandsnaam in de covermap. Oudere events hebben dit veld niet, vandaar de default.
+    cover: str | None = None
 
 
 @dataclass(frozen=True)
