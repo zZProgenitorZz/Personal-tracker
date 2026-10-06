@@ -1,6 +1,6 @@
 {% import "_macros.html" as ui %}
 {# Ververst zichzelf na "Back up now" of een terugzetting (event backups-changed). #}
-<div id="backups" hx-get="/ui/backups" hx-trigger="backups-changed from:body" hx-swap="outerHTML">
+<div id="backups" hx-disinherit="*" hx-get="/ui/backups" hx-trigger="backups-changed from:body" hx-swap="outerHTML">
   {% if backups %}
   <ul class="backup-list">
     {% for b in backups %}

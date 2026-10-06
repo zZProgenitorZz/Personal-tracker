@@ -40,6 +40,8 @@ document.addEventListener("click", (event) => {
     dialog().showModal();
   } else if (event.target.closest("[data-close]")) {
     dialog().close();
+  } else if (event.target.closest("[data-close-dialog]")) {
+    event.target.closest("dialog").close();
   } else if (event.target.tagName === "DIALOG") {
     event.target.close(); // klik op de achtergrond
   }
@@ -53,6 +55,12 @@ document.addEventListener("reading-changed", () => {
     d.querySelector("form").reset();
     resetCover();
   }
+  el("genre-dialog").close();
+});
+
+// "Edit genres" in het ⋯-menu laadt het formulier in #genre-editor; dan het venster openen.
+document.addEventListener("htmx:afterSwap", (event) => {
+  if (event.detail.target.id === "genre-editor") el("genre-dialog").showModal();
 });
 
 
@@ -62,7 +70,7 @@ document.addEventListener("reading-changed", () => {
 // controle en het opslaan; dit is alleen de preview.
 
 const MAX_COVER_BYTES = 5 * 1024 * 1024;
-const COVER_HINT = "Search AniList by title, upload an image, or paste a link.";
+const COVER_HINT = "Search for a cover by title, upload an image, or paste a link.";
 const el = (id) => document.getElementById(id);
 let coverSkips = 0;   // hoeveel zoekresultaten op rij niet laadden
 let objectUrl = null;
@@ -91,6 +99,7 @@ function clearSearch() {
 }
 
 function resetCover() {
+  resetGenres();
   clearSearch();
   el("cover-file").value = "";
   el("cover-link").value = "";
@@ -104,9 +113,36 @@ function coverTitle() {
   return el("series-title").value.trim() || "this series";
 }
 
+// Genres die bij een gevonden cover horen, alvast aanvinken in het formulier.
+// Zelf aangevinkte of uitgezette genres blijven zoals jij ze zette; alleen de
+// vorige suggestie wordt vervangen als je naar de volgende cover bladert.
+function suggestGenres(genres) {
+  for (const box of document.querySelectorAll("#add-dialog [name=genres]")) {
+    if (box.dataset.touched) continue;
+    box.checked = genres.includes(box.value);
+    box.dataset.suggested = box.checked ? "1" : "";
+  }
+  const found = genres.length ? `Genres from this cover: ${genres.join(", ")}` : "No genres found for this cover";
+  el("genre-hint").textContent = found + " · change them freely";
+}
+
+document.addEventListener("change", (event) => {
+  if (event.target.matches("#add-dialog [name=genres]")) event.target.dataset.touched = "1";
+});
+
+function resetGenres() {
+  for (const box of document.querySelectorAll("#add-dialog [name=genres]")) {
+    delete box.dataset.touched;
+    delete box.dataset.suggested;
+  }
+  el("genre-hint").textContent = "optional · found covers fill these in";
+}
+
 // Zoekresultaat geladen: deze telt.
-function coverLoaded() {
+function coverLoaded(img) {
   coverSkips = 0;
+  const genres = (img && img.dataset.genres) ? img.dataset.genres.split(",") : [];
+  suggestGenres(genres);
   el("cover-file").value = "";
   el("cover-link").value = "";
   el("cover-clear").hidden = false;

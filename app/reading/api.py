@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 from ..covers import CoverError, CoverStore
 from .aggregate import DomainError
-from .commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, StartSeries
+from .commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, SetGenres, StartSeries
 from .events import Kind, Status
 from .projections import LibraryProjection, ReadingActivityProjection
 
@@ -18,6 +18,12 @@ class StartSeriesBody(BaseModel):
     source: str
     start_chapter: float = 0
     cover_url: str | None = None
+    status: Status = Status.READING
+    genres: list[str] = []
+
+
+class GenresBody(BaseModel):
+    genres: list[str]
 
 
 class ProgressBody(BaseModel):
@@ -76,7 +82,8 @@ def create_reading_router(
                 cover_error = str(exc)
         try:
             events = handler.handle(
-                StartSeries(body.title, body.kind, body.source, body.start_chapter, cover)
+                StartSeries(body.title, body.kind, body.source, body.start_chapter, cover, body.status,
+                            tuple(body.genres))
             )
         except DomainError:
             if cover:
@@ -95,6 +102,12 @@ def create_reading_router(
     def change_status(series_id: str, body: StatusBody):
         entry_or_404(series_id)
         handler.handle(ChangeStatus(series_id, body.status))
+        return entry_or_404(series_id)
+
+    @router.post("/series/{series_id}/genres")
+    def set_genres(series_id: str, body: GenresBody):
+        entry_or_404(series_id)
+        handler.handle(SetGenres(series_id, tuple(body.genres)))
         return entry_or_404(series_id)
 
     @router.delete("/series/{series_id}", status_code=204)

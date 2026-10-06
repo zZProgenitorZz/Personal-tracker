@@ -1,7 +1,8 @@
 {# Gaat in #cover-preview van het formulier; het onderschrift wordt via hx-swap-oob bijgewerkt. #}
 {% if pick %}
 <img class="cover-img" src="{{ pick.image_url }}" alt="Cover of {{ pick.title }}"
-     data-cover-total="{{ total }}" onload="coverLoaded(this)" onerror="coverFailed(this)">
+     data-cover-total="{{ total }}" data-genres="{{ pick.genres|join(',') }}"
+     onload="coverLoaded(this)" onerror="coverFailed(this)">
 <input type="hidden" name="cover_url" value="{{ pick.image_url }}">
 <input type="hidden" id="cover-index" name="index" value="{{ next_index }}">
 {% endif %}

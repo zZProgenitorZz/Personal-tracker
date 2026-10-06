@@ -15,8 +15,10 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import httpx
 
 from ..covers import CoverError
+from .genres import from_source
 
 SOURCE_TIMEOUT = 6.0  # seconden per verzoek
+ANILIST_MIN_TAG_RANK = 60  # alleen tags waar AniList zeker van is
 
 
 @dataclass(frozen=True)
@@ -25,6 +27,7 @@ class SourceResult:
     image_url: str
     source: str
     check_size: bool = False  # True: afmetingen controleren voordat we hem tonen
+    genres: tuple[str, ...] = ()  # al vertaald naar de vaste genrelijst
 
 
 def cover_source(name: str):
@@ -68,6 +71,8 @@ query ($search: String) {
       title { romaji english native }
       synonyms
       coverImage { extraLarge large }
+      genres
+      tags { name rank }
     }
   }
 }
@@ -83,8 +88,10 @@ def anilist(client: httpx.Client, term: str) -> list[SourceResult]:
         names = media.get("title") or {}
         image = (media.get("coverImage") or {}).get("extraLarge") or (media.get("coverImage") or {}).get("large")
         titles = _titles(names.get("english"), names.get("romaji"), names.get("native"), *(media.get("synonyms") or []))
+        tags = [t.get("name") for t in media.get("tags") or [] if (t.get("rank") or 0) >= ANILIST_MIN_TAG_RANK]
+        genres = tuple(from_source([*(media.get("genres") or []), *tags]))
         if image and titles:
-            results.append(SourceResult(titles, image, "AniList"))
+            results.append(SourceResult(titles, image, "AniList", genres=genres))
     return results
 
 
@@ -101,8 +108,9 @@ def mangaupdates(client: httpx.Client, term: str) -> list[SourceResult]:
         record = hit.get("record") or {}
         image = (((record.get("image") or {}).get("url")) or {}).get("original")
         titles = _titles(record.get("title"), hit.get("hit_title"))
+        genres = tuple(from_source(g.get("genre") for g in record.get("genres") or [] if isinstance(g, dict)))
         if image and titles:
-            results.append(SourceResult(titles, image, "MangaUpdates"))
+            results.append(SourceResult(titles, image, "MangaUpdates", genres=genres))
     return results
 
 
@@ -139,8 +147,9 @@ def google_books(client: httpx.Client, term: str) -> list[SourceResult]:
         image = _largest_google_image(info.get("imageLinks") or {})
         title, subtitle = info.get("title"), info.get("subtitle")
         titles = _titles(title, f"{title}: {subtitle}" if title and subtitle else None)
+        genres = tuple(from_source(info.get("categories") or []))
         if image and titles:
-            results.append(SourceResult(titles, image, "Google Books", check_size=True))
+            results.append(SourceResult(titles, image, "Google Books", check_size=True, genres=genres))
     return results
 
 
@@ -153,15 +162,16 @@ OPEN_LIBRARY_COVER = "https://covers.openlibrary.org/b/id/{}-L.jpg"
 @cover_source("Open Library")
 def open_library(client: httpx.Client, term: str) -> list[SourceResult]:
     data = _ask(client, "Open Library", "GET", OPEN_LIBRARY_URL, params={
-        "title": term, "limit": 20, "fields": "title,subtitle,alternative_title,cover_i",
+        "title": term, "limit": 20, "fields": "title,subtitle,alternative_title,cover_i,subject",
     })
     results = []
     for doc in (data or {}).get("docs") or []:
         cover = doc.get("cover_i")
         alternative = doc.get("alternative_title") or []
         titles = _titles(doc.get("title"), *(alternative if isinstance(alternative, list) else [alternative]))
+        genres = tuple(from_source(doc.get("subject") or []))
         if isinstance(cover, int) and cover > 0 and titles:
-            results.append(SourceResult(titles, OPEN_LIBRARY_COVER.format(cover), "Open Library"))
+            results.append(SourceResult(titles, OPEN_LIBRARY_COVER.format(cover), "Open Library", genres=genres))
     return results
 
 

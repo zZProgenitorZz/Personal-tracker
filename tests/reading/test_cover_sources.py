@@ -147,3 +147,39 @@ def test_network_error_names_the_source(source, name):
 def test_unreadable_answer_names_the_source(source, name):
     with pytest.raises(CoverError, match=name):
         source(client_answering(httpx.Response(200, text="<html>")), "x")
+
+
+# ---- Genres die bronnen meegeven ----
+
+def test_anilist_genres_and_strong_tags():
+    seen = []
+    client = client_answering({"data": {"Page": {"media": [{
+        "title": {"english": "Lord of Mysteries"}, "synonyms": [], "coverImage": {"extraLarge": "https://a/x.jpg"},
+        "genres": ["Action", "Mystery", "Ecchi"],
+        "tags": [{"name": "Isekai", "rank": 70}, {"name": "Martial Arts", "rank": 20}],
+    }]}}}, seen)
+    [result] = anilist(client, "Lord of Mysteries")
+    assert result.genres == ("Action", "Isekai", "Mystery")  # zwakke tag en onbekend genre vallen weg
+    assert "genres" in json.loads(seen[0].content)["query"]
+
+
+def test_mangaupdates_genres():
+    client = client_answering({"results": [{"hit_title": "Reverend Insanity", "record": {
+        "title": "Reverend Insanity", "image": {"url": {"original": "https://mu/o.jpg"}},
+        "genres": [{"genre": "Action"}, {"genre": "Martial Arts"}, {"genre": "Seinen"}]}}]})
+    assert mangaupdates(client, "Reverend Insanity")[0].genres == ("Action", "Martial Arts")
+
+
+def test_google_books_categories(monkeypatch):
+    monkeypatch.delenv("GOOGLE_BOOKS_API_KEY", raising=False)
+    client = client_answering({"items": [{"volumeInfo": {
+        "title": "Shadow Slave", "categories": ["Fiction / Fantasy / Epic"],
+        "imageLinks": {"thumbnail": "http://g/t?zoom=1"}}}]})
+    assert google_books(client, "Shadow Slave")[0].genres == ("Fantasy",)
+
+
+def test_open_library_subjects():
+    seen = []
+    client = client_answering({"docs": [{"title": "Shadow Slave", "cover_i": 1, "subject": ["Fantasy fiction", "Magic"]}]}, seen)
+    assert open_library(client, "Shadow Slave")[0].genres == ("Fantasy",)
+    assert "subject" in seen[0].url.params["fields"]

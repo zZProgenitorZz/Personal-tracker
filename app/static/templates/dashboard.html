@@ -1,5 +1,5 @@
 {% import "_macros.html" as ui %}
-<div class="page" hx-get="/ui/dashboard" hx-trigger="reading-changed from:body" hx-swap="outerHTML">
+<div class="page" hx-disinherit="*" hx-get="/ui/dashboard" hx-trigger="reading-changed from:body" hx-swap="outerHTML">
   <header class="page-head">
     <div>
       <p class="eyebrow">{{ greeting }}</p>

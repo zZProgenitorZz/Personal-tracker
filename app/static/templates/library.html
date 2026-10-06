@@ -21,6 +21,10 @@
       {% endfor %}
     </div>
     <span class="chip-divider" aria-hidden="true"></span>
+    <select class="select" name="genre" aria-label="Genre">
+      <option value="">All genres</option>
+      {%- for g in GENRES %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+    </select>
     <div class="chips" role="radiogroup" aria-label="Type">
       <label class="chip"><input type="radio" name="kind" value="" checked><span>All types</span></label>
       {% for k, label in KIND_LABELS.items() %}

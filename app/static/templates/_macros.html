@@ -2,6 +2,15 @@
 <svg class="icon" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ ICONS[name]|safe }}</svg>
 {%- endmacro %}
 
+{# Vinkjes voor de vaste genrelijst; gedeeld door "Add series" en "Edit genres". #}
+{% macro genre_picker(selected=()) -%}
+<div class="genre-picker" role="group" aria-label="Genres">
+  {%- for g in GENRES %}
+  <label class="genre-chip"><input type="checkbox" name="genres" value="{{ g }}"{% if g in selected %} checked{% endif %}><span>{{ g }}</span></label>
+  {%- endfor %}
+</div>
+{%- endmacro %}
+
 {% macro status_pill(status) -%}
 <span class="pill pill-{{ status.value }}"><i></i>{{ STATUS_LABELS[status] }}</span>
 {%- endmacro %}
@@ -36,6 +45,10 @@
         <details class="card-menu">
           <summary aria-label="More options for {{ e.title }}" title="More options">{{ icon('more', 16) }}</summary>
           <div class="menu" role="menu">
+            <button class="menu-item" type="button" role="menuitem"
+                    hx-get="{{ base }}/genres" hx-target="#genre-editor" hx-swap="innerHTML">
+              {{ icon('tag', 15) }}Edit genres
+            </button>
             {# hx-confirm opent het bevestigingsvenster uit index.html (zie trackly.js) #}
             <button class="menu-item danger" type="button" role="menuitem"
                     hx-delete="{{ base }}" hx-swap="none" hx-confirm="{{ e.title }}">
@@ -50,6 +63,7 @@
       {%- if e.source %}<span class="series-source">{{ icon('link', 12) }}<span>{{ e.source }}</span></span><span aria-hidden="true">·</span>{% endif -%}
       <span>{{ e.updated_at|ago }}</span>
     </p>
+    {% if e.genres %}<p class="series-genres" title="{{ e.genres|join(', ') }}">{{ e.genres|join(' · ') }}</p>{% endif %}
     <div class="chapter-line">
       <div>
         <span class="mini-label">Chapter</span>

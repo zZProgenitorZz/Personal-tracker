@@ -1,4 +1,5 @@
-from .events import Kind, ProgressLogged, SeriesRemoved, SeriesStarted, Status, StatusChanged
+from .events import GenresChanged, Kind, ProgressLogged, SeriesRemoved, SeriesStarted, Status, StatusChanged
+from .genres import validated
 
 
 class DomainError(Exception):
@@ -12,6 +13,7 @@ class ReadingSeries:
         self.status = None
         self.current_chapter = None
         self.removed = False
+        self.genres: list[str] = []
         for event in events:
             self._apply(event)
 
@@ -33,14 +35,21 @@ class ReadingSeries:
             self.status = event.to_status
         elif isinstance(event, SeriesRemoved):
             self.removed = True
+        elif isinstance(event, GenresChanged):
+            self.genres = list(event.genres)
 
     # ---- Beslissingen: regels checken, nieuwe events teruggeven ----
 
     def start(self, series_id: str, title: str, kind: Kind, source: str, start_chapter: float,
-              cover: str | None = None) -> list:
+              cover: str | None = None, status: Status = Status.READING, genres=()) -> list:
         if self.exists:
             raise DomainError("Deze serie bestaat al")
-        return self._record(SeriesStarted(series_id, title, kind, source, start_chapter, cover=cover))
+        events = self._record(SeriesStarted(series_id, title, kind, source, start_chapter, cover=cover))
+        # Een serie begint altijd als Reading; een andere beginstatus is een gewone statuswijziging.
+        if status is not Status.READING:
+            events += self._record(StatusChanged(series_id, Status.READING, status))
+        events += self.set_genres(genres)
+        return events
 
     def log_progress(self, chapter: float) -> list:
         self._require_active()
@@ -57,6 +66,16 @@ class ReadingSeries:
         if new_status is self.status:
             raise DomainError(f"Status is al {new_status.value}")
         return self._record(StatusChanged(self.series_id, self.status, new_status))
+
+    def set_genres(self, genres) -> list:
+        self._require_active()
+        try:
+            chosen = validated(genres)
+        except ValueError as exc:
+            raise DomainError(f"Onbekend genre: {exc}") from exc
+        if chosen == self.genres:
+            return []  # niets veranderd, dus ook geen event
+        return self._record(GenresChanged(self.series_id, chosen))
 
     def remove(self) -> list:
         self._require_active()

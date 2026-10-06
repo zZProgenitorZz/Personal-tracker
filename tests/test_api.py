@@ -83,3 +83,23 @@ def test_real_environment_wins_over_env_file(tmp_path, monkeypatch):
     env_file.write_text("GOOGLE_BOOKS_API_KEY=uit-bestand\n", encoding="utf-8")
     create_app(":memory:", env_file=env_file)
     assert os.environ["GOOGLE_BOOKS_API_KEY"] == "uit-terminal"
+
+
+def test_start_series_with_status_via_api():
+    client = make_client()
+    response = client.post("/reading/series", json={
+        "title": "Nano Machine", "kind": "manhwa", "source": "asura", "start_chapter": 200, "status": "completed"})
+    assert response.status_code == 201
+    assert response.json()["status"] == "completed"
+
+
+def test_genres_via_api():
+    client = make_client()
+    response = client.post("/reading/series", json={
+        "title": "Solo Leveling", "kind": "manhwa", "source": "asura", "genres": ["Fantasy", "Action"]})
+    sid = response.json()["series_id"]
+    assert response.json()["genres"] == ["Action", "Fantasy"]
+
+    response = client.post(f"/reading/series/{sid}/genres", json={"genres": ["Romance"]})
+    assert response.json()["genres"] == ["Romance"]
+    assert client.post(f"/reading/series/{sid}/genres", json={"genres": ["Ninja"]}).status_code == 400

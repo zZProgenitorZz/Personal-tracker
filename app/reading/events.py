@@ -47,6 +47,13 @@ class StatusChanged:
 
 
 @dataclass(frozen=True)
+class GenresChanged:
+    series_id: str
+    genres: list[str]  # de volledige nieuwe lijst, niet een toevoeging
+    at: datetime = field(default_factory=now)
+
+
+@dataclass(frozen=True)
 class SeriesRemoved:
     series_id: str
     title: str

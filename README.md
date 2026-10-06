@@ -78,9 +78,8 @@ app/
   covers.py            covers downloaden, controleren en als 300×450 WebP bewaren (gedeeld)
   web.py               gedeeld voor de webpagina: templates, filters, toasts
   static/
-    index.html         de schil van de webpagina (Progen)
-    trackly.css/.js    stijl, navigatie, dialogen, coverkiezer
-    templates/         HTML-fragmenten voor htmx
+    trackly.css/.js    stijl, navigatie, dialogen, coverkiezer, genre-suggesties
+    templates/         index.html (de schil) en de HTML-fragmenten voor htmx
   reading/
     events.py          SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved
     aggregate.py       ReadingSeries + DomainError
@@ -88,6 +87,7 @@ app/
     projections.py     LibraryProjection, ReadingActivityProjection
     cover_search.py    covers zoeken bij alle bronnen tegelijk, fuzzy matching, cache
     cover_sources.py   de bronnen: AniList, MangaUpdates, Open Library, Google Books
+    genres.py          de vaste genrelijst, en genres uit bronnen daarnaar vertalen
     api.py             /reading endpoints (JSON)
     web.py             /ui endpoints (HTML-fragmenten voor htmx)
 tests/
@@ -104,8 +104,8 @@ data/                  tracker.db en covers/ (niet in git)
 | Onderdeel   | Inhoud                                                          |
 | ----------- | --------------------------------------------------------------- |
 | Statussen   | Reading, On-Hold, Completed, Dropped                            |
-| Events      | `SeriesStarted` (optioneel `cover`), `ProgressLogged`, `StatusChanged`, `SeriesRemoved` |
-| Commands    | `StartSeries`, `LogProgress`, `ChangeStatus`, `RemoveSeries`    |
+| Events      | `SeriesStarted` (optioneel `cover`), `ProgressLogged`, `StatusChanged`, `GenresChanged`, `SeriesRemoved` |
+| Commands    | `StartSeries`, `LogProgress`, `ChangeStatus`, `SetGenres`, `RemoveSeries` |
 | Read models | CurrentlyReading, Library, ReadingActivity (per dag / per week) |
 
 Regels:
@@ -116,7 +116,9 @@ Regels:
 4. Een negatief hoofdstuk wordt geweigerd.
 5. Een status wijzigen naar dezelfde status wordt geweigerd.
 6. Een verwijderde serie krijgt geen voortgang of status meer. Haar titel is daarna weer vrij: opnieuw toevoegen maakt een nieuwe serie (nieuwe `series_id`) die opnieuw begint. Gelezen hoofdstukken van de oude serie blijven meetellen in de statistieken.
-7. Een cover is optioneel. Een cover die niet lukt (geen afbeelding, te groot, netwerkfout) blokkeert het opslaan van de serie nooit.
+7. Bij het toevoegen kies je de status (standaard Reading). Een andere beginstatus wordt opgeslagen als `SeriesStarted` gevolgd door `StatusChanged`; het beginhoofdstuk telt niet mee als gelezen, zodat een afgeronde serie toevoegen je statistieken niet opblaast. Daarna kan elke status naar elke andere.
+8. Genres komen uit een vaste lijst (`GENRES` in `app/reading/genres.py`). `GenresChanged` bevat steeds de volledige nieuwe lijst; dezelfde genres opnieuw opslaan levert geen event op. Bij het toevoegen gaan genres mee als `GenresChanged` na `SeriesStarted`.
+9. Een cover is optioneel. Een cover die niet lukt (geen afbeelding, te groot, netwerkfout) blokkeert het opslaan van de serie nooit.
 
 Hoofdstukken zijn `float`, zodat hoofdstukken als 45.5 mogelijk zijn.
 
@@ -133,6 +135,7 @@ Hoofdstukken zijn `float`, zodat hoofdstukken als 45.5 mogelijk zijn.
 - Faalt of hangt een bron (deadline `SOURCE_DEADLINE`), dan tonen we de andere. Alleen als alle bronnen falen, volgt een foutmelding.
 - Instelbaar bovenaan `app/reading/cover_search.py`: `COVER_MATCH_THRESHOLD`, `FALLBACK_WORDS`, `SOURCE_DEADLINE`, `MIN_SOURCE_SIZE`. Resultaten worden 10 minuten per titel bewaard, maar maar 1 minuut als een bron faalde.
 - Bij het opslaan wordt de cover gedownload en met Pillow gecontroleerd, rechtgezet (EXIF), vanuit het midden bijgesneden tot 300×450 (2:3) en als WebP met een UUID-naam in `data/covers/` gezet. Alleen http/https, maximaal 5 MB, timeout 10 s. Alleen de bestandsnaam staat in het event.
+- Genres: AniList (genres en tags met rank ≥ 60), MangaUpdates (genres), Google Books (categorieën) en Open Library (onderwerpen) leveren genres mee. Die worden vertaald naar de vaste lijst en in het formulier alvast aangevinkt; wat je zelf aan- of uitvinkt, blijft staan als je naar een volgende cover bladert. Later aanpassen kan via ⋯ > *Edit genres* op een kaart.
 - Een cover van een bestaande serie wijzigen kan nog niet; daar is een apart event voor nodig (bijvoorbeeld `SeriesCoverChanged`).
 
 ---

@@ -1,8 +1,8 @@
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
-from .events import Kind, ProgressLogged, SeriesRemoved, SeriesStarted, Status, StatusChanged
+from .events import GenresChanged, Kind, ProgressLogged, SeriesRemoved, SeriesStarted, Status, StatusChanged
 
 
 @dataclass
@@ -15,6 +15,7 @@ class LibraryEntry:
     current_chapter: float
     updated_at: datetime
     cover: str | None = None
+    genres: list[str] = field(default_factory=list)
 
 
 class LibraryProjection:
@@ -39,6 +40,8 @@ class LibraryProjection:
             entry = self._entries[event.series_id]
             entry.status = event.to_status
             entry.updated_at = event.at
+        elif isinstance(event, GenresChanged):
+            self._entries[event.series_id].genres = list(event.genres)
         elif isinstance(event, SeriesRemoved):
             del self._entries[event.series_id]  # de titel is daarmee weer vrij
 

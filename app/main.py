@@ -4,7 +4,7 @@ from pathlib import Path
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .backup import Backups, default_backup_dir
@@ -14,15 +14,15 @@ from .reading.aggregate import DomainError
 from .reading.api import create_reading_router
 from .reading.commands import ReadingCommandHandler
 from .reading.cover_search import CoverSearch
-from .reading.events import ProgressLogged, SeriesRemoved, SeriesStarted, StatusChanged
+from .reading.events import GenresChanged, ProgressLogged, SeriesRemoved, SeriesStarted, StatusChanged
 from .reading.projections import LibraryProjection, ReadingActivityProjection
 from .reading.web import create_reading_web_router
-from .web import STATIC, create_settings_router
+from .web import STATIC, create_settings_router, render
 
 # Instellingen zoals GOOGLE_BOOKS_API_KEY. Staat niet in git (.gitignore).
 ENV_FILE = Path(__file__).parent.parent / ".env"
 
-EVENT_TYPES = [SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved]
+EVENT_TYPES = [SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved, GenresChanged]
 
 
 def create_app(
@@ -77,12 +77,22 @@ def create_app(
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     app.mount("/covers", StaticFiles(directory=covers.directory), name="covers")
 
+    @app.middleware("http")
+    async def always_fresh(request: Request, call_next):
+        """Pagina, scripts en fragmenten: de browser vraagt altijd even na of ze nog
+        actueel zijn, zodat je na een update nooit een oude versie ziet. Covers
+        (vaste, unieke namen) mogen gewoon uit de cache komen."""
+        response = await call_next(request)
+        if not request.url.path.startswith("/covers/"):
+            response.headers.setdefault("Cache-Control", "no-cache")
+        return response
+
     @app.exception_handler(DomainError)
     def handle_domain_error(request: Request, exc: DomainError):
         return JSONResponse(status_code=400, content={"detail": str(exc)})
 
     @app.get("/", include_in_schema=False)
-    def index():
-        return FileResponse(STATIC / "index.html")
+    def index(request: Request):
+        return render(request, "index.html")
 
     return app

@@ -27,7 +27,7 @@ def fake_internet(request: httpx.Request) -> httpx.Response:
         if "solo" in term.lower():
             found = [
                 {"title": {"romaji": "Ore dake Level Up na Ken", "english": "Solo Leveling", "native": None},
-                 "synonyms": [], "coverImage": {"extraLarge": SOLO_1}},
+                 "synonyms": [], "coverImage": {"extraLarge": SOLO_1}, "genres": ["Action", "Fantasy"]},
                 {"title": {"romaji": "Na Honjaman Level Up", "english": None, "native": None},
                  "synonyms": ["Solo Levelling"], "coverImage": {"extraLarge": SOLO_2}},
             ]
@@ -174,3 +174,9 @@ def test_json_api_saves_series_when_cover_fails(client):
     assert response.status_code == 201
     assert response.json()["cover"] is None
     assert "http" in response.json()["cover_error"]
+
+
+def test_search_result_suggests_genres(client):
+    # trackly.js vinkt deze genres aan in het formulier; je kunt ze daarna zelf aanpassen.
+    response = client.get("/ui/covers/search", params={"title": "Solo Leveling"})
+    assert 'data-genres="Action,Fantasy"' in response.text

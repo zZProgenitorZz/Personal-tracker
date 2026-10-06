@@ -16,6 +16,8 @@ class StartSeries:
     source: str
     start_chapter: float = 0
     cover: str | None = None
+    status: Status = Status.READING
+    genres: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -28,6 +30,12 @@ class LogProgress:
 class ChangeStatus:
     series_id: str
     new_status: Status
+
+
+@dataclass(frozen=True)
+class SetGenres:
+    series_id: str
+    genres: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -54,6 +62,8 @@ class ReadingCommandHandler:
                 command.source,
                 command.start_chapter,
                 command.cover,
+                command.status,
+                command.genres,
             )
         elif isinstance(command, LogProgress):
             series = self._load(command.series_id)
@@ -61,6 +71,9 @@ class ReadingCommandHandler:
         elif isinstance(command, ChangeStatus):
             series = self._load(command.series_id)
             events = series.change_status(command.new_status)
+        elif isinstance(command, SetGenres):
+            series = self._load(command.series_id)
+            events = series.set_genres(command.genres)
         elif isinstance(command, RemoveSeries):
             series = self._load(command.series_id)
             events = series.remove()

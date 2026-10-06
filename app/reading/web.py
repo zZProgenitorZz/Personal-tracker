@@ -12,8 +12,9 @@ from ..covers import MAX_BYTES, CoverError, CoverStore, too_large
 from ..web import render, toast, templates
 from .aggregate import DomainError
 from .cover_search import CoverSearch
-from .commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, StartSeries
+from .commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, SetGenres, StartSeries
 from .events import Kind, Status, StatusChanged
+from .genres import GENRES
 from .projections import LibraryEntry, LibraryProjection, ReadingActivityProjection
 
 CHANGED = "reading-changed"
@@ -26,7 +27,7 @@ STATUS_LABELS = {
 }
 KIND_LABELS = {Kind.MANHWA: "Manhwa", Kind.NOVEL: "Novel"}
 
-templates.env.globals.update(STATUS_LABELS=STATUS_LABELS, KIND_LABELS=KIND_LABELS)
+templates.env.globals.update(STATUS_LABELS=STATUS_LABELS, KIND_LABELS=KIND_LABELS, GENRES=GENRES)
 
 
 # ---- Gegevens voor de grafieken, afgeleid uit ReadingActivity ----
@@ -108,7 +109,16 @@ def create_reading_web_router(
             for s, label in STATUS_LABELS.items()
         ]
 
-    def filtered(status: str, kind: str, q: str) -> list[LibraryEntry]:
+    def genre_counts() -> list[dict]:
+        """Hoeveel series per genre, meeste eerst (alleen genres die voorkomen)."""
+        counts = {g: sum(g in e.genres for e in library.all()) for g in GENRES}
+        top = max(counts.values(), default=0)
+        return [
+            {"genre": g, "count": n, "width": round(100 * n / top) if top else 0}
+            for g, n in sorted(counts.items(), key=lambda item: -item[1]) if n
+        ]
+
+    def filtered(status: str, kind: str, q: str, genre: str = "") -> list[LibraryEntry]:
         entries = library.all()
         if status in Status._value2member_map_:
             entries = [e for e in entries if e.status is Status(status)]
@@ -116,6 +126,8 @@ def create_reading_web_router(
             entries = [e for e in entries if e.kind is Kind(kind)]
         if q.strip():
             entries = [e for e in entries if q.strip().lower() in e.title.lower()]
+        if genre:
+            entries = [e for e in entries if genre in e.genres]
         return entries
 
     # Lezen
@@ -136,13 +148,13 @@ def create_reading_web_router(
 
     @router.get("/library")
     def library_page(request: Request):
-        return render(request, "library.html", entries=library.all(), status="", kind="", q="")
+        return render(request, "library.html", entries=library.all(), status="", kind="", q="", genre="")
 
     @router.get("/library/grid")
-    def library_grid(request: Request, status: str = "", kind: str = "", q: str = ""):
+    def library_grid(request: Request, status: str = "", kind: str = "", q: str = "", genre: str = ""):
         return render(
             request, "_library_grid.html",
-            entries=filtered(status, kind, q), status=status, kind=kind, q=q,
+            entries=filtered(status, kind, q, genre), status=status, kind=kind, q=q, genre=genre,
         )
 
     @router.get("/progress")
@@ -165,6 +177,7 @@ def create_reading_web_router(
                 {"label": label, "count": sum(e.kind is k for e in library.all())}
                 for k, label in KIND_LABELS.items()
             ],
+            genres=genre_counts(),
             library_size=len(library.all()),
         )
 
@@ -197,6 +210,8 @@ def create_reading_web_router(
         kind: Kind = Form(),
         source: str = Form(""),
         start_chapter: float = Form(0),
+        status: Status = Form(Status.READING),
+        genres: list[str] = Form([]),
         cover_file: UploadFile | None = File(None),
         cover_link: str = Form(""),
         cover_url: str = Form(""),
@@ -209,7 +224,7 @@ def create_reading_web_router(
             cover_problem = str(exc)
 
         try:
-            handler.handle(StartSeries(title, kind, source.strip(), start_chapter, cover))
+            handler.handle(StartSeries(title, kind, source.strip(), start_chapter, cover, status, tuple(genres)))
         except DomainError as exc:
             if cover:
                 covers.delete(cover)  # geen losse bestanden achterlaten
@@ -217,10 +232,11 @@ def create_reading_web_router(
 
         if cover_problem:
             return toast(
-                request, f"Added {title.strip()}, but the cover couldn't be used: {cover_problem}",
+                request, f"Added {title.strip()} ({STATUS_LABELS[status]}), but the cover couldn't be used: {cover_problem}",
                 error=True, changed=CHANGED,
             )
-        return toast(request, f"Added {title.strip()} to your library", changed=CHANGED)
+        added = f"Added {title.strip()}" + ("" if status is Status.READING else f" as {STATUS_LABELS[status]}")
+        return toast(request, f"{added} to your library", changed=CHANGED)
 
     @router.post("/series/{series_id}/progress")
     def log_progress(request: Request, series_id: str, chapter: float = Form()):
@@ -242,6 +258,27 @@ def create_reading_web_router(
             return toast(request, str(exc), error=True)
         entry = library.get(series_id)
         return toast(request, f"{entry.title if entry else 'Series'} → {STATUS_LABELS[status]}", changed=CHANGED)
+
+    @router.get("/series/{series_id}/genres")
+    def edit_genres(request: Request, series_id: str):
+        """Inhoud van het venster "Edit genres", met de huidige genres aangevinkt."""
+        entry = library.get(series_id)
+        if entry is None:
+            return toast(request, "Onbekende serie", error=True)
+        return render(request, "_genre_editor.html", entry=entry)
+
+    @router.post("/series/{series_id}/genres")
+    def set_genres(request: Request, series_id: str, genres: list[str] = Form([])):
+        try:
+            events = handler.handle(SetGenres(series_id, tuple(genres)))
+        except DomainError as exc:
+            return toast(request, str(exc), error=True)
+        entry = library.get(series_id)
+        title = entry.title if entry else "Series"
+        if not events:
+            return toast(request, f"{title}: genres unchanged", changed=CHANGED)
+        chosen = ", ".join(entry.genres) if entry and entry.genres else "no genres"
+        return toast(request, f"{title} · {chosen}", changed=CHANGED)
 
     @router.delete("/series/{series_id}")
     def remove_series(request: Request, series_id: str):

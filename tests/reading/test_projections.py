@@ -5,11 +5,11 @@ import pytest
 
 from app.eventstore import EventStore
 from app.reading.aggregate import DomainError
-from app.reading.commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, StartSeries
-from app.reading.events import Kind, ProgressLogged, SeriesRemoved, SeriesStarted, Status, StatusChanged
+from app.reading.commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, SetGenres, StartSeries
+from app.reading.events import GenresChanged, Kind, ProgressLogged, SeriesRemoved, SeriesStarted, Status, StatusChanged
 from app.reading.projections import LibraryProjection, ReadingActivityProjection
 
-EVENT_TYPES = [SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved]
+EVENT_TYPES = [SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved, GenresChanged]
 
 
 def make_app():
@@ -165,3 +165,33 @@ def test_cover_survives_storage_and_reaches_library():
 
     assert store.load_all()[0].cover == "abc.webp"
     assert library.get(started.series_id).cover == "abc.webp"
+
+
+def test_finished_series_added_as_completed_does_not_count_as_reading_today():
+    handler, library, store = make_app()
+    activity = ReadingActivityProjection()
+    store.subscribe(activity.apply)
+    handler.handle(StartSeries("Lord of the Mysteries", Kind.NOVEL, "x", 1432, status=Status.COMPLETED))
+
+    [entry] = library.all()
+    assert entry.status is Status.COMPLETED and entry.current_chapter == 1432
+    assert library.currently_reading() == []
+    assert activity.total_chapters() == 0
+
+
+def test_genres_reach_the_library_and_survive_a_rebuild():
+    handler, library, store = make_app()
+    [started, _] = handler.handle(StartSeries("Solo Leveling", Kind.MANHWA, "asura", 1, genres=["Fantasy", "Action"]))
+    handler.handle(SetGenres(started.series_id, ["Action", "Game"]))
+
+    assert library.get(started.series_id).genres == ["Action", "Game"]
+    rebuilt = LibraryProjection()
+    for event in store.load_all():
+        rebuilt.apply(event)
+    assert rebuilt.all() == library.all()
+
+
+def test_old_series_have_no_genres():
+    handler, library, _ = make_app()
+    series_id = start(handler, "Solo Leveling")
+    assert library.get(series_id).genres == []

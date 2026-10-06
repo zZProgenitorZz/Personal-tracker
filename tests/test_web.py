@@ -100,3 +100,95 @@ def test_backup_and_restore_via_settings(tmp_path):
 def test_restoring_unknown_backup_gives_error_toast(tmp_path):
     client = TestClient(create_app(":memory:", backup_dir=tmp_path / "backups"))
     assert "toast-error" in client.post("/ui/backups/bestaat-niet/restore").text
+
+
+def test_add_series_with_status():
+    client = make_client()
+    response = client.post("/ui/series", data={
+        "title": "Lord of the Mysteries", "kind": "novel", "source": "x", "start_chapter": "1432", "status": "completed"})
+    assert "Completed" in response.text
+    assert client.get("/reading/library").json()[0]["status"] == "completed"
+
+
+def test_add_series_without_status_is_reading():
+    client = make_client()
+    add_series(client)
+    assert client.get("/reading/library").json()[0]["status"] == "reading"
+
+
+def test_cards_in_the_library_do_not_inherit_the_filters():
+    # Anders stuurt het statusmenu op een kaart het filter "All" (status="") mee.
+    client = make_client()
+    add_series(client)
+    grid = client.get("/ui/library/grid").text
+    assert 'id="library-grid"' in grid and 'hx-disinherit="*"' in grid.split(">", 1)[0]
+
+
+def test_browser_always_checks_for_a_newer_page_and_scripts():
+    # Anders blijft de browser na een update oude index.html/trackly.js gebruiken.
+    client = make_client()
+    for path in ["/", "/static/trackly.js", "/static/trackly.css", "/ui/dashboard"]:
+        assert client.get(path).headers.get("cache-control") == "no-cache", path
+
+
+# ---- Genres ----
+
+def add_with_genres(client, title="Solo Leveling", genres=("Action", "Fantasy"), kind="manhwa"):
+    return client.post("/ui/series", data={"title": title, "kind": kind, "source": "x", "start_chapter": "1",
+                                           "genres": list(genres)})
+
+
+def test_add_series_with_genres():
+    client = make_client()
+    add_with_genres(client)
+    assert client.get("/reading/library").json()[0]["genres"] == ["Action", "Fantasy"]
+    assert "Action · Fantasy" in client.get("/ui/library/grid").text
+
+
+def test_add_form_lists_every_genre():
+    from app.reading.genres import GENRES
+    page = make_client().get("/").text
+    assert all(f'value="{g}"' in page for g in GENRES)
+
+
+def test_edit_genres_later():
+    client = make_client()
+    add_with_genres(client)
+    sid = series_id(client)
+
+    form = client.get(f"/ui/series/{sid}/genres").text
+    assert 'value="Action" checked' in form and 'value="Romance">' in form
+
+    response = client.post(f"/ui/series/{sid}/genres", data={"genres": ["Romance"]})
+    assert response.headers["HX-Trigger"] == "reading-changed"
+    assert client.get("/reading/library").json()[0]["genres"] == ["Romance"]
+
+
+def test_clearing_all_genres():
+    client = make_client()
+    add_with_genres(client)
+    client.post(f"/ui/series/{series_id(client)}/genres", data={})
+    assert client.get("/reading/library").json()[0]["genres"] == []
+
+
+def test_unknown_genre_gives_error_toast():
+    client = make_client()
+    add_series(client)
+    response = client.post(f"/ui/series/{series_id(client)}/genres", data={"genres": ["Ninja"]})
+    assert "toast-error" in response.text
+
+
+def test_library_filters_by_genre():
+    client = make_client()
+    add_with_genres(client, "Solo Leveling", ["Action"])
+    add_with_genres(client, "True Beauty", ["Romance"])
+    grid = client.get("/ui/library/grid", params={"genre": "Romance"}).text
+    assert "True Beauty" in grid and "Solo Leveling" not in grid
+
+
+def test_progress_shows_genres():
+    client = make_client()
+    add_with_genres(client, "Solo Leveling", ["Action", "Fantasy"])
+    add_with_genres(client, "Omniscient Reader", ["Action"])
+    page = client.get("/ui/progress").text
+    assert "Genres" in page and "Action" in page

@@ -89,6 +89,7 @@ class CoverCandidate:
     score: float
     source: str
     check_size: bool = False
+    genres: tuple[str, ...] = ()
 
 
 def rank(query: str, results: list[SourceResult]) -> list[CoverCandidate]:
@@ -99,7 +100,8 @@ def rank(query: str, results: list[SourceResult]) -> list[CoverCandidate]:
             continue
         score, title = max((similarity(query, t), t) for t in result.titles)
         if score >= COVER_MATCH_THRESHOLD and score > best.get(result.image_url, _NONE).score:
-            best[result.image_url] = CoverCandidate(title, result.image_url, score, result.source, result.check_size)
+            best[result.image_url] = CoverCandidate(
+                title, result.image_url, score, result.source, result.check_size, result.genres)
     # sorted is stabiel: bij gelijke score blijft de volgorde van de bronnen staan.
     return sorted(best.values(), key=lambda c: c.score, reverse=True)
 
@@ -164,7 +166,7 @@ class CoverSearch:
         for term in terms:
             matches = [c for c in rank(title, source(self._client, term)) if self._big_enough(c)]
             if matches:
-                return [SourceResult((c.title,), c.image_url, c.source, c.check_size) for c in matches]
+                return [SourceResult((c.title,), c.image_url, c.source, c.check_size, c.genres) for c in matches]
         return []
 
     def _big_enough(self, candidate: CoverCandidate) -> bool:

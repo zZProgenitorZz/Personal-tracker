@@ -67,4 +67,20 @@
       </ul>
     </section>
   </div>
+
+  <section class="panel spaced">
+    <div class="panel-head">
+      <h2>Genres</h2>
+      <span class="muted">Series per genre</span>
+    </div>
+    {% if genres %}
+    <ul class="genre-bars">
+      {% for g in genres %}
+      <li><span>{{ g.genre }}</span><div class="genre-bar"><i style="width: {{ g.width }}%"></i></div><b>{{ g.count }}</b></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No genres yet. Add them when you add a series, or with “Edit genres” in the ⋯ menu on a card.</p>
+    {% endif %}
+  </section>
 </div>
