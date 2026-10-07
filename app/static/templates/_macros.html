@@ -2,17 +2,65 @@
 <svg class="icon" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ ICONS[name]|safe }}</svg>
 {%- endmacro %}
 
-{# Vinkjes voor de vaste genrelijst; gedeeld door "Add series" en "Edit genres". #}
-{% macro genre_picker(selected=()) -%}
+{# Tabbladen binnen een tracker: Dashboard, Library, Progress. #}
+{% macro tracker_tabs(tracker, active) -%}
+<nav class="tracker-tabs" aria-label="{{ tracker|capitalize }}">
+  <a href="#{{ tracker }}"{% if active == 'dashboard' %} class="active" aria-current="page"{% endif %}>Dashboard</a>
+  <a href="#{{ tracker }}/library"{% if active == 'library' %} class="active" aria-current="page"{% endif %}>Library</a>
+  <a href="#{{ tracker }}/progress"{% if active == 'progress' %} class="active" aria-current="page"{% endif %}>Progress</a>
+</nav>
+{%- endmacro %}
+
+{# Vinkjes voor de vaste genrelijst van een tracker; gedeeld door "Add ..." en "Edit genres". #}
+{% macro genre_picker(options, selected=()) -%}
 <div class="genre-picker" role="group" aria-label="Genres">
-  {%- for g in GENRES %}
+  {%- for g in options %}
   <label class="genre-chip"><input type="checkbox" name="genres" value="{{ g }}"{% if g in selected %} checked{% endif %}><span>{{ g }}</span></label>
   {%- endfor %}
 </div>
 {%- endmacro %}
 
-{% macro status_pill(status) -%}
-<span class="pill pill-{{ status.value }}"><i></i>{{ STATUS_LABELS[status] }}</span>
+{# Keuze uit statussen of soorten als knoppenrij. options: {enum: label}; zonder `checked` de eerste. #}
+{% macro segmented(name, options, checked=none, dots=false) -%}
+{% set checked = checked if checked is not none else (options|list)[0] %}
+<div class="segmented segmented-{{ options|length }}" role="radiogroup">
+  {%- for value, label in options.items() %}
+  <label><input type="radio" name="{{ name }}" value="{{ value.value }}"{% if value == checked %} checked{% endif %}><span>
+    {%- if dots %}<i class="dot dot-{{ value.value }}"></i>{% endif %}{{ label }}</span></label>
+  {%- endfor %}
+</div>
+{%- endmacro %}
+
+{# Coverkiezer in een "Add ..."-formulier. De ids zijn uniek, want er staat altijd maar één formulier open. #}
+{% macro cover_picker(search_url) -%}
+<div class="field">
+  <span>Cover <small>optional</small></span>
+  <div class="cover-picker" id="cover-picker">
+    <div class="cover-frame" id="cover-preview" aria-label="Cover preview"></div>
+    <div class="cover-controls">
+      <div class="cover-buttons">
+        <button class="btn btn-ghost btn-sm" id="find-cover" type="button"
+                hx-get="{{ search_url }}" hx-include="#item-title, #cover-index"
+                hx-target="#cover-preview" hx-indicator="#cover-picker"
+                hx-on:htmx:before-request="coverSkips = 0">
+          {{ icon('search', 15) }}<span class="spinner" aria-hidden="true"></span>
+          Find cover
+        </button>
+        <label class="btn btn-ghost btn-sm">
+          {{ icon('upload', 15) }}Upload
+          <input type="file" id="cover-file" name="cover_file" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp" class="sr-only">
+        </label>
+        <button class="btn-link" type="button" id="cover-clear" hidden>Remove</button>
+      </div>
+      <input class="input input-sm" id="cover-link" name="cover_link" type="url" inputmode="url" autocomplete="off" placeholder="…or paste an image URL">
+      <div id="cover-caption" class="cover-caption" aria-live="polite">Search for a cover by title, upload an image, or paste a link.</div>
+    </div>
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro status_pill(status, labels=STATUS_LABELS) -%}
+<span class="pill pill-{{ status.value }}"><i></i>{{ labels[status] }}</span>
 {%- endmacro %}
 
 {# Zonder cover, of als de afbeelding niet laadt, blijft de gekleurde placeholder met initialen zichtbaar. #}
@@ -20,7 +68,7 @@
 <div class="cover" style="--hue: {{ title|hue }}">
   <span class="cover-initials" aria-hidden="true">{{ title|initials }}</span>
   {% if file %}<img class="cover-img" src="/covers/{{ file }}" alt="Cover of {{ title }}" loading="lazy" onerror="this.remove()">{% endif %}
-  <span class="cover-kind" aria-hidden="true">{{ icon('book' if kind.value == 'novel' else 'image', 13) }}</span>
+  <span class="cover-kind" aria-hidden="true">{{ icon(KIND_ICONS[kind.value], 13) }}</span>
 </div>
 {%- endmacro %}
 
@@ -32,8 +80,26 @@
 </div>
 {%- endmacro %}
 
+{# Het ⋯-menu op een kaart: genres aanpassen en verwijderen. #}
+{% macro card_menu(base, title, confirm_kind='remove') -%}
+<details class="card-menu">
+  <summary aria-label="More options for {{ title }}" title="More options">{{ icon('more', 16) }}</summary>
+  <div class="menu" role="menu">
+    <button class="menu-item" type="button" role="menuitem"
+            hx-get="{{ base }}/genres" hx-target="#genre-editor" hx-swap="innerHTML">
+      {{ icon('tag', 15) }}Edit genres
+    </button>
+    {# hx-confirm opent het bevestigingsvenster uit index.html (zie trackly.js) #}
+    <button class="menu-item danger" type="button" role="menuitem"
+            hx-delete="{{ base }}" hx-swap="none" hx-confirm="{{ title }}" data-confirm-kind="{{ confirm_kind }}">
+      {{ icon('trash', 15) }}Remove
+    </button>
+  </div>
+</details>
+{%- endmacro %}
+
 {% macro series_card(e) -%}
-{% set base = "/ui/series/" ~ e.series_id %}
+{% set base = "/ui/reading/series/" ~ e.series_id %}
 {% set next = (e.current_chapter // 1 + 1)|int %}
 <article class="series-card">
   {{ cover(e.title, e.kind, e.cover) }}
@@ -42,20 +108,7 @@
       <span class="kind-tag">{{ KIND_LABELS[e.kind] }}</span>
       <div class="series-head-end">
         {{ status_pill(e.status) }}
-        <details class="card-menu">
-          <summary aria-label="More options for {{ e.title }}" title="More options">{{ icon('more', 16) }}</summary>
-          <div class="menu" role="menu">
-            <button class="menu-item" type="button" role="menuitem"
-                    hx-get="{{ base }}/genres" hx-target="#genre-editor" hx-swap="innerHTML">
-              {{ icon('tag', 15) }}Edit genres
-            </button>
-            {# hx-confirm opent het bevestigingsvenster uit index.html (zie trackly.js) #}
-            <button class="menu-item danger" type="button" role="menuitem"
-                    hx-delete="{{ base }}" hx-swap="none" hx-confirm="{{ e.title }}">
-              {{ icon('trash', 15) }}Remove from library
-            </button>
-          </div>
-        </details>
+        {{ card_menu(base, e.title) }}
       </div>
     </div>
     <h3 class="series-title" title="{{ e.title }}">{{ e.title }}</h3>
@@ -89,11 +142,39 @@
 </article>
 {%- endmacro %}
 
-{% macro empty(icon_name, title, text, cta=true) -%}
+{# Een film, serie of anime. Alleen status en genres; geen afleveringen. #}
+{% macro show_card(e) -%}
+{% set base = "/ui/watching/shows/" ~ e.show_id %}
+<article class="series-card">
+  {{ cover(e.title, e.kind, e.cover) }}
+  <div class="series-body">
+    <div class="series-head">
+      <span class="kind-tag">{{ WATCH_KIND_LABELS[e.kind] }}</span>
+      <div class="series-head-end">
+        {{ status_pill(e.status, WATCH_STATUS_LABELS) }}
+        {{ card_menu(base, e.title, 'remove-show') }}
+      </div>
+    </div>
+    <h3 class="series-title" title="{{ e.title }}">{{ e.title }}</h3>
+    <p class="series-meta"><span>{{ e.updated_at|ago }}</span></p>
+    {% if e.genres %}<p class="series-genres" title="{{ e.genres|join(', ') }}">{{ e.genres|join(' · ') }}</p>{% endif %}
+    <div class="series-actions show-actions">
+      <select class="select" name="status" hx-post="{{ base }}/status" hx-trigger="change" hx-swap="none"
+              aria-label="Status of {{ e.title }}">
+        {%- for s, label in WATCH_STATUS_LABELS.items() %}
+        <option value="{{ s.value }}"{% if s == e.status %} selected{% endif %}>{{ label }}</option>
+        {%- endfor %}
+      </select>
+    </div>
+  </div>
+</article>
+{%- endmacro %}
+
+{% macro empty(icon_name, title, text, cta=true, cta_label='Add series') -%}
 <div class="empty">
   <div class="empty-icon">{{ icon(icon_name, 22) }}</div>
   <h3>{{ title }}</h3>
   <p>{{ text }}</p>
-  {% if cta %}<button class="btn btn-primary" type="button" data-open-add>{{ icon('plus', 16) }}Add series</button>{% endif %}
+  {% if cta %}<button class="btn btn-primary" type="button" data-open-add>{{ icon('plus', 16) }}{{ cta_label }}</button>{% endif %}
 </div>
 {%- endmacro %}

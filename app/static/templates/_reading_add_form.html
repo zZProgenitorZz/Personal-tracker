@@ -1,0 +1,50 @@
+{% import "_macros.html" as ui %}
+{# Inhoud van het venster "Add series" (Reading); geladen in #add-form-slot. #}
+<form class="dialog-form" hx-post="/ui/reading/series" hx-target="#toasts" hx-swap="beforeend"
+      hx-encoding="multipart/form-data" hx-disinherit="*">
+  <div class="dialog-head">
+    <div>
+      <p class="eyebrow">Reading</p>
+      <h2 id="add-title">Add a series</h2>
+    </div>
+    <button class="btn-close" type="button" data-close-dialog aria-label="Close">{{ ui.icon('x', 18) }}</button>
+  </div>
+
+  <label class="field">
+    <span>Title</span>
+    <input class="input" id="item-title" name="title" required autocomplete="off" placeholder="Solo Leveling">
+  </label>
+
+  {{ ui.cover_picker("/ui/reading/covers/search") }}
+
+  <div class="field">
+    <span>Type</span>
+    {{ ui.segmented("kind", KIND_LABELS, none) }}
+  </div>
+
+  <div class="field">
+    <span>Status</span>
+    {{ ui.segmented("status", STATUS_LABELS, none, dots=true) }}
+  </div>
+
+  <div class="field">
+    <span>Genres <small id="genre-hint">optional · found covers fill these in</small></span>
+    {{ ui.genre_picker(GENRES) }}
+  </div>
+
+  <div class="field-row">
+    <label class="field">
+      <span>Where you read it</span>
+      <input class="input" name="source" autocomplete="off" placeholder="asuracomic.net">
+    </label>
+    <label class="field">
+      <span>Current chapter</span>
+      <input class="input" name="start_chapter" type="number" step="any" min="0" value="0">
+    </label>
+  </div>
+
+  <div class="dialog-actions">
+    <button class="btn btn-ghost" type="button" data-close-dialog>Cancel</button>
+    <button class="btn btn-primary">Add series</button>
+  </div>
+</form>

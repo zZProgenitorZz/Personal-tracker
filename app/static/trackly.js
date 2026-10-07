@@ -1,25 +1,52 @@
-// Navigatie via de hash (#library), zodat terugknop en verversen werken.
-// Alle data en acties lopen via htmx; dit script regelt alleen de schil.
+// De schil van Progen: navigatie, vensters, coverkiezer en toasts.
+// Alle data en acties lopen via htmx; dit script regelt alleen wat daaromheen zit.
 
-const PAGES = ["dashboard", "library", "progress", "settings"];
+const el = (id) => document.getElementById(id);
 
-function currentPage() {
-  const page = location.hash.slice(1);
-  return PAGES.includes(page) ? page : "dashboard";
+
+// ---- Navigatie via de hash, zodat terugknop en verversen werken ----
+// #home, #settings, en per tracker #<tracker>, #<tracker>/library, #<tracker>/progress.
+
+const TRACKERS = {
+  reading: { add: "Add series" },
+  watching: { add: "Add title" },
+};
+const TABS = ["dashboard", "library", "progress"];
+const OLD_ADDRESSES = { dashboard: "reading", library: "reading/library", progress: "reading/progress" };
+
+function currentRoute() {
+  let hash = location.hash.slice(1);
+  hash = OLD_ADDRESSES[hash] || hash;  // bladwijzers van vóór het startscherm blijven werken
+  const [section, tab = "dashboard"] = hash.split("/");
+  if (TRACKERS[section] && TABS.includes(tab)) return { section, tab, url: `/ui/${section}/${tab}` };
+  if (section === "settings") return { section, url: "/ui/settings" };
+  return { section: "home", url: "/ui/home" };
+}
+
+function currentTracker() {
+  const { section } = currentRoute();
+  return TRACKERS[section] ? section : null;
 }
 
 function showPage() {
-  const page = currentPage();
-  const main = document.getElementById("page");
+  const route = currentRoute();
+  const main = el("page");
 
   document.querySelectorAll("[data-page]").forEach((link) => {
-    const active = link.dataset.page === page;
+    const active = link.dataset.page === route.section;
     link.classList.toggle("active", active);
     link.toggleAttribute("aria-current", active);
   });
-  document.title = `${page[0].toUpperCase()}${page.slice(1)} · Progen`;
 
-  htmx.ajax("GET", `/ui/${page}`, { target: "#page", swap: "innerHTML" }).then(() => {
+  // De knop "Add ..." hoort bij de tracker waar je bent.
+  const tracker = TRACKERS[route.section];
+  document.querySelector(".nav-add").hidden = !tracker;
+  if (tracker) el("nav-add-label").textContent = tracker.add;
+
+  const name = route.section[0].toUpperCase() + route.section.slice(1);
+  document.title = `${name}${route.tab && route.tab !== "dashboard" ? " · " + route.tab : ""} · Progen`;
+
+  htmx.ajax("GET", route.url, { target: "#page", swap: "innerHTML" }).then(() => {
     // Alleen bij navigeren animeren, niet bij het verversen na een actie.
     main.classList.add("entering");
     setTimeout(() => main.classList.remove("entering"), 800);
@@ -31,15 +58,21 @@ window.addEventListener("hashchange", showPage);
 document.addEventListener("DOMContentLoaded", showPage);
 
 
-// ---- Dialoog "Add series" ----
+// ---- Vensters ----
 
-const dialog = () => document.getElementById("add-dialog");
+function openAddForm() {
+  const tracker = currentTracker();
+  if (!tracker) return;
+  htmx.ajax("GET", `/ui/${tracker}/add-form`, { target: "#add-form-slot", swap: "innerHTML" })
+    .then(() => {
+      el("add-dialog").showModal();
+      el("item-title").focus();
+    });
+}
 
 document.addEventListener("click", (event) => {
   if (event.target.closest("[data-open-add]")) {
-    dialog().showModal();
-  } else if (event.target.closest("[data-close]")) {
-    dialog().close();
+    openAddForm();
   } else if (event.target.closest("[data-close-dialog]")) {
     event.target.closest("dialog").close();
   } else if (event.target.tagName === "DIALOG") {
@@ -47,16 +80,16 @@ document.addEventListener("click", (event) => {
   }
 });
 
-// De server stuurt dit event mee als een actie gelukt is.
-document.addEventListener("reading-changed", () => {
-  const d = dialog();
-  if (d.open) {
-    d.close();
-    d.querySelector("form").reset();
-    resetCover();
-  }
-  el("genre-dialog").close();
-});
+// De server stuurt een van deze events mee als een actie gelukt is.
+for (const changed of ["reading-changed", "watching-changed"]) {
+  document.addEventListener(changed, () => {
+    if (el("add-dialog").open) {
+      el("add-dialog").close();
+      resetObjectUrl();
+    }
+    el("genre-dialog").close();
+  });
+}
 
 // "Edit genres" in het ⋯-menu laadt het formulier in #genre-editor; dan het venster openen.
 document.addEventListener("htmx:afterSwap", (event) => {
@@ -65,13 +98,14 @@ document.addEventListener("htmx:afterSwap", (event) => {
 
 
 // ---- Cover kiezen in het formulier ----
-// Drie bronnen: zoeken bij AniList (htmx vult #cover-preview), een upload of
-// een geplakte link. Er is altijd maar één bron actief. De server doet de echte
-// controle en het opslaan; dit is alleen de preview.
+// Drie bronnen: zoeken (htmx vult #cover-preview), een upload of een geplakte
+// link. Er is altijd maar één bron actief. De server doet de echte controle en
+// het opslaan; dit is alleen de preview. Het formulier wordt steeds opnieuw
+// geladen, daarom luisteren we op document in plaats van op de velden zelf.
 
 const MAX_COVER_BYTES = 5 * 1024 * 1024;
 const COVER_HINT = "Search for a cover by title, upload an image, or paste a link.";
-const el = (id) => document.getElementById(id);
+const GENRE_HINT = "optional · found covers fill these in";
 let coverSkips = 0;   // hoeveel zoekresultaten op rij niet laadden
 let objectUrl = null;
 
@@ -98,19 +132,23 @@ function clearSearch() {
   el("cover-preview").replaceChildren();
 }
 
+function resetObjectUrl() {
+  if (objectUrl) URL.revokeObjectURL(objectUrl);
+  objectUrl = null;
+}
+
 function resetCover() {
   resetGenres();
   clearSearch();
   el("cover-file").value = "";
   el("cover-link").value = "";
   el("cover-clear").hidden = true;
-  if (objectUrl) URL.revokeObjectURL(objectUrl);
-  objectUrl = null;
+  resetObjectUrl();
   setCaption(COVER_HINT);
 }
 
 function coverTitle() {
-  return el("series-title").value.trim() || "this series";
+  return el("item-title").value.trim() || "this title";
 }
 
 // Genres die bij een gevonden cover horen, alvast aanvinken in het formulier.
@@ -120,29 +158,20 @@ function suggestGenres(genres) {
   for (const box of document.querySelectorAll("#add-dialog [name=genres]")) {
     if (box.dataset.touched) continue;
     box.checked = genres.includes(box.value);
-    box.dataset.suggested = box.checked ? "1" : "";
   }
   const found = genres.length ? `Genres from this cover: ${genres.join(", ")}` : "No genres found for this cover";
   el("genre-hint").textContent = found + " · change them freely";
 }
 
-document.addEventListener("change", (event) => {
-  if (event.target.matches("#add-dialog [name=genres]")) event.target.dataset.touched = "1";
-});
-
 function resetGenres() {
-  for (const box of document.querySelectorAll("#add-dialog [name=genres]")) {
-    delete box.dataset.touched;
-    delete box.dataset.suggested;
-  }
-  el("genre-hint").textContent = "optional · found covers fill these in";
+  for (const box of document.querySelectorAll("#add-dialog [name=genres]")) delete box.dataset.touched;
+  el("genre-hint").textContent = GENRE_HINT;
 }
 
 // Zoekresultaat geladen: deze telt.
 function coverLoaded(img) {
   coverSkips = 0;
-  const genres = (img && img.dataset.genres) ? img.dataset.genres.split(",") : [];
-  suggestGenres(genres);
+  suggestGenres(img && img.dataset.genres ? img.dataset.genres.split(",") : []);
   el("cover-file").value = "";
   el("cover-link").value = "";
   el("cover-clear").hidden = false;
@@ -154,9 +183,9 @@ function coverFailed(img) {
   img.remove();
   if (coverSkips < total - 1) {
     coverSkips += 1;
-    htmx.ajax("GET", "/ui/covers/search", {
+    htmx.ajax("GET", el("find-cover").getAttribute("hx-get"), {
       target: "#cover-preview",
-      values: { title: el("series-title").value, index: el("cover-index").value },
+      values: { title: el("item-title").value, index: el("cover-index").value },
     });
   } else {
     clearSearch();
@@ -164,43 +193,48 @@ function coverFailed(img) {
   }
 }
 
-el("cover-file").addEventListener("change", (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-  if (file.size > MAX_COVER_BYTES) {
-    event.target.value = "";
-    setCaption("That file is larger than 5 MB. Pick a smaller image.", true);
-    return;
+document.addEventListener("change", (event) => {
+  const target = event.target;
+  if (target.matches("#add-dialog [name=genres]")) {
+    target.dataset.touched = "1";
+  } else if (target.id === "cover-file") {
+    const file = target.files[0];
+    if (!file) return;
+    if (file.size > MAX_COVER_BYTES) {
+      target.value = "";
+      setCaption("That file is larger than 5 MB. Pick a smaller image.", true);
+      return;
+    }
+    el("cover-link").value = "";
+    resetObjectUrl();
+    objectUrl = URL.createObjectURL(file);
+    showPreview(objectUrl, `Cover of ${coverTitle()}`);
+    setCaption(`Uploading ${file.name} when you save.`);
+  } else if (target.id === "cover-link") {
+    const url = target.value.trim();
+    if (!url) return resetCover();
+    if (!/^https?:\/\//i.test(url)) {
+      setCaption("Use a link that starts with http:// or https://", true);
+      return;
+    }
+    el("cover-file").value = "";
+    showPreview(url, `Cover of ${coverTitle()}`);
+    setCaption("Downloading this image when you save.");
   }
-  el("cover-link").value = "";
-  if (objectUrl) URL.revokeObjectURL(objectUrl);
-  objectUrl = URL.createObjectURL(file);
-  showPreview(objectUrl, `Cover of ${coverTitle()}`);
-  setCaption(`Uploading ${file.name} when you save.`);
-});
-
-el("cover-link").addEventListener("change", (event) => {
-  const url = event.target.value.trim();
-  if (!url) return resetCover();
-  if (!/^https?:\/\//i.test(url)) {
-    setCaption("Use a link that starts with http:// or https://", true);
-    return;
-  }
-  el("cover-file").value = "";
-  showPreview(url, `Cover of ${coverTitle()}`);
-  setCaption("Downloading this image when you save.");
 });
 
 // Een andere titel betekent andere zoekresultaten: de oude vervallen.
-el("series-title").addEventListener("input", () => {
-  if (el("cover-preview").querySelector("[name=cover_url]")) {
+document.addEventListener("input", (event) => {
+  if (event.target.id === "item-title" && el("cover-preview").querySelector("[name=cover_url]")) {
     clearSearch();
     el("cover-clear").hidden = true;
     setCaption(COVER_HINT);
   }
 });
 
-el("cover-clear").addEventListener("click", resetCover);
+document.addEventListener("click", (event) => {
+  if (event.target.id === "cover-clear") resetCover();
+});
 
 
 // ---- Optiemenu op een kaart ----
@@ -232,9 +266,14 @@ const CONFIRM_TEXTS = {
     body: "The series leaves your library, <strong>including its progress</strong>. You can add it again later, but it starts over as a new series. Chapters you've read still count in your stats.",
     action: "Remove",
   },
+  "remove-show": {
+    title: (name) => `Remove ${name}?`,
+    body: "It leaves your list. You can add it again later. Titles you finished still count in your stats.",
+    action: "Remove",
+  },
   restore: {
     title: (date) => `Restore the backup from ${date}?`,
-    body: "Your library goes back to how it was then. <strong>Anything you logged after that disappears from the app.</strong> Progen first saves a backup of how things are now, so you can always go back.",
+    body: "All your trackers go back to how they were then. <strong>Anything you logged after that disappears from the app.</strong> Progen first saves a backup of how things are now, so you can always go back.",
     action: "Restore",
   },
 };
@@ -254,7 +293,7 @@ document.addEventListener("htmx:confirm", (event) => {
   d.showModal();
 });
 
-document.getElementById("confirm-dialog").addEventListener("close", (event) => {
+el("confirm-dialog").addEventListener("close", (event) => {
   if (event.target.returnValue === "confirm" && confirmed) confirmed();
   confirmed = null;
 });
@@ -268,7 +307,7 @@ function showToast(message) {
   toast.setAttribute("role", "alert");
   toast.innerHTML = '<span class="toast-icon">!</span><span></span>';
   toast.lastElementChild.textContent = message;
-  document.getElementById("toasts").append(toast);
+  el("toasts").append(toast);
 }
 
 document.addEventListener("animationend", (event) => {

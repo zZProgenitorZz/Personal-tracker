@@ -1,6 +1,8 @@
 # Personal-tracker
 
-Een persoonlijke API die gegevens over mijn eigen leven op één plek verzamelt, in eigen beheer. Het begon met het bijhouden van wat ik lees (novels en manhwa); slaap, fitness en andere domeinen volgen.
+Een persoonlijke API die gegevens over mijn eigen leven op één plek verzamelt, in eigen beheer. Het begon met het bijhouden van wat ik lees (**Reading**: novels en manhwa); daarna kwam **Watching** (films, series en anime). Slaap, fitness en andere trackers kunnen volgen.
+
+Het startscherm (`#home`) toont een kaart per tracker. Een klik brengt je naar de eigen omgeving van die tracker, met de tabbladen Dashboard, Library en Progress (`#reading`, `#watching/library`, ...).
 
 De applicatie is opgezet met **event modeling** en **event sourcing**: alles wat er gebeurt wordt opgeslagen als onveranderlijke events, en alle overzichten (read models) worden daaruit opgebouwd. Daardoor gaat er nooit geschiedenis verloren en kan ik later nieuwe overzichten maken over oude data.
 
@@ -17,10 +19,11 @@ pip install -r requirements.txt
 uvicorn app.main:create_app --factory --reload
 ```
 
-Instellingen staan in `.env` in de projectmap (niet in git). Begin met een kopie van `.env.example`: `copy .env.example .env`. Beide instellingen zijn optioneel:
+Instellingen staan in `.env` in de projectmap (niet in git). Begin met een kopie van `.env.example`: `copy .env.example .env`. Alle instellingen zijn optioneel:
 
 ```
 GOOGLE_BOOKS_API_KEY=...          # betere covers uit Google Books (zonder sleutel valt Google vaak af)
+TMDB_API_KEY=...                  # covers en genres van films en series (Watching)
 PROGEN_BACKUP_DIR=D:\Backups\Progen  # andere back-upmap dan OneDrive\Progen-backups
 ```
 
@@ -30,13 +33,13 @@ Paden zonder aanhalingstekens schrijven. Een waarde die al in de omgeving staat,
 - API-documentatie (Swagger): http://127.0.0.1:8000/docs
 - Tests draaien: `python -m pytest`
 
-Data staat in `data/tracker.db`. **Dit bestand is de enige bron van waarheid**: alle read models worden er bij het opstarten uit opgebouwd. Covers staan ernaast in `data/covers/`. Geen van beide staat in git; maak dus back-ups (zie hieronder).
+Data van **alle trackers** staat in één bestand, `data/tracker.db`. **Dit bestand is de enige bron van waarheid**: alle read models worden er bij het opstarten uit opgebouwd. Covers staan ernaast in `data/covers/`. Geen van beide staat in git; maak dus back-ups (zie hieronder).
 
 ### Back-ups
 
 - **Maken:** Settings > *Back up now*, of `python -m app.backup` (werkt ook als de app niet draait; `--list` toont de back-ups).
 - **Waar:** standaard `OneDrive\Progen-backups\`, zodat er ook een kopie in de cloud staat. Een andere map kies je met `PROGEN_BACKUP_DIR` in `.env`.
-- **Wat:** per back-up een map met datum en tijd als naam (`2026-10-06_21-05-33`) met `tracker.db`, `covers/` en `info.json`. De kopie wordt gemaakt met de back-up-API van SQLite (veilig terwijl de server draait) en daarna gecontroleerd; een mislukte back-up laat niets achter.
+- **Wat:** één back-up bevat alle trackers tegelijk, zodat ze altijd bij elkaar passen. Per back-up een map met datum en tijd als naam (`2026-10-06_21-05-33`) met `tracker.db`, `covers/` en `info.json`. De kopie wordt gemaakt met de back-up-API van SQLite (veilig terwijl de server draait) en daarna gecontroleerd; een mislukte back-up laat niets achter.
 - **Hoeveel:** de 10 nieuwste blijven (`KEEP_BACKUPS` in `app/backup.py`); oudere worden verwijderd.
 - **Terugzetten:** Settings > *Restore* bij de gewenste back-up. Progen maakt eerst automatisch een back-up van de huidige stand ("saved automatically before a restore"), zodat ook terugzetten terug te draaien is. Daarna worden de events vervangen, ontbrekende covers teruggezet en de read models opnieuw opgebouwd.
 - **Met de hand terugzetten** (als de app niet start): stop de server, kopieer `tracker.db` en `covers/` uit de back-upmap naar `data/` en start de server opnieuw.
@@ -75,25 +78,36 @@ app/
   main.py              koppelt alles: event store, projecties, handlers, routers
   eventstore.py        SQLite event store (append, load_stream, load_all, subscribe)
   backup.py            back-ups maken, bewaren (10 nieuwste) en terugzetten; ook los te draaien
+  domain.py            DomainError (gedeeld door alle trackers)
   covers.py            covers downloaden, controleren en als 300×450 WebP bewaren (gedeeld)
-  web.py               gedeeld voor de webpagina: templates, filters, toasts
+  cover_search.py      covers en genres zoeken bij meerdere bronnen tegelijk, fuzzy matching, cache (gedeeld)
+  genres.py            GenreSet: een vaste genrelijst en genres uit bronnen daarnaar vertalen (gedeeld)
+  web.py               gedeeld voor de webpagina: templates, toasts, Tracker, startscherm, Settings
   static/
     trackly.css/.js    stijl, navigatie, dialogen, coverkiezer, genre-suggesties
     templates/         index.html (de schil) en de HTML-fragmenten voor htmx
   reading/
     events.py          SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved
-    aggregate.py       ReadingSeries + DomainError
-    commands.py        StartSeries, LogProgress, ChangeStatus, RemoveSeries + ReadingCommandHandler
+    aggregate.py       ReadingSeries
+    commands.py        StartSeries, LogProgress, ChangeStatus, SetGenres, RemoveSeries + ReadingCommandHandler
     projections.py     LibraryProjection, ReadingActivityProjection
-    cover_search.py    covers zoeken bij alle bronnen tegelijk, fuzzy matching, cache
-    cover_sources.py   de bronnen: AniList, MangaUpdates, Open Library, Google Books
-    genres.py          de vaste genrelijst, en genres uit bronnen daarnaar vertalen
+    cover_sources.py   bronnen: AniList (manga), MangaUpdates, Open Library, Google Books
+    genres.py          de genrelijst van Reading
     api.py             /reading endpoints (JSON)
-    web.py             /ui endpoints (HTML-fragmenten voor htmx)
+    web.py             /ui/reading endpoints (HTML-fragmenten voor htmx)
+  watching/
+    events.py          ShowAdded, ShowStatusChanged, ShowGenresChanged, ShowRemoved
+    aggregate.py       WatchItem
+    commands.py        AddShow, ChangeShowStatus, SetShowGenres, RemoveShow + WatchingCommandHandler
+    projections.py     WatchlistProjection, WatchActivityProjection
+    cover_sources.py   bronnen: AniList (anime), TVmaze (series), TMDB (films en series, met sleutel)
+    genres.py          de genrelijst van Watching
+    api.py             /watching endpoints (JSON)
+    web.py             /ui/watching endpoints (HTML-fragmenten voor htmx)
 tests/
   test_eventstore.py, test_api.py, test_web.py
   test_covers.py, test_cover_flow.py
-  reading/             given/when/then-tests per regel
+  reading/, watching/  given/when/then-tests per regel
 data/                  tracker.db en covers/ (niet in git)
 ```
 
@@ -122,10 +136,31 @@ Regels:
 
 Hoofdstukken zijn `float`, zodat hoofdstukken als 45.5 mogelijk zijn.
 
+## Watching (klaar)
+
+| Onderdeel   | Inhoud |
+| ----------- | ------ |
+| Soorten     | Series, Anime, Movie |
+| Statussen   | Watching, Completed, On hold, Dropped (geen afleveringen, geen cijfers) |
+| Events      | `ShowAdded` (met beginstatus en optioneel `cover`), `ShowStatusChanged`, `ShowGenresChanged`, `ShowRemoved` |
+| Commands    | `AddShow`, `ChangeShowStatus`, `SetShowGenres`, `RemoveShow` |
+| Read models | Watchlist, WatchActivity (afgerond per dag) |
+
+Regels:
+
+1. Een titel mag één keer per soort in de lijst staan: *Dune* de film en *Dune* de serie mogen allebei.
+2. Elke status kan naar elke andere; naar dezelfde status wordt geweigerd.
+3. Afgerond telt alleen als je iets op Completed **zet**. Toevoegen als Completed is geschiedenis en telt niet mee in "Finished this month".
+4. Genres uit een eigen vaste lijst (`WATCH_GENRES` in `app/watching/genres.py`); verder zoals bij Reading.
+5. Na verwijderen is de titel weer vrij.
+
+De event-klassen heten `Show...`, omdat de event store alleen de klassenaam opslaat; namen moeten uniek zijn over alle trackers heen.
+
 ### Covers
 
-- Bij "Add series" kun je een cover zoeken, zelf een afbeelding uploaden of een link plakken. Zoeken is een hulp-endpoint (`GET /ui/covers/search`), geen command of event.
-- Bronnen (`app/reading/cover_sources.py`), allemaal tegelijk bevraagd:
+- Bij "Add ..." kun je een cover zoeken, zelf een afbeelding uploaden of een link plakken. Zoeken is een hulp-endpoint (`GET /ui/<tracker>/covers/search`), geen command of event.
+- Watching zoekt bij AniList (anime), TVmaze (series) en TMDB (films en series; alleen met `TMDB_API_KEY`).
+- Bronnen voor Reading (`app/reading/cover_sources.py`), allemaal tegelijk bevraagd:
   - [AniList](https://anilist.co): manga, manhwa, light novels
   - [MangaUpdates](https://www.mangaupdates.com): ook webnovels (type "Novel")
   - [Open Library](https://openlibrary.org): boeken, ook webnovels in print (bijvoorbeeld Shadow Slave)
@@ -133,7 +168,8 @@ Hoofdstukken zijn `float`, zodat hoofdstukken als 45.5 mogelijk zijn.
 - Een bron is een functie `bron(client, zoekterm) -> list[SourceResult]` met `@cover_source("Naam")` erboven. Toevoegen of weghalen = de lijst `SOURCES` aanpassen.
 - Elke bron zoekt in drie stappen en stopt zodra iets past: de titel zoals getypt, genormaliseerd, en de langste losse woorden (bronnen vinden zelf niets bij een typfout). Alle resultaten worden samen vergeleken met rapidfuzz, waarbij achtervoegsels als "(Novel)" of ", Book 1" niet meetellen, en gesorteerd op beste match; dubbele URL's verdwijnen.
 - Faalt of hangt een bron (deadline `SOURCE_DEADLINE`), dan tonen we de andere. Alleen als alle bronnen falen, volgt een foutmelding.
-- Instelbaar bovenaan `app/reading/cover_search.py`: `COVER_MATCH_THRESHOLD`, `FALLBACK_WORDS`, `SOURCE_DEADLINE`, `MIN_SOURCE_SIZE`. Resultaten worden 10 minuten per titel bewaard, maar maar 1 minuut als een bron faalde.
+- Korte titels (tot 10 tekens) moeten strenger kloppen, zodat "Frieren" niet "Frieden" vindt. Het deel vóór een dubbele punt telt ook mee ("Frieren" vindt "Frieren: Beyond Journey's End"), maar lager dan een exacte titel, zodat een vervolg altijd ná de serie zelf komt.
+- Instelbaar bovenaan `app/cover_search.py`: `COVER_MATCH_THRESHOLD`, `SHORT_TITLE_THRESHOLD`, `SUBTITLE_FACTOR`, `FALLBACK_WORDS`, `SOURCE_DEADLINE`, `MIN_SOURCE_SIZE`. Resultaten worden 10 minuten per titel bewaard, maar maar 1 minuut als een bron faalde.
 - Bij het opslaan wordt de cover gedownload en met Pillow gecontroleerd, rechtgezet (EXIF), vanuit het midden bijgesneden tot 300×450 (2:3) en als WebP met een UUID-naam in `data/covers/` gezet. Alleen http/https, maximaal 5 MB, timeout 10 s. Alleen de bestandsnaam staat in het event.
 - Genres: AniList (genres en tags met rank ≥ 60), MangaUpdates (genres), Google Books (categorieën) en Open Library (onderwerpen) leveren genres mee. Die worden vertaald naar de vaste lijst en in het formulier alvast aangevinkt; wat je zelf aan- of uitvinkt, blijft staan als je naar een volgende cover bladert. Later aanpassen kan via ⋯ > *Edit genres* op een kaart.
 - Een cover van een bestaande serie wijzigen kan nog niet; daar is een apart event voor nodig (bijvoorbeeld `SeriesCoverChanged`).
@@ -195,7 +231,7 @@ Eerst handmatig invoeren; automatisch importeren komt later (zie punt 5).
 
 ## Werkwijze: een nieuw domein toevoegen
 
-Elk domein volgt dezelfde stappen als het leesdomein. Bestaande domeinen hoeven daarvoor niet te veranderen.
+Elk domein volgt dezelfde stappen als Reading en Watching. Bestaande domeinen hoeven daarvoor niet te veranderen.
 
 1. **Event model** maken: slices met trigger, command, event en read model, plus de regels als given/when/then.
 2. **`app/<domein>/events.py`**: events als `@dataclass(frozen=True)`, namen in de verleden tijd, met een `at`-veld.
@@ -207,7 +243,9 @@ Elk domein volgt dezelfde stappen als het leesdomein. Bestaande domeinen hoeven 
    - de nieuwe events toevoegen aan `EVENT_TYPES`
    - de nieuwe projecties toevoegen aan `projections`
    - de handler aanmaken en de router toevoegen met `include_router`
-8. **Webpagina** uitbreiden met een sectie voor het domein.
+   - een `Tracker(...)` toevoegen aan `trackers` (naam, icoon, event na een wijziging, samenvatting voor het startscherm); dan staat hij vanzelf op het startscherm, in Settings en in elke back-up
+8. **Webpagina**: `web.py` met `/ui/<domein>/dashboard`, `/library`, `/progress` en `/add-form`, templates met `ui.tracker_tabs(...)` bovenaan, een link in de navigatie (`index.html`) en een regel in `TRACKERS` in `trackly.js`.
+   - Event-klassen moeten uniek zijn over alle domeinen heen (de event store bewaart alleen de klassenaam).
 9. `python -m pytest` moet groen blijven, zonder warnings.
 
 ---

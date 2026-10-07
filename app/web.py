@@ -5,13 +5,16 @@ JSON-API. Elk domein heeft een eigen web.py met routes die HTML-fragmenten
 teruggeven; deze module bevat wat ze delen.
 """
 import zlib
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, UploadFile
 from fastapi.templating import Jinja2Templates
 
 from .backup import KEEP_BACKUPS, BackupError, Backups, is_cloud_synced
+from .covers import MAX_BYTES, CoverStore, too_large
 
 STATIC = Path(__file__).parent / "static"
 BACKUPS_CHANGED = "backups-changed"
@@ -71,12 +74,22 @@ ICONS = {
     "database": '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>',
     "code": '<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/>',
     "grid": '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+    "x": '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    "upload": '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
+    "eye": '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    "film": '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/>',
+    "tv": '<rect width="20" height="15" x="2" y="7" rx="2"/><path d="m17 2-5 5-5-5"/>',
+    "star": '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+    "home": '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+    "settings": '<path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/>',
     "tag": '<path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
     "more": '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
     "trash": '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/>',
     "alert":'<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
 }
 templates.env.globals["ICONS"] = ICONS
+# Welk icoon hoort bij welke soort (reading en watching samen).
+templates.env.globals["KIND_ICONS"] = {"novel": "book", "manhwa": "image", "movie": "film", "series": "tv", "anime": "star"}
 
 
 # ---- Antwoorden ----
@@ -96,9 +109,48 @@ def toast(request: Request, message: str, *, error: bool = False, changed: str |
     return response
 
 
+def save_cover(covers: CoverStore, upload: UploadFile | None, link: str, found: str) -> str | None:
+    """Bewaar de gekozen cover lokaal. Volgorde: upload, geplakte link, zoekresultaat.
+    Gooit CoverError als het niet lukt."""
+    if upload is not None and upload.filename:
+        data = upload.file.read(MAX_BYTES + 1)
+        if len(data) > MAX_BYTES:
+            raise too_large()
+        if data:
+            return covers.save(data)
+    url = link.strip() or found.strip()
+    return covers.save_from_url(url) if url else None
+
+
+# ---- Trackers ----
+
+@dataclass(frozen=True)
+class Tracker:
+    """Wat het startscherm en Settings van een tracker moeten weten."""
+    key: str                       # "reading": adres #reading en /ui/reading/...
+    name: str                      # "Reading"
+    icon: str                      # naam uit ICONS
+    changed_event: str             # htmx-event na een wijziging, bv. "reading-changed"
+    summary: Callable[[], dict]    # {"stats": [(waarde, label)], "covers": [...], "current": [...],
+                                   #  "count": int, "unit": "series"}
+
+
 # ---- Pagina's die niet bij één domein horen ----
 
-def create_settings_router(db_path: str, series_count, backups: Backups) -> APIRouter:
+def create_home_router(trackers: list[Tracker]) -> APIRouter:
+    router = APIRouter(prefix="/ui", include_in_schema=False)
+
+    @router.get("/home")
+    def home(request: Request):
+        hour = datetime.now().hour
+        greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
+        return render(request, "home.html", greeting=greeting,
+                      trackers=[(t, t.summary()) for t in trackers])
+
+    return router
+
+
+def create_settings_router(db_path: str, trackers: list[Tracker], backups: Backups) -> APIRouter:
     router = APIRouter(prefix="/ui", include_in_schema=False)
 
     def backup_context() -> dict:
@@ -110,7 +162,8 @@ def create_settings_router(db_path: str, series_count, backups: Backups) -> APIR
     @router.get("/settings")
     def settings(request: Request):
         location = db_path if db_path == ":memory:" else str(Path(db_path).resolve())
-        return render(request, "settings.html", db_path=location, series_count=series_count(), **backup_context())
+        counts = [(t, t.summary()) for t in trackers]
+        return render(request, "settings.html", db_path=location, counts=counts, **backup_context())
 
     @router.get("/backups")
     def backup_overview(request: Request):
@@ -132,7 +185,8 @@ def create_settings_router(db_path: str, series_count, backups: Backups) -> APIR
             return toast(request, f"Restore failed: {exc}", error=True)
         return toast(
             request, f"Restored the backup from {nice_date(info.created)}",
-            changed=f"reading-changed, {BACKUPS_CHANGED}",
+            # Eén back-up bevat alle trackers, dus alles ververst.
+            changed=", ".join([*(t.changed_event for t in trackers), BACKUPS_CHANGED]),
         )
 
     return router

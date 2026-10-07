@@ -1,0 +1,54 @@
+{% import "_macros.html" as ui %}
+<div class="page" hx-disinherit="*" hx-get="/ui/watching/dashboard" hx-trigger="watching-changed from:body" hx-swap="outerHTML">
+  {{ ui.tracker_tabs('watching', 'dashboard') }}
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Watching</p>
+      <h1>What you're <span class="grad-text">watching</span></h1>
+      <p class="lede">Movies, series and anime: what you're on, and what you've finished.</p>
+    </div>
+  </header>
+
+  <section class="stats" aria-label="Overview">
+    {{ ui.stat('eye', 'purple', summary.stats[0][0], 'Watching now') }}
+    {{ ui.stat('check-circle', 'green', summary.stats[2][0], 'Completed') }}
+    {{ ui.stat('calendar', 'amber', summary.stats[1][0], 'Finished this month') }}
+    {{ ui.stat('layers', 'teal', summary.count, 'Titles in your list') }}
+  </section>
+
+  <div class="dash-grid">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Currently watching</h2>
+        {% if summary.count %}<a class="link" href="#watching/library">View all {{ ui.icon('arrow-right', 15) }}</a>{% endif %}
+      </div>
+      {% if current %}
+      <div class="card-grid">
+        {% for e in current %}{{ ui.show_card(e) }}{% endfor %}
+      </div>
+      {% elif summary.count %}
+      {{ ui.empty('eye', 'Nothing in progress', 'Set something to Watching and it shows up here.', cta=false) }}
+      {% else %}
+      {{ ui.empty('eye', 'Your list is empty', 'Add a movie, series or anime you are watching or have seen.', cta_label='Add title') }}
+      {% endif %}
+    </section>
+
+    <aside class="side">
+      <section class="panel">
+        <div class="panel-head"><h2>By type</h2><span class="muted">{{ counts.total }} titles</span></div>
+        <ul class="legend">
+          {% for k in counts.kind %}<li>{{ ui.icon(KIND_ICONS[k.kind.value], 15) }}{{ k.label }}<b>{{ k.count }}</b></li>{% endfor %}
+        </ul>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>By status</h2></div>
+        <div class="seg-bar">
+          {% for c in counts.status if c.count %}<span class="seg seg-{{ c.status.value }}" style="flex: {{ c.count }}"></span>{% endfor %}
+        </div>
+        <ul class="legend">
+          {% for c in counts.status %}<li><i class="dot dot-{{ c.status.value }}"></i>{{ c.label }}<b>{{ c.count }}</b></li>{% endfor %}
+        </ul>
+      </section>
+    </aside>
+  </div>
+</div>

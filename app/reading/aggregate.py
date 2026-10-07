@@ -1,9 +1,6 @@
+from ..domain import DomainError
 from .events import GenresChanged, Kind, ProgressLogged, SeriesRemoved, SeriesStarted, Status, StatusChanged
 from .genres import validated
-
-
-class DomainError(Exception):
-    """Een verzoek dat de regels van het domein overtreedt."""
 
 
 class ReadingSeries:

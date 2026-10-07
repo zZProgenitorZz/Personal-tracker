@@ -29,6 +29,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }  /* ook als een class zelf display zet */
 
 body {
   margin: 0;
@@ -618,7 +619,8 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
 }
 .pill-reading i { animation: pulse 2.4s ease-out infinite; }
 
-.pill-reading,   .dot-reading,   .seg-reading   { --c: var(--purple-hi); }
+.pill-reading,   .dot-reading,   .seg-reading,
+.pill-watching,  .dot-watching,  .seg-watching  { --c: var(--purple-hi); }
 .pill-on_hold,   .dot-on_hold,   .seg-on_hold   { --c: var(--amber); }
 .pill-completed, .dot-completed, .seg-completed { --c: var(--green); }
 .pill-dropped,   .dot-dropped,   .seg-dropped   { --c: var(--rose); }
@@ -868,6 +870,91 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
 }
 .badge-on { color: var(--teal-hi); background: rgba(45, 212, 191, .1); box-shadow: inset 0 0 0 1px rgba(45, 212, 191, .3); }
 
+/* Tabbladen binnen een tracker */
+.tracker-tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin: -20px 0 28px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .025);
+}
+.tracker-tabs a {
+  padding: 8px 16px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color .2s, background .2s;
+}
+.tracker-tabs a:hover { color: var(--text); background: rgba(255, 255, 255, .04); }
+.tracker-tabs a.active { color: var(--text); background: rgba(139, 92, 246, .18); box-shadow: inset 0 0 0 1px rgba(167, 139, 250, .3); }
+
+/* Startscherm: één kaart per tracker */
+.tracker-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 20px; }
+.tracker-card {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 22px;
+  padding: 26px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(180deg, rgba(28, 24, 42, .78), rgba(16, 13, 25, .78));
+  box-shadow: var(--shadow);
+  color: var(--text);
+  text-decoration: none;
+  transition: transform .3s var(--ease), border-color .3s, box-shadow .3s;
+}
+.tracker-card::before {
+  content: "";
+  position: absolute;
+  top: -120px;
+  right: -80px;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--glow), transparent 70%);
+  pointer-events: none;
+}
+.tracker-card:hover { transform: translateY(-4px); border-color: rgba(167, 139, 250, .3); box-shadow: 0 28px 60px -30px rgba(124, 58, 237, .8); }
+.tracker-head { position: relative; display: flex; align-items: center; gap: 14px; }
+.tracker-head h2 { font-size: 22px; letter-spacing: -.02em; }
+.tracker-open {
+  margin-left: auto;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .05);
+  color: var(--muted);
+  transition: transform .3s var(--ease), color .3s, background .3s;
+}
+.tracker-card:hover .tracker-open { transform: translateX(4px); color: var(--text); background: rgba(139, 92, 246, .25); }
+.tracker-stats { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.tracker-stats div {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .03);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.tracker-stats b { font: 700 26px/1 var(--font-display); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.tracker-stats span { color: var(--muted); font-size: 12.5px; }
+.tracker-covers { position: relative; display: flex; gap: 10px; }
+.tracker-covers .cover { width: 64px; border-radius: 12px; }
+.tracker-covers .cover-initials { font-size: 18px; }
+.tracker-covers .cover-kind { display: none; }
+.tracker-now { position: relative; margin: -8px 0 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* Kaart voor films, series en anime: alleen het statusmenu onderaan */
+.show-actions .select { flex: 1; }
+
 /* Genres */
 .genre-picker { display: flex; flex-wrap: wrap; gap: 6px; }
 .genre-chip { position: relative; }
@@ -1060,6 +1147,7 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
   background: rgba(139, 92, 246, .22);
   box-shadow: inset 0 0 0 1px rgba(167, 139, 250, .35);
 }
+.segmented-3 { grid-template-columns: repeat(3, 1fr); }
 .segmented-4 { grid-template-columns: repeat(4, 1fr); }
 .segmented-4 span { gap: 7px; align-items: center; padding: 10px 6px; font-size: 13px; }
 @media (max-width: 480px) { .segmented-4 { grid-template-columns: 1fr 1fr; } }
@@ -1243,6 +1331,9 @@ label.btn:focus-within { outline: 2px solid var(--purple-hi); outline-offset: 2p
   .panel { padding: 18px; border-radius: var(--radius-lg); }
   .side { grid-template-columns: minmax(0, 1fr); }
   .chip-divider { display: none; }
+  .tracker-tabs { margin-top: -8px; }
+  .tracker-stats b { font-size: 22px; }
+  .tracker-covers .cover { width: 52px; }
   .bars { gap: 4px; height: 220px; }
   .bar-label { font-size: 9.5px; }
   .bar-value { font-size: 10.5px; }

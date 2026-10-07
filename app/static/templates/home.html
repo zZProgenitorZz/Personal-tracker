@@ -1,0 +1,41 @@
+{% import "_macros.html" as ui %}
+{# Startscherm: één kaart per tracker. Ververst na een wijziging in welke tracker dan ook. #}
+<div class="page" hx-disinherit="*" hx-get="/ui/home" hx-trigger="reading-changed from:body, watching-changed from:body" hx-swap="outerHTML">
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">{{ greeting }}</p>
+      <h1>Everything you <span class="grad-text">follow</span></h1>
+      <p class="lede">Pick a tracker to see where you are.</p>
+    </div>
+  </header>
+
+  <div class="tracker-grid">
+    {% for tracker, summary in trackers %}
+    <a class="tracker-card accent-{{ loop.cycle('purple', 'teal') }}" href="#{{ tracker.key }}">
+      <div class="tracker-head">
+        <span class="stat-icon">{{ ui.icon(tracker.icon, 20) }}</span>
+        <div>
+          <h2>{{ tracker.name }}</h2>
+          <span class="muted">{{ summary.count }} {{ summary.unit }}</span>
+        </div>
+        <span class="tracker-open">{{ ui.icon('arrow-right', 18) }}</span>
+      </div>
+
+      <div class="tracker-stats">
+        {% for value, label in summary.stats %}
+        <div><b>{{ value|chapter }}</b><span>{{ label }}</span></div>
+        {% endfor %}
+      </div>
+
+      {% if summary.current %}
+      <div class="tracker-covers" aria-label="Now">
+        {% for e in summary.current %}{{ ui.cover(e.title, e.kind, e.cover) }}{% endfor %}
+      </div>
+      <p class="tracker-now muted">Now: {{ summary.current|map(attribute='title')|join(', ') }}</p>
+      {% else %}
+      <p class="tracker-now muted">Nothing in progress right now.</p>
+      {% endif %}
+    </a>
+    {% endfor %}
+  </div>
+</div>

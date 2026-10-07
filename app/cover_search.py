@@ -1,8 +1,11 @@
-"""Covers zoeken voor novels en manhwa, bij alle bronnen tegelijk.
+"""Covers (en genres) zoeken bij meerdere bronnen tegelijk; gedeeld door alle trackers.
 
-Een hulpmiddel bij het invullen van het formulier: geen command en geen
-event. Pas als je de serie opslaat, wordt de gekozen cover gedownload.
-De bronnen zelf staan in cover_sources.py.
+Een hulpmiddel bij het invullen van een formulier: geen command en geen
+event. Pas bij het opslaan wordt de gekozen cover gedownload.
+
+Een bron is een functie `bron(client, zoekterm) -> list[SourceResult]` met
+@cover_source("Naam") erboven. Elke tracker heeft zijn eigen bronnen, in
+<tracker>/cover_sources.py, en geeft die mee aan CoverSearch.
 """
 import re
 import time
@@ -15,13 +18,62 @@ import httpx
 from PIL import Image, UnidentifiedImageError
 from rapidfuzz import fuzz
 
-from ..covers import CoverError
-from .cover_sources import SOURCES, SOURCE_TIMEOUT, SourceResult
+from .covers import CoverError
+
+SOURCE_TIMEOUT = 6.0  # seconden per verzoek
+
+
+@dataclass(frozen=True)
+class SourceResult:
+    titles: tuple[str, ...]
+    image_url: str
+    source: str
+    check_size: bool = False  # True: afmetingen controleren voordat we hem tonen
+    genres: tuple[str, ...] = ()  # al vertaald naar de vaste genrelijst
+
+
+def cover_source(name: str):
+    """Geeft een bron zijn naam, zodat foutmeldingen hem kunnen noemen."""
+    def register(function):
+        function.source_name = name
+        return function
+    return register
+
+
+def ask(client: httpx.Client, name: str, method: str, url: str, **kwargs):
+    """Eén verzoek aan een bron, met nette foutmeldingen waarin de bron genoemd wordt."""
+    try:
+        response = client.request(method, url, timeout=SOURCE_TIMEOUT, **kwargs)
+    except httpx.TimeoutException as exc:
+        raise CoverError(f"{name} took too long to answer.") from exc
+    except httpx.HTTPError as exc:
+        raise CoverError(f"Couldn't reach {name}.") from exc
+    if response.status_code == 429:
+        raise CoverError(f"{name} is busy right now.")
+    if response.status_code != 200:
+        raise CoverError(f"{name} gave an error (HTTP {response.status_code}).")
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise CoverError(f"{name} sent an answer Progen doesn't understand.") from exc
+
+
+def unique_titles(*names) -> tuple[str, ...]:
+    """Unieke, niet-lege titels in volgorde."""
+    return tuple(dict.fromkeys(n.strip() for n in names if isinstance(n, str) and n.strip()))
+
 
 # Hoe streng de titels moeten overeenkomen (0–100). Lager vindt meer, maar
-# ook vaker een verkeerde serie. 85 laat typfouten en een ontbrekend lidwoord
-# door, maar geen vervolgdelen als "Solo Leveling: Ragnarok".
+# ook vaker een verkeerde serie. 85 laat typfouten en een ontbrekend lidwoord door.
 COVER_MATCH_THRESHOLD = 85
+# Korte titels (tot SHORT_TITLE tekens) strenger: bij "Frieren" is één letter
+# verschil ("Frieden") al een andere serie.
+SHORT_TITLE = 10
+SHORT_TITLE_THRESHOLD = 92
+# "Frieren" mag "Frieren: Beyond Journey's End" vinden via het deel vóór de dubbele
+# punt, maar lager dan een exacte titel; zo staat een vervolg ("Solo Leveling:
+# Ragnarok") altijd ná de serie zelf.
+SUBTITLE_FACTOR = 0.92
 # Bronnen zoeken letterlijk: één typfout en ze vinden niets. Daarom zoeken we als
 # laatste stap op de langste losse woorden en vergelijken we zelf. 0 = uit.
 FALLBACK_WORDS = 2
@@ -73,13 +125,26 @@ def search_words(title: str) -> list[str]:
     return sorted(words, key=lambda w: (-len(w), w))[:FALLBACK_WORDS]
 
 
+def required_score(query: str) -> float:
+    return SHORT_TITLE_THRESHOLD if len(normalize(query)) <= SHORT_TITLE else COVER_MATCH_THRESHOLD
+
+
+def _main_titles(title: str) -> set[str]:
+    """'Re:Zero - Starting Life' -> {'Re:Zero', 'Re'}; zonder ondertitel een lege set."""
+    return {title.split(sep, 1)[0] for sep in (" - ", " – ", ":") if sep in title} - {""}
+
+
+def _ratio(a: str, b: str) -> float:
+    if not a or not b:
+        return 0.0
+    return max(fuzz.ratio(a, b), fuzz.ratio(_without_article(a), _without_article(b)))
+
+
 def similarity(mine: str, other: str) -> float:
     a = normalize(mine)
-    best = 0.0
-    for variant in {normalize(other), normalize(without_suffix(other))}:
-        if a and variant:
-            best = max(best, fuzz.ratio(a, variant), fuzz.ratio(_without_article(a), _without_article(variant)))
-    return best
+    full = max(_ratio(a, normalize(v)) for v in {other, without_suffix(other)})
+    main = max((_ratio(a, normalize(v)) for v in _main_titles(without_suffix(other))), default=0.0)
+    return max(full, main * SUBTITLE_FACTOR)
 
 
 @dataclass(frozen=True)
@@ -95,11 +160,13 @@ class CoverCandidate:
 def rank(query: str, results: list[SourceResult]) -> list[CoverCandidate]:
     """Alleen resultaten boven de drempel, beste match eerst, elke URL één keer."""
     best: dict[str, CoverCandidate] = {}
+    required = required_score(query)
     for result in results:
         if not result.titles or not result.image_url:
             continue
-        score, title = max((similarity(query, t), t) for t in result.titles)
-        if score >= COVER_MATCH_THRESHOLD and score > best.get(result.image_url, _NONE).score:
+        # Beste score; bij gelijke score de eerste titel van de bron (meestal de Engelse).
+        score, _, title = max((similarity(query, t), -i, t) for i, t in enumerate(result.titles))
+        if score >= required and score > best.get(result.image_url, _NONE).score:
             best[result.image_url] = CoverCandidate(
                 title, result.image_url, score, result.source, result.check_size, result.genres)
     # sorted is stabiel: bij gelijke score blijft de volgorde van de bronnen staan.
@@ -110,10 +177,10 @@ _NONE = CoverCandidate("", "", -1, "")
 
 
 class CoverSearch:
-    def __init__(self, client: httpx.Client, *, sources=None, deadline: float = SOURCE_DEADLINE,
+    def __init__(self, client: httpx.Client, *, sources, deadline: float = SOURCE_DEADLINE,
                  clock=time.monotonic):
         self._client = client
-        self._sources = list(SOURCES if sources is None else sources)
+        self._sources = list(sources)
         self._deadline = deadline
         self._clock = clock
         self._cache: dict[str, tuple[float, list[CoverCandidate]]] = {}  # titel -> (verloopt om, resultaten)

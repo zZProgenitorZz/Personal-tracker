@@ -1,38 +1,38 @@
 {% import "_macros.html" as ui %}
 <div class="page">
-  {{ ui.tracker_tabs('reading', 'library') }}
+  {{ ui.tracker_tabs('watching', 'library') }}
   <header class="page-head">
     <div>
-      <p class="eyebrow">Reading · Library</p>
-      <h1>Everything you <span class="grad-text">read</span></h1>
-      <p class="lede">Every novel and manhwa you've started, whatever its status.</p>
+      <p class="eyebrow">Watching · Library</p>
+      <h1>Everything you <span class="grad-text">watch</span></h1>
+      <p class="lede">Every movie, series and anime in your list, whatever its status.</p>
     </div>
   </header>
 
-  <form id="library-filters" class="filters" hx-get="/ui/reading/library/grid" hx-target="#library-grid" hx-swap="outerHTML"
-        hx-trigger="change, submit, input changed delay:250ms from:#library-q">
+  <form id="watching-filters" class="filters" hx-get="/ui/watching/library/grid" hx-target="#watching-grid" hx-swap="outerHTML"
+        hx-trigger="change, submit, input changed delay:250ms from:#watching-q">
     <label class="search">
       {{ ui.icon('search', 16) }}
-      <input id="library-q" type="search" name="q" placeholder="Search titles" autocomplete="off" aria-label="Search titles">
+      <input id="watching-q" type="search" name="q" placeholder="Search titles" autocomplete="off" aria-label="Search titles">
     </label>
     <div class="chips" role="radiogroup" aria-label="Status">
       <label class="chip"><input type="radio" name="status" value="" checked><span>All</span></label>
-      {% for s, label in STATUS_LABELS.items() %}
+      {% for s, label in WATCH_STATUS_LABELS.items() %}
       <label class="chip"><input type="radio" name="status" value="{{ s.value }}"><span><i class="dot dot-{{ s.value }}"></i>{{ label }}</span></label>
       {% endfor %}
     </div>
     <span class="chip-divider" aria-hidden="true"></span>
     <select class="select" name="genre" aria-label="Genre">
       <option value="">All genres</option>
-      {%- for g in GENRES %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+      {%- for g in WATCH_GENRES %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
     </select>
     <div class="chips" role="radiogroup" aria-label="Type">
       <label class="chip"><input type="radio" name="kind" value="" checked><span>All types</span></label>
-      {% for k, label in KIND_LABELS.items() %}
+      {% for k, label in WATCH_KIND_LABELS.items() %}
       <label class="chip"><input type="radio" name="kind" value="{{ k.value }}"><span>{{ label }}</span></label>
       {% endfor %}
     </div>
   </form>
 
-  {% include "_library_grid.html" %}
+  {% include "_watching_grid.html" %}
 </div>

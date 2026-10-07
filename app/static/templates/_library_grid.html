@@ -1,6 +1,6 @@
 {% import "_macros.html" as ui %}
 {# hx-disinherit: de kaarten mogen hx-include (de filters) niet erven, anders stuurt het statusmenu status="" mee. #}
-<div id="library-grid" hx-disinherit="*" hx-get="/ui/library/grid" hx-include="#library-filters" hx-trigger="reading-changed from:body" hx-swap="outerHTML">
+<div id="library-grid" hx-disinherit="*" hx-get="/ui/reading/library/grid" hx-include="#library-filters" hx-trigger="reading-changed from:body" hx-swap="outerHTML">
   {% if entries %}
   <p class="result-count">{{ entries|length }} series</p>
   <div class="card-grid">

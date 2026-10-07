@@ -9,20 +9,31 @@ from fastapi.staticfiles import StaticFiles
 
 from .backup import Backups, default_backup_dir
 from .covers import CoverStore
+from .domain import DomainError
 from .eventstore import EventStore
-from .reading.aggregate import DomainError
 from .reading.api import create_reading_router
 from .reading.commands import ReadingCommandHandler
-from .reading.cover_search import CoverSearch
+from .cover_search import CoverSearch
+from .reading.cover_sources import SOURCES as READING_SOURCES
 from .reading.events import GenresChanged, ProgressLogged, SeriesRemoved, SeriesStarted, StatusChanged
 from .reading.projections import LibraryProjection, ReadingActivityProjection
-from .reading.web import create_reading_web_router
-from .web import STATIC, create_settings_router, render
+from .reading.web import create_reading_web_router, reading_summary
+from .watching.api import create_watching_router
+from .watching.commands import WatchingCommandHandler
+from .watching.cover_sources import SOURCES as WATCHING_SOURCES
+from .watching.events import ShowAdded, ShowGenresChanged, ShowRemoved, ShowStatusChanged
+from .watching.projections import WatchActivityProjection, WatchlistProjection
+from .watching.web import create_watching_web_router, watching_summary
+from .web import STATIC, Tracker, create_home_router, create_settings_router, render
 
 # Instellingen zoals GOOGLE_BOOKS_API_KEY. Staat niet in git (.gitignore).
 ENV_FILE = Path(__file__).parent.parent / ".env"
 
-EVENT_TYPES = [SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved, GenresChanged]
+# Alle trackers delen één event store (één database, één back-up).
+EVENT_TYPES = [
+    SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved, GenresChanged,   # reading
+    ShowAdded, ShowStatusChanged, ShowGenresChanged, ShowRemoved,                 # watching
+]
 
 
 def create_app(
@@ -48,11 +59,14 @@ def create_app(
         backup_dir = backup_dir or default_backup_dir()
     http = http_client or httpx.Client(headers={"User-Agent": "Progen personal tracker"})
     covers = CoverStore(Path(covers_dir), http)
-    cover_search = CoverSearch(http)
+    reading_search = CoverSearch(http, sources=READING_SOURCES)
+    watching_search = CoverSearch(http, sources=WATCHING_SOURCES)
 
     library = LibraryProjection()
     activity = ReadingActivityProjection()
-    projections = [library, activity]
+    watchlist = WatchlistProjection()
+    watch_activity = WatchActivityProjection()
+    projections = [library, activity, watchlist, watch_activity]
 
     def rebuild() -> None:
         """Read models opnieuw opbouwen uit alle events (bij start en na terugzetten)."""
@@ -68,12 +82,20 @@ def create_app(
     backups = Backups(store, covers.directory, Path(backup_dir), on_restored=rebuild)
 
     handler = ReadingCommandHandler(store, library)
+    watching = WatchingCommandHandler(store, watchlist)
+    trackers = [
+        Tracker("reading", "Reading", "book", "reading-changed", lambda: reading_summary(library, activity)),
+        Tracker("watching", "Watching", "eye", "watching-changed", lambda: watching_summary(watchlist, watch_activity)),
+    ]
 
     app = FastAPI(title="Personal Tracker")
     app.state.scratch_covers = scratch
     app.include_router(create_reading_router(handler, library, activity, covers))
-    app.include_router(create_reading_web_router(handler, library, activity, covers, cover_search))
-    app.include_router(create_settings_router(db_path, lambda: len(library.all()), backups))
+    app.include_router(create_reading_web_router(handler, library, activity, covers, reading_search))
+    app.include_router(create_watching_router(watching, watchlist, watch_activity, covers))
+    app.include_router(create_watching_web_router(watching, watchlist, watch_activity, covers, watching_search))
+    app.include_router(create_home_router(trackers))
+    app.include_router(create_settings_router(db_path, trackers, backups))
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     app.mount("/covers", StaticFiles(directory=covers.directory), name="covers")
 

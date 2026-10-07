@@ -53,7 +53,7 @@ def client(covers):
 
 def add(client, title="Solo Leveling", files=None, **fields):
     data = {"title": title, "kind": "manhwa", "source": "asura", "start_chapter": "1", **fields}
-    return client.post("/ui/series", data=data, files=files)
+    return client.post("/ui/reading/series", data=data, files=files)
 
 
 def library(client):
@@ -63,7 +63,7 @@ def library(client):
 # ---- Zoeken (hulp-endpoint, geen command) ----
 
 def test_search_shows_first_match(client):
-    response = client.get("/ui/covers/search", params={"title": "solo leveling"})
+    response = client.get("/ui/reading/covers/search", params={"title": "solo leveling"})
     assert SOLO_1 in response.text
     assert "1 of 2" in response.text
     assert 'alt="Cover of Solo Leveling"' in response.text
@@ -71,7 +71,7 @@ def test_search_shows_first_match(client):
 
 def test_search_finds_webnovel_in_another_source(client):
     # Niet op AniList, wel op Open Library; de andere bronnen falen hier.
-    response = client.get("/ui/covers/search", params={"title": "Shadow Slave"})
+    response = client.get("/ui/reading/covers/search", params={"title": "Shadow Slave"})
     assert "https://covers.openlibrary.org/b/id/151-L.jpg" in response.text
     assert "Open Library · 1 of 1" in response.text
 
@@ -82,24 +82,24 @@ def test_saving_a_cover_from_another_source(client):
 
 
 def test_search_cycles_through_results(client):
-    second = client.get("/ui/covers/search", params={"title": "Solo Leveling", "index": 1})
-    wrapped = client.get("/ui/covers/search", params={"title": "Solo Leveling", "index": 2})
+    second = client.get("/ui/reading/covers/search", params={"title": "Solo Leveling", "index": 1})
+    wrapped = client.get("/ui/reading/covers/search", params={"title": "Solo Leveling", "index": 2})
     assert SOLO_2 in second.text and "2 of 2" in second.text
     assert SOLO_1 in wrapped.text and "1 of 2" in wrapped.text
 
 
 def test_search_without_results_says_so(client):
-    response = client.get("/ui/covers/search", params={"title": "Iets Onbekends"})
+    response = client.get("/ui/reading/covers/search", params={"title": "Iets Onbekends"})
     assert "No covers found" in response.text
     assert 'name="cover_url"' not in response.text
 
 
 def test_search_needs_a_title(client):
-    assert "Type a title" in client.get("/ui/covers/search", params={"title": " "}).text
+    assert "Type a title" in client.get("/ui/reading/covers/search", params={"title": " "}).text
 
 
 def test_search_does_not_store_anything(client):
-    client.get("/ui/covers/search", params={"title": "Solo Leveling"})
+    client.get("/ui/reading/covers/search", params={"title": "Solo Leveling"})
     assert library(client) == []
 
 
@@ -118,7 +118,7 @@ def test_save_with_found_cover(client, covers):
     [entry] = library(client)
     assert (covers / entry["cover"]).exists()
     assert client.get(f"/covers/{entry['cover']}").headers["content-type"] == "image/webp"
-    assert f'/covers/{entry["cover"]}' in client.get("/ui/library/grid").text
+    assert f'/covers/{entry["cover"]}' in client.get("/ui/reading/library/grid").text
 
 
 def test_save_with_pasted_url(client):
@@ -178,5 +178,5 @@ def test_json_api_saves_series_when_cover_fails(client):
 
 def test_search_result_suggests_genres(client):
     # trackly.js vinkt deze genres aan in het formulier; je kunt ze daarna zelf aanpassen.
-    response = client.get("/ui/covers/search", params={"title": "Solo Leveling"})
+    response = client.get("/ui/reading/covers/search", params={"title": "Solo Leveling"})
     assert 'data-genres="Action,Fantasy"' in response.text

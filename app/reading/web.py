@@ -4,14 +4,14 @@ GET-routes geven HTML-fragmenten terug uit de read models. POST-routes sturen
 dezelfde commands als de JSON-API en antwoorden met een toast plus het event
 `reading-changed`, waarop de zichtbare onderdelen zichzelf opnieuw ophalen.
 """
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 
-from ..covers import MAX_BYTES, CoverError, CoverStore, too_large
-from ..web import render, toast, templates
+from ..covers import CoverError, CoverStore
+from ..web import render, save_cover, toast, templates
 from .aggregate import DomainError
-from .cover_search import CoverSearch
+from ..cover_search import CoverSearch
 from .commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, SetGenres, StartSeries
 from .events import Kind, Status, StatusChanged
 from .genres import GENRES
@@ -70,6 +70,20 @@ def with_height(bars: list[dict]) -> list[dict]:
     return bars
 
 
+def reading_summary(library: LibraryProjection, activity: ReadingActivityProjection) -> dict:
+    """Voor het startscherm en Settings."""
+    today = date.today()
+    current = library.currently_reading()
+    this_week = sum(b["value"] for b in last_days(activity.per_day(), today, 7))
+    return {
+        "stats": [(len(current), "reading now"), (this_week, "chapters this week"),
+                  (activity.streak(today), "day streak")],
+        "current": current[:5],
+        "count": len(library.all()),
+        "unit": "series",
+    }
+
+
 # ---- Routes ----
 
 def create_reading_web_router(
@@ -79,18 +93,7 @@ def create_reading_web_router(
     covers: CoverStore,
     cover_search: CoverSearch,
 ) -> APIRouter:
-    router = APIRouter(prefix="/ui", include_in_schema=False)
-
-    def save_cover(upload: UploadFile | None, link: str, found: str) -> str | None:
-        """Bewaar de gekozen cover lokaal. Volgorde: upload, geplakte link, zoekresultaat."""
-        if upload is not None and upload.filename:
-            data = upload.file.read(MAX_BYTES + 1)
-            if len(data) > MAX_BYTES:
-                raise too_large()
-            if data:
-                return covers.save(data)
-        url = link.strip() or found.strip()
-        return covers.save_from_url(url) if url else None
+    router = APIRouter(prefix="/ui/reading", include_in_schema=False)
 
     def overview(today: date) -> dict:
         per_day = activity.per_day()
@@ -134,14 +137,12 @@ def create_reading_web_router(
 
     @router.get("/dashboard")
     def dashboard(request: Request):
-        now = datetime.now()
-        greeting = "Good morning" if now.hour < 12 else "Good afternoon" if now.hour < 18 else "Good evening"
+        today = date.today()
         return render(
             request, "dashboard.html",
-            greeting=greeting,
-            stats=overview(now.date()),
+            stats=overview(today),
             current=library.currently_reading()[:6],
-            week=with_height(last_days(activity.per_day(), now.date(), 7)),
+            week=with_height(last_days(activity.per_day(), today, 7)),
             counts=status_counts(),
             library_size=len(library.all()),
         )
@@ -219,7 +220,7 @@ def create_reading_web_router(
         # Eerst de cover. Mislukt die, dan wordt de serie toch opgeslagen.
         cover, cover_problem = None, None
         try:
-            cover = save_cover(cover_file, cover_link, cover_url)
+            cover = save_cover(covers, cover_file, cover_link, cover_url)
         except CoverError as exc:
             cover_problem = str(exc)
 
@@ -265,7 +266,13 @@ def create_reading_web_router(
         entry = library.get(series_id)
         if entry is None:
             return toast(request, "Onbekende serie", error=True)
-        return render(request, "_genre_editor.html", entry=entry)
+        return render(request, "_genre_editor.html", title=entry.title, options=GENRES, selected=entry.genres,
+                      action=f"/ui/reading/series/{series_id}/genres")
+
+    @router.get("/add-form")
+    def add_form(request: Request):
+        """Inhoud van het venster "Add series"."""
+        return render(request, "_reading_add_form.html")
 
     @router.post("/series/{series_id}/genres")
     def set_genres(request: Request, series_id: str, genres: list[str] = Form([])):

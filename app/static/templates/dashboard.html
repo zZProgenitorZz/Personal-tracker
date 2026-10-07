@@ -1,8 +1,9 @@
 {% import "_macros.html" as ui %}
-<div class="page" hx-disinherit="*" hx-get="/ui/dashboard" hx-trigger="reading-changed from:body" hx-swap="outerHTML">
+<div class="page" hx-disinherit="*" hx-get="/ui/reading/dashboard" hx-trigger="reading-changed from:body" hx-swap="outerHTML">
+  {{ ui.tracker_tabs('reading', 'dashboard') }}
   <header class="page-head">
     <div>
-      <p class="eyebrow">{{ greeting }}</p>
+      <p class="eyebrow">Reading</p>
       <h1>Your reading, <span class="grad-text">at a glance</span></h1>
       <p class="lede">
         {%- if stats.this_week %}You've read {{ stats.this_week|chapter }} chapter{{ '' if stats.this_week == 1 else 's' }} in the last 7 days.
@@ -22,7 +23,7 @@
     <section class="panel">
       <div class="panel-head">
         <h2>Currently reading</h2>
-        {% if library_size %}<a class="link" href="#library">View library {{ ui.icon('arrow-right', 15) }}</a>{% endif %}
+        {% if library_size %}<a class="link" href="#reading/library">View library {{ ui.icon('arrow-right', 15) }}</a>{% endif %}
       </div>
       {% if current %}
       <div class="card-grid">

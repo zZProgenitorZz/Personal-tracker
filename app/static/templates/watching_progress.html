@@ -1,0 +1,63 @@
+{% import "_macros.html" as ui %}
+<div class="page">
+  {{ ui.tracker_tabs('watching', 'progress') }}
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Watching · Progress</p>
+      <h1>What you've <span class="grad-text">finished</span></h1>
+      <p class="lede">A title counts as finished when you set it to Completed. Adding something you've already seen doesn't count.</p>
+    </div>
+  </header>
+
+  <section class="stats" aria-label="Progress summary">
+    {{ ui.stat('calendar', 'amber', summary.stats[1][0], 'Finished this month') }}
+    {{ ui.stat('trending', 'purple', finished_total, 'Finished in Progen') }}
+    {{ ui.stat('check-circle', 'green', summary.stats[2][0], 'Completed in total') }}
+    {{ ui.stat('eye', 'teal', summary.stats[0][0], 'Watching now') }}
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Finished per month</h2>
+      <span class="muted">Last 12 months</span>
+    </div>
+    <div class="bars">
+      {% for m in months %}
+      <div class="bar{% if loop.last %} is-current{% endif %}" title="{{ m.label }} {{ m.year }}: {{ m.value }} finished">
+        <span class="bar-value">{{ m.value if m.value else '' }}</span>
+        <div class="bar-track"><div class="bar-fill" style="height: {{ m.height }}%"></div></div>
+        <span class="bar-label">{{ m.label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <div class="two-col spaced">
+    <section class="panel">
+      <div class="panel-head"><h2>Genres</h2><span class="muted">Titles per genre</span></div>
+      {% if genres %}
+      <ul class="genre-bars">
+        {% for g in genres %}
+        <li><span>{{ g.genre }}</span><div class="genre-bar"><i style="width: {{ g.width }}%"></i></div><b>{{ g.count }}</b></li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">No genres yet. Add them when you add a title, or with “Edit genres” in the ⋯ menu on a card.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Your list</h2><span class="muted">{{ counts.total }} titles</span></div>
+      <div class="seg-bar">
+        {% for c in counts.status if c.count %}<span class="seg seg-{{ c.status.value }}" style="flex: {{ c.count }}"></span>{% endfor %}
+      </div>
+      <ul class="legend">
+        {% for c in counts.status %}<li><i class="dot dot-{{ c.status.value }}"></i>{{ c.label }}<b>{{ c.count }}</b></li>{% endfor %}
+      </ul>
+      <div class="divider"></div>
+      <ul class="legend">
+        {% for k in counts.kind %}<li>{{ ui.icon(KIND_ICONS[k.kind.value], 15) }}{{ k.label }}<b>{{ k.count }}</b></li>{% endfor %}
+      </ul>
+    </section>
+  </div>
+</div>

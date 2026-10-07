@@ -13,7 +13,9 @@
       <div class="panel-head"><h2>Data</h2><span class="muted">{{ ui.icon('database', 18) }}</span></div>
       <dl class="kv">
         <div><dt>Database</dt><dd><code>{{ db_path }}</code></dd></div>
-        <div><dt>Series in library</dt><dd>{{ series_count }}</dd></div>
+        {% for tracker, summary in counts %}
+        <div><dt>{{ tracker.name }}</dt><dd>{{ summary.count }} {{ summary.unit }}</dd></div>
+        {% endfor %}
         <div><dt>Storage</dt><dd>Event sourced, append-only</dd></div>
       </dl>
       <p class="muted note">This file is the only source of truth. Keep copies of it with Backups below.</p>
@@ -51,7 +53,7 @@
     <div class="panel-head"><h2>Tracking</h2><span class="muted">What Progen keeps track of</span></div>
     <ul class="domain-list">
       <li><span class="domain-icon is-on">{{ ui.icon('book', 18) }}</span><div><b>Reading</b><span>Novels and manhwa</span></div><span class="badge badge-on">Active</span></li>
-      <li><span class="domain-icon">{{ ui.icon('image', 18) }}</span><div><b>Series &amp; anime</b><span>Episodes and seasons</span></div><span class="badge">Planned</span></li>
+      <li><span class="domain-icon is-on">{{ ui.icon('eye', 18) }}</span><div><b>Watching</b><span>Movies, series and anime</span></div><span class="badge badge-on">Active</span></li>
       <li><span class="domain-icon">{{ ui.icon('trending', 18) }}</span><div><b>Gym</b><span>Workouts and sessions</span></div><span class="badge">Planned</span></li>
     </ul>
   </section>

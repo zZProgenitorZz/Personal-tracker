@@ -9,8 +9,8 @@ import pytest
 from PIL import Image
 
 from app.covers import CoverError
-from app.reading.cover_search import (
-    COVER_MATCH_THRESHOLD, MIN_SOURCE_SIZE, CoverSearch, normalize, rank, similarity,
+from app.cover_search import (
+    COVER_MATCH_THRESHOLD, MIN_SOURCE_SIZE, CoverSearch, normalize, rank, required_score, similarity,
 )
 from app.reading.cover_sources import SourceResult, anilist as anilist_source
 
@@ -94,13 +94,41 @@ def test_small_differences_match(mine, official):
 
 @pytest.mark.parametrize("mine, other", [
     ("Tower of God", "The God of High School"),
-    ("Solo Leveling", "Solo Leveling: Ragnarok"),
+    ("Frieren", "Frieden"),            # korte titels: één letter verschil is een andere serie
+    ("Eleceed", "Elected"),
     ("Nano Machine", "Machine Heart"),
     ("Shadow Slave", "Slave of the Shadow Kingdom"),
     ("Shadow Slave", "Shadow Hack (Novel)"),
 ])
 def test_different_titles_do_not_match(mine, other):
-    assert similarity(mine, other) < COVER_MATCH_THRESHOLD
+    assert similarity(mine, other) < required_score(mine)
+
+
+def test_main_title_before_the_colon_counts():
+    assert similarity("Frieren", "Frieren: Beyond Journey's End") >= required_score("Frieren")
+    assert similarity("Re Zero", "Re:Zero - Starting Life in Another World") >= required_score("Re Zero")
+
+
+def test_sequel_with_subtitle_ranks_below_the_exact_title():
+    results = rank("Solo Leveling", [
+        SourceResult(("Solo Leveling: Ragnarok",), "https://a/ragnarok.jpg", "AniList"),
+        SourceResult(("Solo Leveling",), "https://a/solo.jpg", "AniList"),
+    ])
+    assert [r.image_url for r in results] == ["https://a/solo.jpg", "https://a/ragnarok.jpg"]
+
+
+def test_short_title_does_not_pick_a_lookalike():
+    results = rank("Frieren", [
+        SourceResult(("Frieden",), "https://tv/frieden.jpg", "TVmaze"),
+        SourceResult(("Frieren: Beyond Journey's End", "Sousou no Frieren"), "https://a/frieren.jpg", "AniList"),
+    ])
+    assert [r.image_url for r in results] == ["https://a/frieren.jpg"]
+
+
+def test_equally_good_titles_show_the_first_one_of_the_source():
+    [result] = rank("Frieren", [SourceResult(
+        ("Frieren: Beyond Journey's End", "Frieren: Tras finalizar el viaje"), "https://a/f.jpg", "AniList")])
+    assert result.title == "Frieren: Beyond Journey's End"
 
 
 def test_rank_uses_every_title_and_sorts_best_first():
