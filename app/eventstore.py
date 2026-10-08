@@ -1,6 +1,7 @@
 import json
 import sqlite3
 import threading
+import weakref
 from dataclasses import asdict, fields
 from datetime import datetime
 from enum import Enum
@@ -23,6 +24,8 @@ class EventStore:
         self._types = {t.__name__: t for t in event_types}
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._lock = threading.RLock()  # schrijven, kopiëren en terugzetten nooit door elkaar
+        # De verbinding sluiten zodra de store opgeruimd wordt (of bij close()).
+        self._closer = weakref.finalize(self, self._conn.close)
         self._conn.execute(
             """CREATE TABLE IF NOT EXISTS events (
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,6 +36,9 @@ class EventStore:
             )"""
         )
         self._conn.commit()
+
+    def close(self) -> None:
+        self._closer()
 
     def subscribe(self, callback) -> None:
         self._subscribers.append(callback)

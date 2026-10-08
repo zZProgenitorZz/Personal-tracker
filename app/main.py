@@ -1,4 +1,8 @@
+import asyncio
+import shutil
 import tempfile
+import weakref
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 import httpx
@@ -11,6 +15,14 @@ from .backup import Backups, default_backup_dir
 from .covers import CoverStore
 from .domain import DomainError
 from .eventstore import EventStore
+from .listening.api import create_listening_router
+from .listening.commands import ListeningCommandHandler
+from .listening.events import TrackPlayed
+from .listening.projections import (
+    ListeningActivityProjection, RecentlyPlayedProjection, TopArtistsProjection, TopTracksProjection,
+)
+from .listening.spotify import ListeningSync, Spotify, TokenFile, sync_interval_seconds
+from .listening.web import create_listening_web_router, create_spotify_router, listening_summary
 from .reading.api import create_reading_router
 from .reading.commands import ReadingCommandHandler
 from .cover_search import CoverSearch
@@ -33,6 +45,7 @@ ENV_FILE = Path(__file__).parent.parent / ".env"
 EVENT_TYPES = [
     SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved, GenresChanged,   # reading
     ShowAdded, ShowStatusChanged, ShowGenresChanged, ShowRemoved,                 # watching
+    TrackPlayed,                                                                  # listening
 ]
 
 
@@ -42,6 +55,7 @@ def create_app(
     http_client: httpx.Client | None = None,
     env_file: Path = ENV_FILE,
     backup_dir: str | Path | None = None,
+    data_dir: str | Path | None = None,
 ) -> FastAPI:
     """covers_dir staat standaard naast de database (data/covers). Tests geven
     een eigen map en een nep-http_client mee, zodat er niets naar buiten gaat.
@@ -50,13 +64,15 @@ def create_app(
     store = EventStore(db_path, EVENT_TYPES)
     if db_path == ":memory:":
         # Tests: covers en back-ups in een tijdelijke map, nooit in data/ of je OneDrive.
-        scratch = tempfile.TemporaryDirectory(prefix="progen-")  # weg zodra de app weg is
-        covers_dir = covers_dir or Path(scratch.name) / "covers"
-        backup_dir = backup_dir or Path(scratch.name) / "backups"
+        scratch = Path(tempfile.mkdtemp(prefix="progen-"))  # wordt opgeruimd zodra de app weg is
+        covers_dir = covers_dir or scratch / "covers"
+        backup_dir = backup_dir or scratch / "backups"
+        data_dir = data_dir or scratch
     else:
         scratch = None
         covers_dir = covers_dir or Path(db_path).parent / "covers"
         backup_dir = backup_dir or default_backup_dir()
+        data_dir = data_dir or Path(db_path).parent  # naast tracker.db, dus niet in git
     http = http_client or httpx.Client(headers={"User-Agent": "Progen personal tracker"})
     covers = CoverStore(Path(covers_dir), http)
     reading_search = CoverSearch(http, sources=READING_SOURCES)
@@ -66,7 +82,11 @@ def create_app(
     activity = ReadingActivityProjection()
     watchlist = WatchlistProjection()
     watch_activity = WatchActivityProjection()
-    projections = [library, activity, watchlist, watch_activity]
+    recent_plays = RecentlyPlayedProjection()
+    listen_activity = ListeningActivityProjection()
+    top_artists = TopArtistsProjection()
+    top_tracks = TopTracksProjection()
+    projections = [library, activity, watchlist, watch_activity, recent_plays, listen_activity, top_artists, top_tracks]
 
     def rebuild() -> None:
         """Read models opnieuw opbouwen uit alle events (bij start en na terugzetten)."""
@@ -83,17 +103,44 @@ def create_app(
 
     handler = ReadingCommandHandler(store, library)
     watching = WatchingCommandHandler(store, watchlist)
+    listening = ListeningCommandHandler(store)
+    # Spotify-tokens en de laatste sync in losse bestanden: niet in de event store en niet in een back-up.
+    spotify = Spotify.from_environment(http, TokenFile(Path(data_dir) / "spotify_token.json"))
+    listening_sync = ListeningSync(spotify, listening, recent_plays, Path(data_dir) / "spotify_sync.json",
+                                   interval_seconds=sync_interval_seconds())
     trackers = [
         Tracker("reading", "Reading", "book", "reading-changed", lambda: reading_summary(library, activity)),
         Tracker("watching", "Watching", "eye", "watching-changed", lambda: watching_summary(watchlist, watch_activity)),
+        Tracker("listening", "Listening", "music", "listening-changed",
+                lambda: listening_summary(recent_plays, listen_activity, top_artists)),
     ]
 
-    app = FastAPI(title="Personal Tracker")
-    app.state.scratch_covers = scratch
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        """Achtergrondtaak: elke SYNC_INTERVAL_MINUTES een Spotify-sync (alleen als er een token is).
+        tick() vangt alle fouten zelf af, dus deze lus stopt alleen als de app stopt."""
+        async def sync_forever():
+            while True:
+                wait = await asyncio.to_thread(listening_sync.tick)
+                await asyncio.sleep(wait)
+
+        task = asyncio.create_task(sync_forever())
+        yield
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+    app = FastAPI(title="Personal Tracker", lifespan=lifespan)
+    if scratch:
+        weakref.finalize(app, shutil.rmtree, scratch, ignore_errors=True)
     app.include_router(create_reading_router(handler, library, activity, covers))
     app.include_router(create_reading_web_router(handler, library, activity, covers, reading_search))
     app.include_router(create_watching_router(watching, watchlist, watch_activity, covers))
     app.include_router(create_watching_web_router(watching, watchlist, watch_activity, covers, watching_search))
+    app.include_router(create_listening_router(listening, recent_plays, listen_activity, top_artists, top_tracks))
+    app.include_router(create_listening_web_router(recent_plays, listen_activity, top_artists, top_tracks,
+                                                   spotify_connected=lambda: spotify.connected))
+    app.include_router(create_spotify_router(listening_sync))
     app.include_router(create_home_router(trackers))
     app.include_router(create_settings_router(db_path, trackers, backups))
     app.mount("/static", StaticFiles(directory=STATIC), name="static")

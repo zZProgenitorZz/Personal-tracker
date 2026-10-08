@@ -1,6 +1,6 @@
 {% import "_macros.html" as ui %}
 {# Startscherm: één kaart per tracker. Ververst na een wijziging in welke tracker dan ook. #}
-<div class="page" hx-disinherit="*" hx-get="/ui/home" hx-trigger="reading-changed from:body, watching-changed from:body" hx-swap="outerHTML">
+<div class="page" hx-disinherit="*" hx-get="/ui/home" hx-trigger="reading-changed from:body, watching-changed from:body, listening-changed from:body" hx-swap="outerHTML">
   <header class="page-head">
     <div>
       <p class="eyebrow">{{ greeting }}</p>
@@ -11,7 +11,7 @@
 
   <div class="tracker-grid">
     {% for tracker, summary in trackers %}
-    <a class="tracker-card accent-{{ loop.cycle('purple', 'teal') }}" href="#{{ tracker.key }}">
+    <a class="tracker-card accent-{{ loop.cycle('purple', 'teal', 'amber') }}" href="#{{ tracker.key }}">
       <div class="tracker-head">
         <span class="stat-icon">{{ ui.icon(tracker.icon, 20) }}</span>
         <div>
@@ -32,6 +32,8 @@
         {% for e in summary.current %}{{ ui.cover(e.title, e.kind, e.cover) }}{% endfor %}
       </div>
       <p class="tracker-now muted">Now: {{ summary.current|map(attribute='title')|join(', ') }}</p>
+      {% elif summary.note %}
+      <p class="tracker-now muted">{{ summary.note }}</p>
       {% else %}
       <p class="tracker-now muted">Nothing in progress right now.</p>
       {% endif %}

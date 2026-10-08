@@ -1,0 +1,29 @@
+{% import "_macros.html" as ui %}
+{# Het Spotify-blok in Settings. Ververst zichzelf na koppelen, ontkoppelen of een sync. #}
+<div id="spotify" hx-disinherit="*" hx-get="/ui/listening/spotify" hx-trigger="spotify-changed from:body" hx-swap="outerHTML">
+  {% if not configured %}
+  <p class="muted">
+    To connect Spotify, create an app on <a class="link" href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com</a>
+    with redirect URI <code>{{ redirect_uri }}</code>, put its <code>SPOTIFY_CLIENT_ID</code> and
+    <code>SPOTIFY_CLIENT_SECRET</code> in <code>.env</code>, and restart Progen.
+  </p>
+  {% elif not connected %}
+  <p class="muted">Progen reads what you played recently (and nothing else), every {{ interval_minutes }} minutes.</p>
+  <a class="btn btn-primary btn-sm" href="/listening/spotify/connect">{{ ui.icon('music', 15) }}Connect Spotify</a>
+  {% else %}
+  <dl class="kv">
+    <div><dt>Status</dt><dd><span class="badge badge-on">Connected</span></dd></div>
+    <div><dt>Last sync</dt><dd>
+      {%- if status.last_sync_at %}{{ status.last_sync_at.astimezone()|nice_date }} ·
+        {% if status.error %}<span class="warn">{{ status.error }}</span>
+        {% else %}{{ status.stored }} new, {{ status.skipped }} already known{% endif %}
+      {%- else %}Not yet{% endif -%}
+    </dd></div>
+    <div><dt>Automatic sync</dt><dd>Every {{ interval_minutes }} minutes, while Progen is running</dd></div>
+  </dl>
+  <div class="spotify-actions">
+    <button class="btn btn-primary btn-sm" type="button" hx-post="/ui/listening/spotify/sync" hx-swap="none">{{ ui.icon('refresh', 15) }}Sync now</button>
+    <button class="btn btn-ghost btn-sm" type="button" hx-post="/ui/listening/spotify/disconnect" hx-swap="none">Disconnect</button>
+  </div>
+  {% endif %}
+</div>

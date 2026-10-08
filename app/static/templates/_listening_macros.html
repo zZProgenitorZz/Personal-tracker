@@ -1,0 +1,30 @@
+{% import "_macros.html" as ui %}
+{# Een lijst met plays (nieuwste eerst), gedeeld door Dashboard en History. #}
+{% macro play_list(plays) -%}
+<ol class="play-list">
+  {%- for p in plays %}
+  <li>
+    <span class="play-icon">{{ ui.icon('music', 15) }}</span>
+    <div class="play-text">
+      <b title="{{ p.track }}">{{ p.track }}</b>
+      <span title="{{ p.artists|join(', ') }}{% if p.album %} · {{ p.album }}{% endif %}">{{ p.artists|join(', ') }}{% if p.album %} · {{ p.album }}{% endif %}</span>
+    </div>
+    <time datetime="{{ p.played_at.isoformat() }}" title="{{ p.played_at.astimezone()|nice_date }}">{{ p.played_at|ago }}</time>
+  </li>
+  {%- endfor %}
+</ol>
+{%- endmacro %}
+
+{# Nog niets: vertel waar je Spotify koppelt. #}
+{% macro no_plays(connected) -%}
+{% if connected %}
+{{ ui.empty('music', 'No plays yet', 'Spotify is connected. Play something, then use “Sync now” in Settings or wait for the next automatic sync.', cta=false) }}
+{% else %}
+<div class="empty">
+  <div class="empty-icon">{{ ui.icon('music', 22) }}</div>
+  <h3>Connect Spotify to start</h3>
+  <p>Progen keeps track of what you listen to once Spotify is connected.</p>
+  <a class="btn btn-primary" href="#settings">{{ ui.icon('settings', 16) }}Go to Settings</a>
+</div>
+{% endif %}
+{%- endmacro %}

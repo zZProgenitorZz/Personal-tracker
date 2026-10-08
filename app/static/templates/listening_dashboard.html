@@ -1,0 +1,63 @@
+{% import "_macros.html" as ui %}
+{% import "_listening_macros.html" as listen %}
+<div class="page" hx-disinherit="*" hx-get="/ui/listening/dashboard" hx-trigger="listening-changed from:body" hx-swap="outerHTML">
+  {{ ui.tracker_tabs('listening', 'dashboard', tabs) }}
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Listening</p>
+      <h1>What you're <span class="grad-text">listening to</span></h1>
+      <p class="lede">
+        {%- if summary.stats[0][0] %}You listened for {{ summary.stats[0][0] }} minutes in the last 7 days.
+        {%- else %}Nothing played in the last 7 days.{% endif -%}
+      </p>
+    </div>
+  </header>
+
+  <section class="stats" aria-label="Overview">
+    {{ ui.stat('clock', 'purple', summary.stats[0][0], 'Minutes this week') }}
+    {{ ui.stat('music', 'teal', summary.stats[1][0], 'Plays this week') }}
+    {{ ui.stat('star', 'amber', summary.stats[2][0], 'Artists this month') }}
+    {{ ui.stat('layers', 'green', summary.count, 'Plays in total') }}
+  </section>
+
+  {% if summary.count %}
+  <div class="dash-grid">
+    <section class="panel">
+      <div class="panel-head"><h2>Top artists</h2><span class="muted">This month</span></div>
+      {% if artists %}
+      <ul class="genre-bars">
+        {% for a in artists %}
+        <li><span title="{{ a.artist }}">{{ a.artist }}</span><div class="genre-bar"><i style="width: {{ a.width }}%"></i></div><b>{{ a.plays }}</b></li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">Nothing played this month yet.</p>
+      {% endif %}
+    </section>
+
+    <aside class="side">
+      <section class="panel">
+        <div class="panel-head"><h2>Last 7 days</h2><span class="muted">minutes</span></div>
+        <div class="mini-bars">
+          {% for b in week %}
+          <div class="mini-bar{% if loop.last %} is-today{% endif %}" title="{{ b.day.strftime('%a %d %b') }}: {{ b.value|round|int }} min">
+            <div class="mini-bar-track"><div class="mini-bar-fill" style="height: {{ b.height }}%"></div></div>
+            <span>{{ b.label }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <section class="panel spaced">
+    <div class="panel-head">
+      <h2>Recently played</h2>
+      <a class="link" href="#listening/history">History {{ ui.icon('arrow-right', 15) }}</a>
+    </div>
+    {{ listen.play_list(recent) }}
+  </section>
+  {% else %}
+  <section class="panel">{{ listen.no_plays(connected) }}</section>
+  {% endif %}
+</div>

@@ -1,0 +1,16 @@
+{% import "_macros.html" as ui %}
+{% import "_listening_macros.html" as listen %}
+<div class="page" hx-disinherit="*" hx-get="/ui/listening/history" hx-trigger="listening-changed from:body" hx-swap="outerHTML">
+  {{ ui.tracker_tabs('listening', 'history', tabs) }}
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Listening · History</p>
+      <h1>Recently <span class="grad-text">played</span></h1>
+      <p class="lede">Your last {{ plays|length if plays else 50 }} plays, newest first.</p>
+    </div>
+  </header>
+
+  <section class="panel">
+    {% if plays %}{{ listen.play_list(plays) }}{% else %}{{ listen.no_plays(connected) }}{% endif %}
+  </section>
+</div>

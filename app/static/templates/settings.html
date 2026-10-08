@@ -50,10 +50,16 @@
   </section>
 
   <section class="panel spaced">
+    <div class="panel-head"><h2>Spotify</h2><span class="muted">For Listening</span></div>
+    <div hx-get="/ui/listening/spotify" hx-trigger="load" hx-swap="outerHTML"><div class="loading"></div></div>
+  </section>
+
+  <section class="panel spaced">
     <div class="panel-head"><h2>Tracking</h2><span class="muted">What Progen keeps track of</span></div>
     <ul class="domain-list">
       <li><span class="domain-icon is-on">{{ ui.icon('book', 18) }}</span><div><b>Reading</b><span>Novels and manhwa</span></div><span class="badge badge-on">Active</span></li>
       <li><span class="domain-icon is-on">{{ ui.icon('eye', 18) }}</span><div><b>Watching</b><span>Movies, series and anime</span></div><span class="badge badge-on">Active</span></li>
+      <li><span class="domain-icon is-on">{{ ui.icon('music', 18) }}</span><div><b>Listening</b><span>What you play on Spotify</span></div><span class="badge badge-on">Active</span></li>
       <li><span class="domain-icon">{{ ui.icon('trending', 18) }}</span><div><b>Gym</b><span>Workouts and sessions</span></div><span class="badge">Planned</span></li>
     </ul>
   </section>

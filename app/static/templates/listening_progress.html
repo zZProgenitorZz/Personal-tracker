@@ -1,0 +1,56 @@
+{% import "_macros.html" as ui %}
+<div class="page" hx-disinherit="*" hx-get="/ui/listening/progress" hx-trigger="listening-changed from:body" hx-swap="outerHTML">
+  {{ ui.tracker_tabs('listening', 'progress', tabs) }}
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Listening · Progress</p>
+      <h1>How your listening <span class="grad-text">adds up</span></h1>
+      <p class="lede">Minutes are the length of each track; Spotify's live data doesn't say how much of it you actually heard.</p>
+    </div>
+  </header>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Minutes per day</h2><span class="muted">Last 30 days</span></div>
+    <div class="bars" style="grid-template-columns: repeat({{ days|length }}, minmax(0, 1fr))">
+      {% for d in days %}
+      <div class="bar{% if loop.last %} is-current{% endif %}" title="{{ d.day.strftime('%a %d %b') }}: {{ d.value|round|int }} min">
+        <span class="bar-value"></span>
+        <div class="bar-track"><div class="bar-fill" style="height: {{ d.height }}%"></div></div>
+        <span class="bar-label">{{ d.label if loop.index0 % 5 == 4 or loop.last else '' }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel spaced">
+    <div class="panel-head"><h2>Minutes per week</h2><span class="muted">Last 12 weeks · {{ total_minutes|round|int }} min in total</span></div>
+    <div class="bars">
+      {% for w in weeks %}
+      <div class="bar{% if loop.last %} is-current{% endif %}" title="Week of {{ w.start.strftime('%d %b') }}: {{ w.value|round|int }} min">
+        <span class="bar-value">{{ w.value|round|int if w.value else '' }}</span>
+        <div class="bar-track"><div class="bar-fill" style="height: {{ w.height }}%"></div></div>
+        <span class="bar-label">{{ w.label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <div class="two-col spaced">
+    <section class="panel">
+      <div class="panel-head"><h2>Top tracks</h2><span class="muted">{{ month }}</span></div>
+      {% if tracks %}
+      <ol class="top-list">
+        {% for t in tracks %}<li><div><b>{{ t.track }}</b><span>{{ t.artists|join(', ') }}</span></div><em>{{ t.plays }}×</em></li>{% endfor %}
+      </ol>
+      {% else %}<p class="muted">Nothing played this month yet.</p>{% endif %}
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>Top artists</h2><span class="muted">{{ month }}</span></div>
+      {% if artists %}
+      <ol class="top-list">
+        {% for artist, plays in artists %}<li><div><b>{{ artist }}</b></div><em>{{ plays }}×</em></li>{% endfor %}
+      </ol>
+      {% else %}<p class="muted">Nothing played this month yet.</p>{% endif %}
+    </section>
+  </div>
+</div>

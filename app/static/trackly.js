@@ -7,25 +7,26 @@ const el = (id) => document.getElementById(id);
 // ---- Navigatie via de hash, zodat terugknop en verversen werken ----
 // #home, #settings, en per tracker #<tracker>, #<tracker>/library, #<tracker>/progress.
 
+// Per tracker: de tekst van de knop "Add ..." (null = geen knop) en de tabbladen.
 const TRACKERS = {
-  reading: { add: "Add series" },
-  watching: { add: "Add title" },
+  reading: { add: "Add series", tabs: ["dashboard", "library", "progress"] },
+  watching: { add: "Add title", tabs: ["dashboard", "library", "progress"] },
+  listening: { add: null, tabs: ["dashboard", "history", "progress"] },  // plays komen uit Spotify
 };
-const TABS = ["dashboard", "library", "progress"];
 const OLD_ADDRESSES = { dashboard: "reading", library: "reading/library", progress: "reading/progress" };
 
 function currentRoute() {
   let hash = location.hash.slice(1);
   hash = OLD_ADDRESSES[hash] || hash;  // bladwijzers van vóór het startscherm blijven werken
   const [section, tab = "dashboard"] = hash.split("/");
-  if (TRACKERS[section] && TABS.includes(tab)) return { section, tab, url: `/ui/${section}/${tab}` };
+  if (TRACKERS[section] && TRACKERS[section].tabs.includes(tab)) return { section, tab, url: `/ui/${section}/${tab}` };
   if (section === "settings") return { section, url: "/ui/settings" };
   return { section: "home", url: "/ui/home" };
 }
 
 function currentTracker() {
   const { section } = currentRoute();
-  return TRACKERS[section] ? section : null;
+  return TRACKERS[section] && TRACKERS[section].add ? section : null;
 }
 
 function showPage() {
@@ -40,8 +41,8 @@ function showPage() {
 
   // De knop "Add ..." hoort bij de tracker waar je bent.
   const tracker = TRACKERS[route.section];
-  document.querySelector(".nav-add").hidden = !tracker;
-  if (tracker) el("nav-add-label").textContent = tracker.add;
+  document.querySelector(".nav-add").hidden = !(tracker && tracker.add);
+  if (tracker && tracker.add) el("nav-add-label").textContent = tracker.add;
 
   const name = route.section[0].toUpperCase() + route.section.slice(1);
   document.title = `${name}${route.tab && route.tab !== "dashboard" ? " · " + route.tab : ""} · Progen`;
@@ -81,7 +82,7 @@ document.addEventListener("click", (event) => {
 });
 
 // De server stuurt een van deze events mee als een actie gelukt is.
-for (const changed of ["reading-changed", "watching-changed"]) {
+for (const changed of ["reading-changed", "watching-changed"]) {  // listening heeft geen formulier
   document.addEventListener(changed, () => {
     if (el("add-dialog").open) {
       el("add-dialog").close();

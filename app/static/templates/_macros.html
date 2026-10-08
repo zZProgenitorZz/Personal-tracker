@@ -2,12 +2,12 @@
 <svg class="icon" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ ICONS[name]|safe }}</svg>
 {%- endmacro %}
 
-{# Tabbladen binnen een tracker: Dashboard, Library, Progress. #}
-{% macro tracker_tabs(tracker, active) -%}
+{# Tabbladen binnen een tracker; standaard Dashboard, Library, Progress. Het eerste tabblad is #<tracker>. #}
+{% macro tracker_tabs(tracker, active, tabs=[('dashboard', 'Dashboard'), ('library', 'Library'), ('progress', 'Progress')]) -%}
 <nav class="tracker-tabs" aria-label="{{ tracker|capitalize }}">
-  <a href="#{{ tracker }}"{% if active == 'dashboard' %} class="active" aria-current="page"{% endif %}>Dashboard</a>
-  <a href="#{{ tracker }}/library"{% if active == 'library' %} class="active" aria-current="page"{% endif %}>Library</a>
-  <a href="#{{ tracker }}/progress"{% if active == 'progress' %} class="active" aria-current="page"{% endif %}>Progress</a>
+  {%- for key, label in tabs %}
+  <a href="#{{ tracker }}{% if not loop.first %}/{{ key }}{% endif %}"{% if active == key %} class="active" aria-current="page"{% endif %}>{{ label }}</a>
+  {%- endfor %}
 </nav>
 {%- endmacro %}
 

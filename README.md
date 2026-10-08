@@ -1,6 +1,6 @@
 # Personal-tracker
 
-Een persoonlijke API die gegevens over mijn eigen leven op één plek verzamelt, in eigen beheer. Het begon met het bijhouden van wat ik lees (**Reading**: novels en manhwa); daarna kwam **Watching** (films, series en anime). Slaap, fitness en andere trackers kunnen volgen.
+Een persoonlijke API die gegevens over mijn eigen leven op één plek verzamelt, in eigen beheer. Het begon met het bijhouden van wat ik lees (**Reading**: novels en manhwa); daarna kwamen **Watching** (films, series en anime) en **Listening** (wat ik op Spotify luister). Slaap, fitness en andere trackers kunnen volgen.
 
 Het startscherm (`#home`) toont een kaart per tracker. Een klik brengt je naar de eigen omgeving van die tracker, met de tabbladen Dashboard, Library en Progress (`#reading`, `#watching/library`, ...).
 
@@ -24,6 +24,9 @@ Instellingen staan in `.env` in de projectmap (niet in git). Begin met een kopie
 ```
 GOOGLE_BOOKS_API_KEY=...          # betere covers uit Google Books (zonder sleutel valt Google vaak af)
 TMDB_API_KEY=...                  # covers en genres van films en series (Watching)
+SPOTIFY_CLIENT_ID=...             # Listening: koppeling met Spotify (zie Listening)
+SPOTIFY_CLIENT_SECRET=...
+SYNC_INTERVAL_MINUTES=30          # hoe vaak Progen automatisch met Spotify synct
 PROGEN_BACKUP_DIR=D:\Backups\Progen  # andere back-upmap dan OneDrive\Progen-backups
 ```
 
@@ -42,6 +45,7 @@ Data van **alle trackers** staat in één bestand, `data/tracker.db`. **Dit best
 - **Wat:** één back-up bevat alle trackers tegelijk, zodat ze altijd bij elkaar passen. Per back-up een map met datum en tijd als naam (`2026-10-06_21-05-33`) met `tracker.db`, `covers/` en `info.json`. De kopie wordt gemaakt met de back-up-API van SQLite (veilig terwijl de server draait) en daarna gecontroleerd; een mislukte back-up laat niets achter.
 - **Hoeveel:** de 10 nieuwste blijven (`KEEP_BACKUPS` in `app/backup.py`); oudere worden verwijderd.
 - **Terugzetten:** Settings > *Restore* bij de gewenste back-up. Progen maakt eerst automatisch een back-up van de huidige stand ("saved automatically before a restore"), zodat ook terugzetten terug te draaien is. Daarna worden de events vervangen, ontbrekende covers teruggezet en de read models opnieuw opgebouwd.
+- **Niet in een back-up:** `data/spotify_token.json` (je Spotify-toegang) en `data/spotify_sync.json` (wanneer de laatste sync was). Na het terugzetten op een andere computer koppel je Spotify gewoon opnieuw.
 - **Met de hand terugzetten** (als de app niet start): stop de server, kopieer `tracker.db` en `covers/` uit de back-upmap naar `data/` en start de server opnieuw.
 
 ---
@@ -95,6 +99,14 @@ app/
     genres.py          de genrelijst van Reading
     api.py             /reading endpoints (JSON)
     web.py             /ui/reading endpoints (HTML-fragmenten voor htmx)
+  listening/
+    events.py          TrackPlayed
+    aggregate.py       Play (één moment = één play)
+    commands.py        RecordPlay + ListeningCommandHandler, stream_id()
+    projections.py     RecentlyPlayed, ListeningActivity, TopArtists, TopTracks
+    spotify.py         de Spotify-koppeling: inloggen, tokens, sync (automation-slice)
+    api.py             /listening endpoints (JSON)
+    web.py             /ui/listening endpoints, en connect/callback/sync voor Spotify
   watching/
     events.py          ShowAdded, ShowStatusChanged, ShowGenresChanged, ShowRemoved
     aggregate.py       WatchItem
@@ -107,8 +119,8 @@ app/
 tests/
   test_eventstore.py, test_api.py, test_web.py
   test_covers.py, test_cover_flow.py
-  reading/, watching/  given/when/then-tests per regel
-data/                  tracker.db en covers/ (niet in git)
+  reading/, watching/, listening/  given/when/then-tests per regel
+data/                  tracker.db, covers/, spotify_token.json, spotify_sync.json (niet in git)
 ```
 
 ---
@@ -155,6 +167,38 @@ Regels:
 5. Na verwijderen is de titel weer vrij.
 
 De event-klassen heten `Show...`, omdat de event store alleen de klassenaam opslaat; namen moeten uniek zijn over alle trackers heen.
+
+## Listening (klaar)
+
+Wat ik op Spotify luister, automatisch bijgehouden. Er is geen formulier: plays komen binnen via de Spotify-sync (of `POST /listening/plays`).
+
+| Onderdeel   | Inhoud |
+| ----------- | ------ |
+| Events      | `TrackPlayed` (played_at, track_id, track, artists, album, album_id, duration_ms, ms_played, source) |
+| Commands    | `RecordPlay` |
+| Streams     | één per moment: `play-<played_at in ISO, UTC>` |
+| Read models | RecentlyPlayed (laatste 50), ListeningActivity (minuten per dag en per week), TopArtists en TopTracks (per maand) |
+| Tabbladen   | Dashboard (minuten deze week, top 5 artiesten deze maand), History (laatste plays), Progress (minuten per dag/week, toplijsten) |
+
+Regels:
+
+1. Een play op een moment dat al bekend is, wordt overgeslagen: geen fout, de handler geeft een lege lijst terug (de API antwoordt dan `200` met `"stored": false` in plaats van `201`). De sync haalt bewust overlappende data op.
+2. Een play zonder `track_id`, of met een negatieve `duration_ms` of `ms_played`, wordt geweigerd (`DomainError`).
+3. Plays worden nooit gewijzigd of verwijderd.
+4. Minuten: `ms_played` als die bekend is, anders `duration_ms`. De Spotify-API geeft alleen de lengte van een nummer, niet hoe lang je echt luisterde; minuten zijn dus een bovengrens.
+5. Dagen, weken en maanden volgen je eigen tijdzone; `played_at` wordt in UTC opgeslagen (een tijd zonder tijdzone geldt als UTC).
+6. Een nummer met meerdere artiesten telt in TopArtists voor elke artiest.
+
+### Spotify koppelen
+
+1. Maak een app op [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard). Zet als **Redirect URI** precies `http://127.0.0.1:8000/listening/spotify/callback` (draait Progen op een andere poort: pas die aan en zet hem ook in `SPOTIFY_REDIRECT_URI`).
+2. Zet `SPOTIFY_CLIENT_ID` en `SPOTIFY_CLIENT_SECRET` in `.env` en herstart Progen.
+3. Klik in Settings op **Connect Spotify** en geef Progen toegang. Progen vraagt alleen `user-read-recently-played`; een `state`-parameter beschermt het inloggen tegen CSRF.
+4. Na het terugkomen draait meteen een eerste sync. Daarna synct Progen elke `SYNC_INTERVAL_MINUTES` minuten (standaard 30) zolang de server draait, of direct via **Sync now**. **Disconnect** verwijdert de tokens; je plays blijven.
+
+Hoe het werkt (`app/listening/spotify.py`, een automation-slice): de sync vraagt `GET /v1/me/player/recently-played?limit=50&after=<laatste played_at in ms>` en stuurt voor elk nummer hetzelfde `RecordPlay` als de API, met `source="api"`. Tokens staan in `data/spotify_token.json`, niet in de event store; de access token wordt automatisch ververst met de refresh token. Bij een 429 wacht de achtergrondtaak de `Retry-After` af. Fouten worden gelogd (logger `progen.listening`) en laten de app nooit crashen; de laatste sync en een eventuele fout staan in Settings.
+
+**Beperking:** Spotify geeft per verzoek maximaal de laatste **50** nummers. Luister je tussen twee syncs meer dan 50 nummers (bij 30 minuten is dat haast onmogelijk, maar staat Progen een dag uit wel), dan zijn de oudere via de API niet meer op te halen.
 
 ### Covers
 
@@ -225,6 +269,7 @@ Eerst handmatig invoeren; automatisch importeren komt later (zie punt 5).
 - Status **Plan to Read** voor series die ik nog wil beginnen (alleen een extra waarde in `Status`).
 - Beoordeling of notities per serie (nieuwe events, bijv. `SeriesRated`).
 - Export van alle data naar JSON of CSV.
+- Listening: importeren van de Spotify **Extended streaming history** (de export die je bij Spotify aanvraagt). Die bevat alles sinds je account bestaat, met echte `ms_played`; importeren als `RecordPlay` met `source="export"`, dubbele plays worden vanzelf overgeslagen.
 - Nieuwe domeinen naar behoefte.
 
 ---
@@ -244,7 +289,7 @@ Elk domein volgt dezelfde stappen als Reading en Watching. Bestaande domeinen ho
    - de nieuwe projecties toevoegen aan `projections`
    - de handler aanmaken en de router toevoegen met `include_router`
    - een `Tracker(...)` toevoegen aan `trackers` (naam, icoon, event na een wijziging, samenvatting voor het startscherm); dan staat hij vanzelf op het startscherm, in Settings en in elke back-up
-8. **Webpagina**: `web.py` met `/ui/<domein>/dashboard`, `/library`, `/progress` en `/add-form`, templates met `ui.tracker_tabs(...)` bovenaan, een link in de navigatie (`index.html`) en een regel in `TRACKERS` in `trackly.js`.
+8. **Webpagina**: `web.py` met `/ui/<domein>/dashboard`, `/library`, `/progress` en (als je iets kunt toevoegen) `/add-form`; andere tabbladen kan ook, zoals `/history` bij Listening (geef `tabs` mee aan `ui.tracker_tabs`), templates met `ui.tracker_tabs(...)` bovenaan, een link in de navigatie (`index.html`) en een regel in `TRACKERS` in `trackly.js`.
    - Event-klassen moeten uniek zijn over alle domeinen heen (de event store bewaart alleen de klassenaam).
 9. `python -m pytest` moet groen blijven, zonder warnings.
 
