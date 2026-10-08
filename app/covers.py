@@ -33,8 +33,9 @@ def too_large() -> CoverError:
     return CoverError(f"The image is larger than {MAX_BYTES // (1024 * 1024)} MB")
 
 
-def process_image(data: bytes) -> bytes:
-    """Controleer dat `data` een afbeelding is en maak er een 300×450 WebP van."""
+def process_image(data: bytes, size: tuple[int, int] = COVER_SIZE) -> bytes:
+    """Controleer dat `data` een afbeelding is en maak er een WebP van `size` van
+    (standaard 300×450, een cover; de Spotify-profielfoto gebruikt een vierkant)."""
     if len(data) > MAX_BYTES:
         raise too_large()
     try:
@@ -59,7 +60,7 @@ def process_image(data: bytes) -> bytes:
         image = image.convert("RGB")
 
     # Bijsnijden vanuit het midden, dus nooit uitrekken.
-    image = ImageOps.fit(image, COVER_SIZE, method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+    image = ImageOps.fit(image, size, method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
     out = BytesIO()
     image.save(out, "WEBP", quality=85, method=6)
     return out.getvalue()

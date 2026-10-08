@@ -32,6 +32,10 @@ class SourceResult:
     genres: tuple[str, ...] = ()  # al vertaald naar de vaste genrelijst
 
 
+class SourceBusy(CoverError):
+    """Een bron gaf 429 (rate limit). Die bron doet deze keer niet mee; de rest wel."""
+
+
 def cover_source(name: str):
     """Geeft een bron zijn naam, zodat foutmeldingen hem kunnen noemen."""
     def register(function):
@@ -40,16 +44,16 @@ def cover_source(name: str):
     return register
 
 
-def ask(client: httpx.Client, name: str, method: str, url: str, **kwargs):
+def ask(client: httpx.Client, name: str, method: str, url: str, *, timeout=SOURCE_TIMEOUT, **kwargs):
     """Eén verzoek aan een bron, met nette foutmeldingen waarin de bron genoemd wordt."""
     try:
-        response = client.request(method, url, timeout=SOURCE_TIMEOUT, **kwargs)
+        response = client.request(method, url, timeout=timeout, **kwargs)
     except httpx.TimeoutException as exc:
         raise CoverError(f"{name} took too long to answer.") from exc
     except httpx.HTTPError as exc:
         raise CoverError(f"Couldn't reach {name}.") from exc
     if response.status_code == 429:
-        raise CoverError(f"{name} is busy right now.")
+        raise SourceBusy(f"{name} is busy right now.")
     if response.status_code != 200:
         raise CoverError(f"{name} gave an error (HTTP {response.status_code}).")
     try:

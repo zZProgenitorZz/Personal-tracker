@@ -6,7 +6,7 @@ niet via een formulier. Na een sync stuurt de server `listening-changed`.
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 
 from ..web import render, toast
 from .projections import (
@@ -63,6 +63,7 @@ def create_listening_web_router(
     top_artists: TopArtistsProjection,
     top_tracks: TopTracksProjection,
     spotify_connected=lambda: False,
+    spotify_profile=lambda: None,
 ) -> APIRouter:
     router = APIRouter(prefix="/ui/listening", include_in_schema=False)
 
@@ -78,7 +79,7 @@ def create_listening_web_router(
                       summary=listening_summary(recent, activity, top_artists),
                       artists=top5_artists(today), recent=recent.recent()[:8],
                       week=with_height(last_days(activity.minutes_per_day(), today, 7)),
-                      connected=spotify_connected())
+                      connected=spotify_connected(), profile=spotify_profile())
 
     @router.get("/history")
     def history(request: Request):
@@ -133,6 +134,7 @@ def create_spotify_router(sync: ListeningSync) -> APIRouter:
             spotify.finish_authorization(code, state)
         except SpotifyError as exc:
             return message(request, "Spotify wasn't connected", str(exc))
+        sync.refresh_profile(force=True)  # naam en foto voor het dashboard
         sync.tick()  # meteen een eerste sync; fouten worden gelogd, niet getoond
         return RedirectResponse("/#settings", status_code=303)
 
@@ -157,7 +159,15 @@ def create_spotify_router(sync: ListeningSync) -> APIRouter:
 
     @router.post("/ui/listening/spotify/disconnect")
     def disconnect(request: Request):
-        spotify.disconnect()
-        return toast(request, "Spotify disconnected. Your plays stay in Progen.", changed=SPOTIFY_CHANGED)
+        sync.disconnect()
+        return toast(request, "Spotify disconnected. Your plays stay in Progen.",
+                     changed=f"{CHANGED}, {SPOTIFY_CHANGED}")
+
+    @router.get("/listening/spotify/avatar")
+    def avatar():
+        """Je Spotify-profielfoto, lokaal bewaard."""
+        if sync.profiles is None or not sync.profiles.avatar_path.exists():
+            return Response(status_code=404)
+        return FileResponse(sync.profiles.avatar_path, media_type="image/webp")
 
     return router

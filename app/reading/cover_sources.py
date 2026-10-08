@@ -9,11 +9,14 @@ een functie zoals hieronder, met @cover_source("Naam") erboven, en zet hem
 in SOURCES (of haal hem eruit).
 """
 import os
+import threading
+import time
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 
-from ..cover_search import SourceResult, ask, cover_source, unique_titles
+from ..cover_search import SOURCE_TIMEOUT, SourceBusy, SourceResult, ask, cover_source, unique_titles
+from ..covers import CoverError
 from .genres import from_source
 
 ANILIST_MIN_TAG_RANK = 60  # alleen tags waar AniList zeker van is
@@ -70,6 +73,64 @@ def mangaupdates(client: httpx.Client, term: str) -> list[SourceResult]:
         if image and titles:
             results.append(SourceResult(titles, image, "MangaUpdates", genres=genres))
     return results
+
+
+# ---- MyAnimeList via Jikan: (light) novels, ook Chinese en Koreaanse webnovels ----
+
+JIKAN_URL = "https://api.jikan.moe/v4/manga"
+JIKAN_TYPES = ("novel", "lightnovel")
+JIKAN_MIN_INTERVAL = 0.4  # seconden tussen verzoeken; Jikan staat er maximaal 3 per seconde toe
+JIKAN_CONNECT_TIMEOUT = 3.0  # neemt Jikan niet op, dan snel opgeven
+JIKAN_COOLDOWN = 5 * 60   # na een netwerkfout Jikan zo lang overslaan, zodat zoeken niet steeds wacht
+_jikan_lock = threading.Lock()
+_jikan_last = [0.0]
+_jikan_down_until = [0.0]
+
+
+def _jikan_pause() -> None:
+    """Wacht tot er JIKAN_MIN_INTERVAL voorbij is sinds het vorige Jikan-verzoek."""
+    with _jikan_lock:
+        # Nooit langer dan JIKAN_MIN_INTERVAL, ook niet als de klok terugspringt.
+        wait = min(JIKAN_MIN_INTERVAL, _jikan_last[0] + JIKAN_MIN_INTERVAL - time.monotonic())
+        if wait > 0:
+            time.sleep(wait)
+        _jikan_last[0] = time.monotonic()
+
+
+@cover_source("MyAnimeList")
+def myanimelist(client: httpx.Client, term: str) -> list[SourceResult]:
+    """Zoekt los naar novels en light novels. Bij een 429 stopt deze bron: wat al gevonden is
+    telt mee, en zonder resultaten valt alleen deze bron af (niet de hele zoekopdracht)."""
+    if _jikan_down_until[0] > time.monotonic():
+        raise CoverError("MyAnimeList is unreachable; Progen tries it again in a few minutes.")
+    found: dict[int, SourceResult] = {}
+    for kind in JIKAN_TYPES:
+        _jikan_pause()
+        try:
+            data = ask(client, "MyAnimeList", "GET", JIKAN_URL, params={"q": term, "type": kind, "limit": 25},
+                       timeout=httpx.Timeout(SOURCE_TIMEOUT, connect=JIKAN_CONNECT_TIMEOUT))
+        except SourceBusy:
+            if found:
+                break
+            raise
+        except CoverError as exc:
+            if isinstance(exc.__cause__, httpx.HTTPError):  # niet bereikbaar of te traag
+                _jikan_down_until[0] = time.monotonic() + JIKAN_COOLDOWN
+            raise
+        for item in (data or {}).get("data") or []:
+            images = item.get("images") or {}
+            image = ((images.get("jpg") or {}).get("large_image_url")
+                     or (images.get("webp") or {}).get("large_image_url")
+                     or (images.get("jpg") or {}).get("image_url"))
+            titles = unique_titles(
+                item.get("title_english"), item.get("title"), item.get("title_japanese"),
+                *(item.get("title_synonyms") or []),
+                *((t or {}).get("title") for t in item.get("titles") or []),
+            )
+            names = [(g or {}).get("name") for key in ("genres", "themes") for g in item.get(key) or []]
+            if image and titles and item.get("mal_id") not in found:
+                found[item.get("mal_id")] = SourceResult(titles, image, "MyAnimeList", genres=tuple(from_source(names)))
+    return list(found.values())
 
 
 # ---- Google Books: gepubliceerde boeken, vaak kleine thumbnails ----
@@ -134,4 +195,4 @@ def open_library(client: httpx.Client, term: str) -> list[SourceResult]:
 
 
 # Volgorde = volgorde bij gelijke score.
-SOURCES = [anilist, mangaupdates, open_library, google_books]
+SOURCES = [anilist, mangaupdates, myanimelist, open_library, google_books]

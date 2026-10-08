@@ -6,7 +6,8 @@ import httpx
 import pytest
 
 from app.covers import CoverError
-from app.reading.cover_sources import anilist, google_books, mangaupdates, open_library
+from app.reading import cover_sources
+from app.reading.cover_sources import anilist, google_books, mangaupdates, myanimelist, open_library
 
 
 def client_answering(answer, seen=None):
@@ -121,7 +122,7 @@ def test_open_library_builds_large_cover_url():
 
 # ---- Fouten zijn voor elke bron hetzelfde ----
 
-SOURCES = [(anilist, "AniList"), (mangaupdates, "MangaUpdates"),
+SOURCES = [(anilist, "AniList"), (mangaupdates, "MangaUpdates"), (myanimelist, "MyAnimeList"),
            (google_books, "Google Books"), (open_library, "Open Library")]
 
 
@@ -183,3 +184,101 @@ def test_open_library_subjects():
     client = client_answering({"docs": [{"title": "Shadow Slave", "cover_i": 1, "subject": ["Fantasy fiction", "Magic"]}]}, seen)
     assert open_library(client, "Shadow Slave")[0].genres == ("Fantasy",)
     assert "subject" in seen[0].url.params["fields"]
+
+
+# ---- Novels worden niet weggefilterd ----
+
+def test_anilist_keeps_novels():
+    seen = []
+    client = client_answering({"data": {"Page": {"media": [
+        {"format": "NOVEL", "title": {"english": "Lord of the Mysteries", "romaji": "Guimi Zhi Zhu"},
+         "synonyms": [], "coverImage": {"extraLarge": "https://a/novel.jpg"}},
+        {"format": "MANGA", "title": {"english": "Lord of the Mysteries"}, "synonyms": [],
+         "coverImage": {"extraLarge": "https://a/manhua.jpg"}},
+    ]}}}, seen)
+    assert [r.image_url for r in anilist(client, "Lord of the Mysteries")] == ["https://a/novel.jpg", "https://a/manhua.jpg"]
+    query = json.loads(seen[0].content)["query"]
+    assert "type: MANGA" in query and "format" not in query.split("media(", 1)[1].split(")", 1)[0]  # geen formatfilter
+
+
+def test_mangaupdates_matches_on_the_associated_name_it_found():
+    # Zoek je "Coiling Dragon", dan heet de serie zelf "Panlong"; hit_title is de naam die matchte.
+    client = client_answering({"results": [{"hit_title": "Coiling Dragon", "record": {
+        "title": "Panlong", "type": "Manhua", "image": {"url": {"original": "https://mu/p.jpg"}}}}]})
+    [result] = mangaupdates(client, "Coiling Dragon")
+    assert "Coiling Dragon" in result.titles and "Panlong" in result.titles
+
+
+# ---- MyAnimeList (via Jikan) ----
+
+def jikan_novel(mal_id, title, *, english=None, synonyms=(), image="https://mal/x.jpg", type_="Light Novel",
+                genres=(), themes=()):
+    return {"mal_id": mal_id, "title": title, "title_english": english, "title_japanese": None,
+            "title_synonyms": list(synonyms), "titles": [{"type": "Default", "title": title}],
+            "type": type_, "images": {"jpg": {"image_url": image + "?small", "large_image_url": image}},
+            "genres": [{"name": g} for g in genres], "themes": [{"name": t} for t in themes]}
+
+
+@pytest.fixture
+def no_jikan_wait(monkeypatch):
+    monkeypatch.setattr(cover_sources, "JIKAN_MIN_INTERVAL", 0)
+
+
+def test_myanimelist_asks_for_novels_and_light_novels(no_jikan_wait):
+    seen = []
+    client = client_answering({"data": [jikan_novel(1, "Gu Zhen Ren", english="Reverend Insanity",
+                                                    genres=["Action", "Fantasy"], themes=["Martial Arts", "Reincarnation"])]}, seen)
+    [result] = myanimelist(client, "Reverend Insanity")  # zelfde id in beide antwoorden: één keer
+    assert [r.url.params["type"] for r in seen] == ["novel", "lightnovel"]
+    assert all(r.url.host == "api.jikan.moe" and r.url.params["q"] == "Reverend Insanity" for r in seen)
+    assert (result.source, result.image_url) == ("MyAnimeList", "https://mal/x.jpg")
+    assert set(result.titles) >= {"Gu Zhen Ren", "Reverend Insanity"}
+    assert result.genres == ("Action", "Fantasy", "Martial Arts", "Reincarnation")
+
+
+def test_myanimelist_uses_every_title(no_jikan_wait):
+    novel = jikan_novel(2, "Wo Yu Feng Tian", english="I Shall Seal the Heavens", synonyms=["ISSTH"])
+    novel["titles"].append({"type": "Chinese", "title": "我欲封天"})
+    [result] = myanimelist(client_answering({"data": [novel]}), "ISSTH")
+    assert set(result.titles) == {"Wo Yu Feng Tian", "I Shall Seal the Heavens", "ISSTH", "我欲封天"}
+
+
+def test_myanimelist_rate_limit_keeps_what_it_already_found(no_jikan_wait):
+    answers = iter([httpx.Response(200, json={"data": [jikan_novel(1, "Coiling Dragon")]}), httpx.Response(429)])
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: next(answers)))
+    assert [r.titles[0] for r in myanimelist(client, "Coiling Dragon")] == ["Coiling Dragon"]
+
+
+def test_myanimelist_rate_limit_without_results_skips_the_source(no_jikan_wait):
+    with pytest.raises(CoverError, match="MyAnimeList is busy"):
+        myanimelist(client_answering(httpx.Response(429)), "x")
+
+
+def test_myanimelist_waits_between_requests(monkeypatch):
+    monkeypatch.setattr(cover_sources, "JIKAN_MIN_INTERVAL", 0.2)
+    import time
+    started = time.monotonic()
+    myanimelist(client_answering({"data": []}), "x")
+    myanimelist(client_answering({"data": []}), "x")
+    assert time.monotonic() - started >= 0.55  # 3 pauzes tussen 4 verzoeken (Jikan: max 3 per seconde)
+
+
+def test_unreachable_myanimelist_is_skipped_for_a_while(no_jikan_wait, monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(cover_sources.time, "monotonic", lambda: clock[0])
+    seen = []
+    with pytest.raises(CoverError, match="MyAnimeList took too long"):
+        myanimelist(client_answering(httpx.ConnectTimeout("geen verbinding"), seen), "x")
+    with pytest.raises(CoverError, match="unreachable"):
+        myanimelist(client_answering({"data": []}, seen), "x")  # meteen, zonder verzoek
+    assert len(seen) == 1
+
+    clock[0] += cover_sources.JIKAN_COOLDOWN + 1
+    assert myanimelist(client_answering({"data": []}, seen), "x") == []  # daarna weer gewoon proberen
+    assert len(seen) == 3
+
+
+def test_myanimelist_uses_a_short_connect_timeout(no_jikan_wait):
+    seen = []
+    myanimelist(client_answering({"data": []}, seen), "x")
+    assert seen[0].extensions["timeout"]["connect"] == cover_sources.JIKAN_CONNECT_TIMEOUT

@@ -18,7 +18,7 @@ READING_GENRES = GenreSet(GENRES, {
     "school": "School Life",
     "murim": "Martial Arts", "wuxia": "Martial Arts",
     "xianxia": "Cultivation", "xuanhuan": "Cultivation",
-    "video games": "Game", "virtual world": "Game", "litrpg": "Game", "gamelit": "Game",
+    "video games": "Game", "video game": "Game", "virtual world": "Game", "litrpg": "Game", "gamelit": "Game",
     "history": "Historical",
     "regressor": "Regression", "returner": "Regression",
 })

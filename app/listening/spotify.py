@@ -23,6 +23,7 @@ from urllib.parse import urlencode
 
 import httpx
 
+from ..covers import CoverError, process_image
 from ..domain import DomainError
 from .commands import ListeningCommandHandler, RecordPlay
 from .projections import RecentlyPlayedProjection
@@ -32,6 +33,9 @@ log = logging.getLogger("progen.listening")
 AUTHORIZE_URL = "https://accounts.spotify.com/authorize"
 TOKEN_URL = "https://accounts.spotify.com/api/token"
 RECENTLY_PLAYED_URL = "https://api.spotify.com/v1/me/player/recently-played"
+PROFILE_URL = "https://api.spotify.com/v1/me"
+AVATAR_SIZE = 256                    # profielfoto: vierkant, in pixels
+PROFILE_REFRESH_SECONDS = 24 * 3600  # naam en foto hooguit één keer per dag opnieuw ophalen
 SCOPE = "user-read-recently-played"
 REDIRECT_URI = "http://127.0.0.1:8000/listening/spotify/callback"
 CLIENT_ID_ENV, CLIENT_SECRET_ENV, REDIRECT_URI_ENV = "SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET", "SPOTIFY_REDIRECT_URI"
@@ -190,9 +194,7 @@ class Spotify:
         params = {"limit": 50}
         if after_ms is not None:
             params["after"] = after_ms
-        response = self._get(params, self._access_token())
-        if response.status_code == 401:  # token net verlopen of ingetrokken: één keer verversen
-            response = self._get(params, self._access_token(force_refresh=True))
+        response = self._authorized_get(RECENTLY_PLAYED_URL, params)
         if response.status_code == 429:
             retry = response.headers.get("Retry-After", "")
             raise RateLimited(int(retry) if retry.isdigit() else DEFAULT_RETRY_AFTER)
@@ -203,9 +205,25 @@ class Spotify:
         except (ValueError, AttributeError) as exc:
             raise SpotifyError("Spotify sent an answer Progen doesn't understand.") from exc
 
-    def _get(self, params: dict, access_token: str) -> httpx.Response:
+    def profile(self) -> dict:
+        """Je Spotify-profiel: o.a. display_name en images (je profielfoto)."""
+        response = self._authorized_get(PROFILE_URL, {})
+        if response.status_code != 200:
+            raise SpotifyError(f"Spotify didn't give the profile (HTTP {response.status_code}).")
         try:
-            return self._http.get(RECENTLY_PLAYED_URL, params=params, timeout=TIMEOUT,
+            return response.json()
+        except ValueError as exc:
+            raise SpotifyError("Spotify sent a profile Progen doesn't understand.") from exc
+
+    def _authorized_get(self, url: str, params: dict) -> httpx.Response:
+        response = self._get(url, params, self._access_token())
+        if response.status_code == 401:  # token net verlopen of ingetrokken: één keer verversen
+            response = self._get(url, params, self._access_token(force_refresh=True))
+        return response
+
+    def _get(self, url: str, params: dict, access_token: str) -> httpx.Response:
+        try:
+            return self._http.get(url, params=params, timeout=TIMEOUT,
                                   headers={"Authorization": f"Bearer {access_token}"})
         except httpx.HTTPError as exc:
             raise SpotifyError("Couldn't reach Spotify.") from exc
@@ -229,6 +247,34 @@ def play_from_item(item: dict) -> RecordPlay | None:
     )
 
 
+class ProfileStore:
+    """Je Spotify-naam en -profielfoto, naast de tokens (niet in de event store, niet in een back-up)."""
+
+    def __init__(self, directory: Path):
+        self.json_path = Path(directory) / "spotify_profile.json"
+        self.avatar_path = Path(directory) / "spotify_avatar.webp"
+
+    def load(self) -> dict | None:
+        try:
+            profile = json.loads(self.json_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        profile["has_avatar"] = self.avatar_path.exists()
+        return profile
+
+    def save(self, profile: dict, avatar: bytes | None) -> None:
+        self.json_path.parent.mkdir(parents=True, exist_ok=True)
+        if avatar:
+            self.avatar_path.write_bytes(avatar)
+        else:
+            self.avatar_path.unlink(missing_ok=True)
+        self.json_path.write_text(json.dumps(profile, indent=2), encoding="utf-8")
+
+    def clear(self) -> None:
+        self.json_path.unlink(missing_ok=True)
+        self.avatar_path.unlink(missing_ok=True)
+
+
 @dataclass(frozen=True)
 class SyncResult:
     stored: int
@@ -240,8 +286,11 @@ class ListeningSync:
     """Eén sync: vraag Spotify om plays na de laatste die we kennen en leg ze vast."""
 
     def __init__(self, spotify: Spotify, handler: ListeningCommandHandler, recent: RecentlyPlayedProjection,
-                 status_file: Path, interval_seconds: int, clock=lambda: datetime.now(timezone.utc)):
+                 status_file: Path, interval_seconds: int, clock=lambda: datetime.now(timezone.utc),
+                 profiles: ProfileStore | None = None, download=None):
         self.spotify = spotify
+        self.profiles = profiles
+        self._download = download  # url -> bytes, met dezelfde limieten als covers
         self._handler = handler
         self._recent = recent
         self._status_file = Path(status_file)
@@ -267,7 +316,39 @@ class ListeningSync:
             stored, skipped = (stored + 1, skipped) if saved else (stored, skipped + 1)
         result = SyncResult(stored, skipped, self._clock())
         self._remember(stored, skipped, error=None)
+        self.refresh_profile()
         return result
+
+    # ---- Profiel (naam en foto) ----
+
+    def refresh_profile(self, force: bool = False) -> None:
+        """Naam en foto ophalen, hooguit één keer per PROFILE_REFRESH_SECONDS (tenzij force).
+        Gooit nooit een fout: zonder profiel werkt alles gewoon."""
+        if self.profiles is None or not self.spotify.connected:
+            return
+        current = self.profiles.load()
+        if not force and current and time.time() - current.get("fetched_at", 0) < PROFILE_REFRESH_SECONDS:
+            return
+        try:
+            me = self.spotify.profile()
+        except SpotifyError as exc:
+            log.warning("Couldn't fetch the Spotify profile: %s", exc)
+            return
+        images = sorted((i for i in me.get("images") or [] if i.get("url")),
+                        key=lambda i: i.get("width") or 0, reverse=True)
+        avatar = None
+        if images and self._download:
+            try:
+                avatar = process_image(self._download(images[0]["url"]), size=(AVATAR_SIZE, AVATAR_SIZE))
+            except CoverError as exc:
+                log.warning("Couldn't use the Spotify profile photo: %s", exc)
+        self.profiles.save({"display_name": me.get("display_name") or me.get("id") or "",
+                            "fetched_at": time.time()}, avatar)
+
+    def disconnect(self) -> None:
+        self.spotify.disconnect()
+        if self.profiles is not None:
+            self.profiles.clear()
 
     def tick(self) -> float:
         """Eén ronde van de achtergrondtaak. Geeft terug hoeveel seconden tot de volgende.

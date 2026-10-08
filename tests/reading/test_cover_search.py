@@ -131,6 +131,25 @@ def test_equally_good_titles_show_the_first_one_of_the_source():
     assert result.title == "Frieren: Beyond Journey's End"
 
 
+def test_title_that_only_matches_an_alternative_title_is_found():
+    # Je kent hem als "ISSTH"; de bron noemt hem "Wo Yu Feng Tian", met ISSTH als synoniem.
+    [result] = rank("I Shall Seal the Heavens", [
+        SourceResult(("Wo Yu Feng Tian", "我欲封天", "I Shall Seal The Heavens"), "https://mal/issth.jpg", "MyAnimeList"),
+        SourceResult(("Wo Yu Feng Tian 2",), "https://mal/other.jpg", "MyAnimeList"),
+    ])
+    assert result.image_url == "https://mal/issth.jpg" and result.score == 100
+    assert result.title == "I Shall Seal The Heavens"
+
+
+def test_failing_myanimelist_does_not_hide_other_sources():
+    search = CoverSearch(no_network(), sources=[
+        fake_source("MyAnimeList", error=CoverError("MyAnimeList is busy right now.")),
+        fake_source("MangaUpdates", [(["Coiling Dragon (Novel)"], "https://mu/cd.jpg")]),
+    ])
+    [result] = search.search("Coiling Dragon")
+    assert result.source == "MangaUpdates"
+
+
 def test_rank_uses_every_title_and_sorts_best_first():
     results = rank("Solo Leveling", [
         SourceResult(("Ore dake Level Up na Ken", "Solo Leveling"), "https://a/1.jpg", "AniList"),

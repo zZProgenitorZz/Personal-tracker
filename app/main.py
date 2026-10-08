@@ -21,7 +21,7 @@ from .listening.events import TrackPlayed
 from .listening.projections import (
     ListeningActivityProjection, RecentlyPlayedProjection, TopArtistsProjection, TopTracksProjection,
 )
-from .listening.spotify import ListeningSync, Spotify, TokenFile, sync_interval_seconds
+from .listening.spotify import ListeningSync, ProfileStore, Spotify, TokenFile, sync_interval_seconds
 from .listening.web import create_listening_web_router, create_spotify_router, listening_summary
 from .reading.api import create_reading_router
 from .reading.commands import ReadingCommandHandler
@@ -107,7 +107,8 @@ def create_app(
     # Spotify-tokens en de laatste sync in losse bestanden: niet in de event store en niet in een back-up.
     spotify = Spotify.from_environment(http, TokenFile(Path(data_dir) / "spotify_token.json"))
     listening_sync = ListeningSync(spotify, listening, recent_plays, Path(data_dir) / "spotify_sync.json",
-                                   interval_seconds=sync_interval_seconds())
+                                   interval_seconds=sync_interval_seconds(),
+                                   profiles=ProfileStore(Path(data_dir)), download=covers.download)
     trackers = [
         Tracker("reading", "Reading", "book", "reading-changed", lambda: reading_summary(library, activity)),
         Tracker("watching", "Watching", "eye", "watching-changed", lambda: watching_summary(watchlist, watch_activity)),
@@ -139,7 +140,8 @@ def create_app(
     app.include_router(create_watching_web_router(watching, watchlist, watch_activity, covers, watching_search))
     app.include_router(create_listening_router(listening, recent_plays, listen_activity, top_artists, top_tracks))
     app.include_router(create_listening_web_router(recent_plays, listen_activity, top_artists, top_tracks,
-                                                   spotify_connected=lambda: spotify.connected))
+                                                   spotify_connected=lambda: spotify.connected,
+                                                   spotify_profile=lambda: spotify.connected and listening_sync.profiles.load()))
     app.include_router(create_spotify_router(listening_sync))
     app.include_router(create_home_router(trackers))
     app.include_router(create_settings_router(db_path, trackers, backups))

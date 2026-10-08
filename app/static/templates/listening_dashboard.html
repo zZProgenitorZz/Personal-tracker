@@ -4,6 +4,13 @@
   {{ ui.tracker_tabs('listening', 'dashboard', tabs) }}
   <header class="page-head">
     <div>
+      {% if profile %}
+      <div class="listener">
+        {% if profile.has_avatar %}<img class="listener-photo" src="/listening/spotify/avatar?v={{ profile.fetched_at|int }}" alt="Spotify profile photo of {{ profile.display_name }}" width="44" height="44">
+        {% else %}<span class="listener-photo listener-initials" style="--hue: {{ profile.display_name|hue }}" aria-hidden="true">{{ profile.display_name|initials }}</span>{% endif %}
+        <span>Listening as <b>{{ profile.display_name }}</b></span>
+      </div>
+      {% endif %}
       <p class="eyebrow">Listening</p>
       <h1>What you're <span class="grad-text">listening to</span></h1>
       <p class="lede">

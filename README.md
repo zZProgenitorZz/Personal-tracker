@@ -45,7 +45,7 @@ Data van **alle trackers** staat in één bestand, `data/tracker.db`. **Dit best
 - **Wat:** één back-up bevat alle trackers tegelijk, zodat ze altijd bij elkaar passen. Per back-up een map met datum en tijd als naam (`2026-10-06_21-05-33`) met `tracker.db`, `covers/` en `info.json`. De kopie wordt gemaakt met de back-up-API van SQLite (veilig terwijl de server draait) en daarna gecontroleerd; een mislukte back-up laat niets achter.
 - **Hoeveel:** de 10 nieuwste blijven (`KEEP_BACKUPS` in `app/backup.py`); oudere worden verwijderd.
 - **Terugzetten:** Settings > *Restore* bij de gewenste back-up. Progen maakt eerst automatisch een back-up van de huidige stand ("saved automatically before a restore"), zodat ook terugzetten terug te draaien is. Daarna worden de events vervangen, ontbrekende covers teruggezet en de read models opnieuw opgebouwd.
-- **Niet in een back-up:** `data/spotify_token.json` (je Spotify-toegang) en `data/spotify_sync.json` (wanneer de laatste sync was). Na het terugzetten op een andere computer koppel je Spotify gewoon opnieuw.
+- **Niet in een back-up:** `data/spotify_token.json` (je Spotify-toegang), `data/spotify_sync.json` (wanneer de laatste sync was) en `data/spotify_profile.json` + `spotify_avatar.webp` (je Spotify-naam en -foto). Na het terugzetten op een andere computer koppel je Spotify gewoon opnieuw.
 - **Met de hand terugzetten** (als de app niet start): stop de server, kopieer `tracker.db` en `covers/` uit de back-upmap naar `data/` en start de server opnieuw.
 
 ---
@@ -120,7 +120,7 @@ tests/
   test_eventstore.py, test_api.py, test_web.py
   test_covers.py, test_cover_flow.py
   reading/, watching/, listening/  given/when/then-tests per regel
-data/                  tracker.db, covers/, spotify_token.json, spotify_sync.json (niet in git)
+data/                  tracker.db, covers/ en de spotify_*-bestanden (niet in git)
 ```
 
 ---
@@ -194,7 +194,7 @@ Regels:
 1. Maak een app op [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard). Zet als **Redirect URI** precies `http://127.0.0.1:8000/listening/spotify/callback` (draait Progen op een andere poort: pas die aan en zet hem ook in `SPOTIFY_REDIRECT_URI`).
 2. Zet `SPOTIFY_CLIENT_ID` en `SPOTIFY_CLIENT_SECRET` in `.env` en herstart Progen.
 3. Klik in Settings op **Connect Spotify** en geef Progen toegang. Progen vraagt alleen `user-read-recently-played`; een `state`-parameter beschermt het inloggen tegen CSRF.
-4. Na het terugkomen draait meteen een eerste sync. Daarna synct Progen elke `SYNC_INTERVAL_MINUTES` minuten (standaard 30) zolang de server draait, of direct via **Sync now**. **Disconnect** verwijdert de tokens; je plays blijven.
+4. Na het terugkomen haalt Progen je naam en profielfoto op (voor het dashboard van Listening; daarna hooguit één keer per dag opnieuw) en draait meteen een eerste sync. Daarna synct Progen elke `SYNC_INTERVAL_MINUTES` minuten (standaard 30) zolang de server draait, of direct via **Sync now**. **Disconnect** verwijdert de tokens; je plays blijven.
 
 Hoe het werkt (`app/listening/spotify.py`, een automation-slice): de sync vraagt `GET /v1/me/player/recently-played?limit=50&after=<laatste played_at in ms>` en stuurt voor elk nummer hetzelfde `RecordPlay` als de API, met `source="api"`. Tokens staan in `data/spotify_token.json`, niet in de event store; de access token wordt automatisch ververst met de refresh token. Bij een 429 wacht de achtergrondtaak de `Retry-After` af. Fouten worden gelogd (logger `progen.listening`) en laten de app nooit crashen; de laatste sync en een eventuele fout staan in Settings.
 
@@ -205,12 +205,13 @@ Hoe het werkt (`app/listening/spotify.py`, een automation-slice): de sync vraagt
 - Bij "Add ..." kun je een cover zoeken, zelf een afbeelding uploaden of een link plakken. Zoeken is een hulp-endpoint (`GET /ui/<tracker>/covers/search`), geen command of event.
 - Watching zoekt bij AniList (anime), TVmaze (series) en TMDB (films en series; alleen met `TMDB_API_KEY`).
 - Bronnen voor Reading (`app/reading/cover_sources.py`), allemaal tegelijk bevraagd:
-  - [AniList](https://anilist.co): manga, manhwa, light novels
-  - [MangaUpdates](https://www.mangaupdates.com): ook webnovels (type "Novel")
+  - [AniList](https://anilist.co): manga, manhwa en novels (`type: MANGA` omvat ook format `NOVEL`; er is geen formatfilter). Van veel Chinese webnovels staat hier alleen de manhua-bewerking.
+  - [MangaUpdates](https://www.mangaupdates.com): ook webnovels (type "Novel", geen typefilter). `hit_title` is de naam waarop MangaUpdates matchte, vaak een alternatieve naam ("Coiling Dragon" voor "Panlong"); die telt mee in de vergelijking.
+  - [MyAnimeList](https://myanimelist.net) via [Jikan](https://jikan.moe): novels en light novels (`type=novel` en `type=lightnovel`, twee verzoeken), met genres en thema's. Jikan staat maximaal 3 verzoeken per seconde toe; Progen wacht `JIKAN_MIN_INTERVAL` (0,4 s) tussen verzoeken. Bij een 429 stopt deze bron (wat al gevonden is, telt mee). Is Jikan onbereikbaar, dan geeft Progen na `JIKAN_CONNECT_TIMEOUT` (3 s) op en slaat de bron `JIKAN_COOLDOWN` (5 minuten) over, zodat zoeken niet steeds wacht.
   - [Open Library](https://openlibrary.org): boeken, ook webnovels in print (bijvoorbeeld Shadow Slave)
   - [Google Books](https://books.google.com): optioneel met `GOOGLE_BOOKS_API_KEY` in `.env`; te kleine thumbnails (onder `MIN_SOURCE_SIZE`) worden overgeslagen
 - Een bron is een functie `bron(client, zoekterm) -> list[SourceResult]` met `@cover_source("Naam")` erboven. Toevoegen of weghalen = de lijst `SOURCES` aanpassen.
-- Elke bron zoekt in drie stappen en stopt zodra iets past: de titel zoals getypt, genormaliseerd, en de langste losse woorden (bronnen vinden zelf niets bij een typfout). Alle resultaten worden samen vergeleken met rapidfuzz, waarbij achtervoegsels als "(Novel)" of ", Book 1" niet meetellen, en gesorteerd op beste match; dubbele URL's verdwijnen.
+- Elke bron zoekt in drie stappen en stopt zodra iets past: de titel zoals getypt, genormaliseerd, en de langste losse woorden (bronnen vinden zelf niets bij een typfout). Alle resultaten worden samen vergeleken met rapidfuzz, tegen **elke** titel die een bron meegeeft (AniList: Engels, romaji, native en synonyms; MangaUpdates: titel en `hit_title`; MyAnimeList: titel, Engels, Japans, synonyms en alle `titles`); de beste score telt. Zo vind je "I Shall Seal the Heavens" ook als de bron hem "Wo Yu Feng Tian" noemt. Achtervoegsels als "(Novel)" of ", Book 1" tellen niet mee; alles wordt gesorteerd op beste match en dubbele URL's verdwijnen.
 - Faalt of hangt een bron (deadline `SOURCE_DEADLINE`), dan tonen we de andere. Alleen als alle bronnen falen, volgt een foutmelding.
 - Korte titels (tot 10 tekens) moeten strenger kloppen, zodat "Frieren" niet "Frieden" vindt. Het deel vóór een dubbele punt telt ook mee ("Frieren" vindt "Frieren: Beyond Journey's End"), maar lager dan een exacte titel, zodat een vervolg altijd ná de serie zelf komt.
 - Instelbaar bovenaan `app/cover_search.py`: `COVER_MATCH_THRESHOLD`, `SHORT_TITLE_THRESHOLD`, `SUBTITLE_FACTOR`, `FALLBACK_WORDS`, `SOURCE_DEADLINE`, `MIN_SOURCE_SIZE`. Resultaten worden 10 minuten per titel bewaard, maar maar 1 minuut als een bron faalde.
