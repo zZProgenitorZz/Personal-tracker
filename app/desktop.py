@@ -58,6 +58,30 @@ def sync_spotify() -> str:
     return text.replace("&#39;", "'").replace("&amp;", "&") or "Synced."
 
 
+PER_MONITOR_AWARE_V2 = -4  # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+
+
+def make_dpi_aware() -> None:
+    """Zeg Windows dat dit proces zelf met schermschaal (bv. 125%) omgaat. Anders tekent
+    Windows het menu van het icoon en de meldingen op 100% en rekt ze op: wazig.
+    Moet gebeuren voordat er een venster of icoon is. Op oudere Windows de oudere varianten;
+    lukt niets, dan blijft alles zoals het was."""
+    try:
+        if ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(PER_MONITOR_AWARE_V2)):
+            return
+    except (AttributeError, OSError):
+        pass
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE (Windows 8.1)
+        return
+    except (AttributeError, OSError):
+        pass
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()  # Vista: alleen systeem-DPI
+    except (AttributeError, OSError):
+        pass
+
+
 def show_message(text: str, error: bool = True) -> None:
     """Zonder console (pythonw) is een meldingsvenster de enige manier om iets te zeggen.
     Niet gebruiken vanuit het icoon in het systeemvak: daar blokkeert het venster het icoon

@@ -2,10 +2,11 @@
 systeemvak heeft dezelfde knop). De server rondt lopende verzoeken af en sluit
 de database; dat is netter dan het proces af te schieten.
 """
-from app.desktop import request_stop, show_message
+from app.desktop import make_dpi_aware, request_stop, show_message
 
 
 def main() -> None:
+    make_dpi_aware()  # scherpe melding bij schermschaal > 100%
     problem = request_stop()
     if problem:
         show_message(problem, error=False)

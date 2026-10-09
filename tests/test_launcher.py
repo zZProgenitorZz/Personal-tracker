@@ -81,7 +81,8 @@ def test_uses_the_venv_python():
 def launch(monkeypatch):
     """launch.pyw met nep-onderdelen: geen echte server, geen venster, geen icoon."""
     module = load("launch.pyw")
-    calls = {"started": 0, "windows": 0, "trays": 0, "messages": []}
+    calls = {"started": 0, "windows": 0, "trays": 0, "messages": [], "dpi_aware": 0}
+    monkeypatch.setattr(module, "make_dpi_aware", lambda: calls.__setitem__("dpi_aware", calls["dpi_aware"] + 1))
     monkeypatch.setattr(module, "claim_tray", lambda: True)
     monkeypatch.setattr(module, "start_server", lambda: calls.__setitem__("started", calls["started"] + 1) or FakeProcess())
     monkeypatch.setattr(module, "open_window", lambda: calls.__setitem__("windows", calls["windows"] + 1))
@@ -90,6 +91,35 @@ def launch(monkeypatch):
     monkeypatch.setattr(module.time, "sleep", lambda s: None)
     module.calls = calls
     return module
+
+
+def test_launcher_is_dpi_aware_so_the_tray_menu_is_sharp(launch, monkeypatch):
+    monkeypatch.setattr(launch, "is_running", lambda: True)
+    launch.main(["--background"])
+    assert launch.calls["dpi_aware"] == 1
+
+
+def test_dpi_awareness_uses_per_monitor_v2_and_never_fails(monkeypatch):
+    from app import desktop
+    calls = []
+
+    class User32:
+        def SetProcessDpiAwarenessContext(self, context):
+            calls.append(context.value)
+            return 1
+
+    class Windll:
+        user32 = User32()
+
+    monkeypatch.setattr(desktop.ctypes, "windll", Windll(), raising=False)
+    desktop.make_dpi_aware()
+    assert calls == [desktop.ctypes.c_void_p(desktop.PER_MONITOR_AWARE_V2).value]
+
+    class Nothing:  # geen Windows, of een heel oude versie: gewoon doorgaan
+        pass
+
+    monkeypatch.setattr(desktop.ctypes, "windll", Nothing(), raising=False)
+    desktop.make_dpi_aware()
 
 
 def test_skips_starting_when_progen_already_runs(launch, monkeypatch):
@@ -274,6 +304,7 @@ def test_stop_sends_the_header_to_localhost(monkeypatch):
     stop = load("stop.pyw")
     messages = []
     monkeypatch.setattr(stop, "show_message", lambda text, **kw: messages.append(text))
+    monkeypatch.setattr(stop, "make_dpi_aware", lambda: None)
     stop.main()
     [request] = sent
     assert request.full_url == "http://127.0.0.1:8000/admin/shutdown" and request.get_method() == "POST"
@@ -288,10 +319,11 @@ def test_stop_when_progen_is_not_running(monkeypatch):
 
     monkeypatch.setattr(desktop.urllib.request, "urlopen", refused)
     stop = load("stop.pyw")
-    messages = []
+    messages, dpi = [], []
     monkeypatch.setattr(stop, "show_message", lambda text, **kw: messages.append(text))
+    monkeypatch.setattr(stop, "make_dpi_aware", lambda: dpi.append(1))
     stop.main()
-    assert messages == ["Progen isn't running."]
+    assert messages == ["Progen isn't running."] and dpi == [1]
 
 
 def test_sync_from_the_tray_returns_the_message_as_text(monkeypatch):

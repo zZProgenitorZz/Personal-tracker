@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))  # zodat app.desktop te vinden is, ook bij automatisch starten
 
 from app.desktop import (  # noqa: E402
-    HOST, NOT_RUNNING, PORT, URL, is_running, request_stop, show_message, sync_spotify,
+    HOST, NOT_RUNNING, PORT, URL, is_running, make_dpi_aware, request_stop, show_message, sync_spotify,
 )
 
 LOG = ROOT / "data" / "launcher.log"
@@ -189,6 +189,7 @@ def run_tray() -> None:
 
 def main(argv: list[str] | None = None) -> None:
     background = "--background" in (sys.argv[1:] if argv is None else argv)
+    make_dpi_aware()  # vóór het icoon en meldingen, anders zijn die wazig bij schermschaal > 100%
     owner = claim_tray()
     if not is_running():
         # Ook als een andere launcher het icoon nog heeft (bijvoorbeeld een vastgelopen):
