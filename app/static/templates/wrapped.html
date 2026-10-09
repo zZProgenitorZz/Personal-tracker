@@ -1,0 +1,158 @@
+{% import "_macros.html" as ui %}
+{# Wrapped: het jaaroverzicht over alle trackers. Ververst na een wijziging in welke tracker dan ook. #}
+{% set r = review %}
+{% set prev = year - 1 %}
+
+{% macro headline_stat(icon_name, accent, value, label, d=none, prev=none) -%}
+<div class="stat accent-{{ accent }}">
+  <span class="stat-icon">{{ ui.icon(icon_name, 18) }}</span>
+  <div class="stat-value">{{ value }}</div>
+  <div class="stat-label">{{ label }}</div>
+  {% if d %}
+  <div class="stat-delta{% if d.up %} up{% elif d.down %} down{% endif %}">{{ d.text if d.value else '±0' }} vs {{ prev }}</div>
+  {% endif %}
+</div>
+{%- endmacro %}
+
+<div class="page" hx-disinherit="*" hx-get="/ui/wrapped?year={{ year }}{% if compare %}&amp;compare=1{% endif %}"
+     hx-trigger="reading-changed from:body, watching-changed from:body, listening-changed from:body" hx-swap="outerHTML">
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Wrapped</p>
+      <h1>Your <span class="grad-text">{{ year }}</span></h1>
+      <p class="lede">
+        {%- if r.has_data %}Everything you read, watched and listened to in {{ year }}.
+        {%- else %}Nothing tracked in {{ year }} yet.{% endif -%}
+      </p>
+    </div>
+    <div class="wrapped-controls">
+      <nav class="chips" aria-label="Year">
+        {% for y in years %}
+        <a class="chip-link{% if y == year %} active{% endif %}" href="#wrapped/{{ y }}{% if compare %}/compare{% endif %}"
+           {% if y == year %}aria-current="page"{% endif %}>{{ y }}</a>
+        {% endfor %}
+      </nav>
+      <a class="btn btn-ghost btn-sm" href="#wrapped/{{ year }}{% if not compare %}/compare{% endif %}">
+        {{ ui.icon('trending', 15) }}{{ 'Hide comparison' if compare else 'Compare with ' ~ prev }}
+      </a>
+    </div>
+  </header>
+
+  <section class="stats" aria-label="{{ year }} in numbers">
+    {{ headline_stat('book', 'purple', big.chapters|chapter, 'Chapters read', deltas.chapters if compare, prev) }}
+    {{ headline_stat('check-circle', 'green', big.finished, 'Titles finished', deltas.finished if compare, prev) }}
+    {{ headline_stat('music', 'teal', big.hours|chapter, 'Hours listened', deltas.hours if compare, prev) }}
+    <div class="stat accent-amber">
+      <span class="stat-icon">{{ ui.icon('flame', 18) }}</span>
+      <div class="stat-value">{{ r.longest_streak }}<small>{{ 'day' if r.longest_streak == 1 else 'days' }}</small></div>
+      <div class="stat-label">Longest reading streak</div>
+    </div>
+  </section>
+
+  {% if r.busiest_month or r.most_active_day %}
+  <ul class="highlights" aria-label="Highlights">
+    {% if r.busiest_month %}<li>{{ ui.icon('calendar', 16) }}<span>Busiest month</span><b>{{ r.busiest_month.label }}</b></li>{% endif %}
+    {% if r.most_active_day %}<li>{{ ui.icon('star', 16) }}<span>Most active day</span><b>{{ r.most_active_day[0].strftime('%a %d %b') }}</b></li>{% endif %}
+    {% if r.busiest_listening_day %}<li>{{ ui.icon('music', 16) }}<span>Biggest listening day</span><b>{{ r.busiest_listening_day[0].strftime('%d %b') }} · {{ r.busiest_listening_day[1]|round|int }} min</b></li>{% endif %}
+  </ul>
+  {% endif %}
+
+  <div class="wrapped-grid">
+    {# ---- Reading ---- #}
+    <section class="panel accent-purple">
+      <div class="panel-head"><h2>{{ ui.icon('book', 18) }}Reading</h2><a class="link" href="#reading">Open {{ ui.icon('arrow-right', 15) }}</a></div>
+      {% if r.chapters or r.series_started or r.series_completed %}
+      <div class="wrapped-numbers">
+        <div><b>{{ r.chapters|chapter }}</b><span>chapters</span></div>
+        <div><b>{{ r.series_started }}</b><span>started</span></div>
+        <div><b>{{ r.series_completed }}</b><span>finished</span></div>
+      </div>
+      {% if r.top_series %}
+      <h3 class="wrapped-sub">Most read</h3>
+      <ol class="wrapped-top">
+        {% for t, n in r.top_series %}
+        <li>{{ ui.cover(t.title, t.kind, t.cover) }}<span title="{{ t.title }}">{{ t.title }}</span><b>{{ n|chapter }} ch</b></li>
+        {% endfor %}
+      </ol>
+      {% endif %}
+      {% if reading_genres %}
+      <h3 class="wrapped-sub">Genres <small>chapters per genre</small></h3>
+      <ul class="genre-bars">
+        {% for g in reading_genres %}<li><span>{{ g.name }}</span><div class="genre-bar"><i style="width: {{ g.width }}%"></i></div><b>{{ g.value|round|int }}</b></li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% else %}
+      <p class="wrapped-empty">Nothing read in {{ year }}.</p>
+      {% endif %}
+    </section>
+
+    {# ---- Watching ---- #}
+    <section class="panel accent-teal">
+      <div class="panel-head"><h2>{{ ui.icon('eye', 18) }}Watching</h2><a class="link" href="#watching">Open {{ ui.icon('arrow-right', 15) }}</a></div>
+      {% if r.watched %}
+      <div class="wrapped-numbers">
+        {% for kind, label in WATCH_KIND_LABELS.items() %}
+        <div><b>{{ r.watched_by_kind[kind] }}</b><span>{{ 'movies' if label == 'Movie' and r.watched_by_kind[kind] != 1 else label|lower }}</span></div>
+        {% endfor %}
+      </div>
+      <h3 class="wrapped-sub">Finished <small>{{ r.watched_total }}</small></h3>
+      <div class="wrapped-covers">
+        {% for t in r.watched %}<div title="{{ t.title }}">{{ ui.cover(t.title, t.kind, t.cover) }}</div>{% endfor %}
+      </div>
+      {% if watch_genres %}
+      <h3 class="wrapped-sub">Genres <small>titles per genre</small></h3>
+      <ul class="genre-bars">
+        {% for g in watch_genres %}<li><span>{{ g.name }}</span><div class="genre-bar"><i style="width: {{ g.width }}%"></i></div><b>{{ g.value }}</b></li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% else %}
+      <p class="wrapped-empty">Nothing finished in {{ year }}.</p>
+      {% endif %}
+    </section>
+
+    {# ---- Listening ---- #}
+    <section class="panel accent-amber">
+      <div class="panel-head"><h2>{{ ui.icon('music', 18) }}Listening</h2><a class="link" href="#listening">Open {{ ui.icon('arrow-right', 15) }}</a></div>
+      {% if r.listen_minutes %}
+      <div class="wrapped-numbers">
+        <div><b>{{ r.listen_minutes|round|int }}</b><span>minutes</span></div>
+        <div><b>{{ hours(r.listen_minutes)|chapter }}</b><span>hours</span></div>
+      </div>
+      <h3 class="wrapped-sub">Top artists</h3>
+      <ul class="genre-bars">
+        {% for a in artists %}<li><span title="{{ a.name }}">{{ a.name }}</span><div class="genre-bar"><i style="width: {{ a.width }}%"></i></div><b>{{ a.value }}</b></li>{% endfor %}
+      </ul>
+      <h3 class="wrapped-sub">Top tracks</h3>
+      <ol class="wrapped-tracks">
+        {% for t in r.top_tracks %}
+        <li><span><b title="{{ t.track }}">{{ t.track }}</b><small>{{ t.artists|join(', ') }}</small></span><em>{{ t.plays }}×</em></li>
+        {% endfor %}
+      </ol>
+      {% else %}
+      <p class="wrapped-empty">Nothing played in {{ year }}.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  {# ---- Per maand: drie balkjes, elk geschaald op zijn eigen maximum ---- #}
+  <section class="panel spaced">
+    <div class="panel-head">
+      <h2>Month by month</h2>
+      <ul class="wbar-legend">
+        <li><i class="wbar-chapters"></i>Chapters</li><li><i class="wbar-finished"></i>Finished</li><li><i class="wbar-minutes"></i>Minutes</li>
+      </ul>
+    </div>
+    <div class="wbars">
+      {% for m in months %}
+      <div class="wbar-month" title="{{ m.row.label }} {{ year }}: {{ m.row.chapters|chapter }} chapters · {{ m.row.finished }} finished · {{ m.row.minutes|round|int }} min">
+        <div class="wbar-track">
+          <i class="wbar-chapters" style="height: {{ m.chapters }}%"></i>
+          <i class="wbar-finished" style="height: {{ m.finished }}%"></i>
+          <i class="wbar-minutes" style="height: {{ m.minutes }}%"></i>
+        </div>
+        <span>{{ m.row.label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+</div>

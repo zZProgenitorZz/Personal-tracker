@@ -11,7 +11,7 @@ from fastapi import APIRouter, File, Form, Request, UploadFile
 from ..cover_search import CoverSearch
 from ..covers import CoverError, CoverStore
 from ..domain import DomainError
-from ..web import render, save_cover, templates, toast
+from ..web import Backlog, pick_from_backlog, render, save_cover, templates, toast
 from .commands import AddShow, ChangeShowStatus, RemoveShow, SetShowGenres, WatchingCommandHandler
 from .events import WatchKind, WatchStatus
 from .genres import WATCH_GENRES
@@ -24,6 +24,7 @@ WATCH_STATUS_LABELS = {
     WatchStatus.COMPLETED: "Completed",
     WatchStatus.ON_HOLD: "On hold",
     WatchStatus.DROPPED: "Dropped",
+    WatchStatus.PLAN_TO_WATCH: "Plan to watch",
 }
 WATCH_KIND_LABELS = {WatchKind.SERIES: "Series", WatchKind.ANIME: "Anime", WatchKind.MOVIE: "Movie"}
 
@@ -92,6 +93,10 @@ def create_watching_web_router(
             entries = [e for e in entries if q.strip().lower() in e.title.lower()]
         return entries
 
+    def backlog() -> Backlog:
+        return Backlog("watching", watchlist.by_status(WatchStatus.PLAN_TO_WATCH), lambda e: e.show_id,
+                       "/ui/watching/shows/{}/status", WatchStatus.WATCHING.value, "Start watching", WATCH_GENRES.names)
+
     # Lezen
 
     @router.get("/dashboard")
@@ -102,7 +107,18 @@ def create_watching_web_router(
 
     @router.get("/library")
     def library_page(request: Request):
-        return render(request, "watching_library.html", entries=watchlist.all(), status="", kind="", genre="", q="")
+        return render(request, "watching_library.html", entries=watchlist.all(), status="", kind="", genre="", q="",
+                      backlog_size=len(watchlist.by_status(WatchStatus.PLAN_TO_WATCH)))
+
+    @router.get("/pick-button")
+    def pick_button(request: Request):
+        return render(request, "_pick_button.html", tracker="watching",
+                      count=len(watchlist.by_status(WatchStatus.PLAN_TO_WATCH)))
+
+    @router.get("/pick")
+    def pick(request: Request, exclude: str = "", genre: str = ""):
+        """"Wat nu?": een willekeurige titel uit Plan to Watch. Alleen lezen; Start stuurt ChangeShowStatus."""
+        return pick_from_backlog(request, backlog(), exclude, genre)
 
     @router.get("/library/grid")
     def library_grid(request: Request, status: str = "", kind: str = "", genre: str = "", q: str = ""):

@@ -7,6 +7,7 @@
       <h1>Everything you <span class="grad-text">read</span></h1>
       <p class="lede">Every novel and manhwa you've started, whatever its status.</p>
     </div>
+    {% with tracker='reading', count=backlog_size %}{% include "_pick_button.html" %}{% endwith %}
   </header>
 
   <form id="library-filters" class="filters" hx-get="/ui/reading/library/grid" hx-target="#library-grid" hx-swap="outerHTML"

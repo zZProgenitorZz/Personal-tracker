@@ -5,7 +5,7 @@ const el = (id) => document.getElementById(id);
 
 
 // ---- Navigatie via de hash, zodat terugknop en verversen werken ----
-// #home, #settings, en per tracker #<tracker>, #<tracker>/library, #<tracker>/progress.
+// #home, #settings, #wrapped(/jaar), en per tracker #<tracker>, #<tracker>/library, #<tracker>/progress.
 
 // Per tracker: de tekst van de knop "Add ..." (null = geen knop) en de tabbladen.
 const TRACKERS = {
@@ -21,6 +21,10 @@ function currentRoute() {
   const [section, tab = "dashboard"] = hash.split("/");
   if (TRACKERS[section] && TRACKERS[section].tabs.includes(tab)) return { section, tab, url: `/ui/${section}/${tab}` };
   if (section === "settings") return { section, url: "/ui/settings" };
+  if (section === "wrapped") {  // #wrapped, #wrapped/2025, #wrapped/2025/compare
+    const [, year = "", extra = ""] = hash.split("/");
+    return { section, url: `/ui/wrapped?year=${encodeURIComponent(year)}${extra === "compare" ? "&compare=1" : ""}` };
+  }
   return { section: "home", url: "/ui/home" };
 }
 
@@ -89,12 +93,14 @@ for (const changed of ["reading-changed", "watching-changed"]) {  // listening h
       resetObjectUrl();
     }
     el("genre-dialog").close();
+    el("pick-dialog").close();  // na Start
   });
 }
 
 // "Edit genres" in het ⋯-menu laadt het formulier in #genre-editor; dan het venster openen.
 document.addEventListener("htmx:afterSwap", (event) => {
   if (event.detail.target.id === "genre-editor") el("genre-dialog").showModal();
+  if (event.detail.target.id === "pick-slot" && !el("pick-dialog").open) el("pick-dialog").showModal();
 });
 
 

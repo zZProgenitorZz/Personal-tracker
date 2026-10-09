@@ -40,6 +40,8 @@ from .watching.events import ShowAdded, ShowGenresChanged, ShowRemoved, ShowStat
 from .watching.projections import WatchActivityProjection, WatchlistProjection
 from .watching.web import create_watching_web_router, watching_summary
 from .web import STATIC, Tracker, create_home_router, create_settings_router, render
+from .wrapped.projections import WrappedProjection
+from .wrapped.web import create_wrapped_web_router, wrapped_teaser
 
 # Instellingen zoals GOOGLE_BOOKS_API_KEY. Staat niet in git (.gitignore).
 ENV_FILE = Path(__file__).parent.parent / ".env"
@@ -89,7 +91,9 @@ def create_app(
     listen_activity = ListeningActivityProjection()
     top_artists = TopArtistsProjection()
     top_tracks = TopTracksProjection()
-    projections = [library, activity, watchlist, watch_activity, recent_plays, listen_activity, top_artists, top_tracks]
+    wrapped = WrappedProjection()  # jaaroverzicht over alle trackers heen, uit dezelfde events
+    projections = [library, activity, watchlist, watch_activity, recent_plays, listen_activity, top_artists, top_tracks,
+                   wrapped]
 
     def rebuild() -> None:
         """Read models opnieuw opbouwen uit alle events (bij start en na terugzetten)."""
@@ -149,7 +153,9 @@ def create_app(
                                                    spotify_connected=lambda: spotify.connected,
                                                    spotify_profile=lambda: spotify.connected and listening_sync.profiles.load()))
     app.include_router(create_spotify_router(listening_sync))
-    app.include_router(create_home_router(trackers))
+    app.include_router(create_wrapped_web_router(wrapped))
+    # Wrapped is geen tracker (niet in Settings of back-ups), alleen een kaart op het startscherm.
+    app.include_router(create_home_router(trackers, wrapped=lambda: wrapped_teaser(wrapped)))
     app.include_router(create_settings_router(db_path, trackers, backups))
     app.include_router(create_shutdown_router())
     app.mount("/static", StaticFiles(directory=STATIC), name="static")

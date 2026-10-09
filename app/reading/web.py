@@ -9,7 +9,7 @@ from datetime import date, timedelta
 from fastapi import APIRouter, File, Form, Request, UploadFile
 
 from ..covers import CoverError, CoverStore
-from ..web import render, save_cover, toast, templates
+from ..web import Backlog, pick_from_backlog, render, save_cover, toast, templates
 from .aggregate import DomainError
 from ..cover_search import CoverSearch
 from .commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, SetGenres, StartSeries
@@ -24,6 +24,7 @@ STATUS_LABELS = {
     Status.ON_HOLD: "On hold",
     Status.COMPLETED: "Completed",
     Status.DROPPED: "Dropped",
+    Status.PLAN_TO_READ: "Plan to read",
 }
 KIND_LABELS = {Kind.MANHWA: "Manhwa", Kind.NOVEL: "Novel"}
 
@@ -133,6 +134,10 @@ def create_reading_web_router(
             entries = [e for e in entries if genre in e.genres]
         return entries
 
+    def backlog() -> Backlog:
+        return Backlog("reading", library.by_status(Status.PLAN_TO_READ), lambda e: e.series_id,
+                       "/ui/reading/series/{}/status", Status.READING.value, "Start reading", GENRES)
+
     # Lezen
 
     @router.get("/dashboard")
@@ -149,7 +154,17 @@ def create_reading_web_router(
 
     @router.get("/library")
     def library_page(request: Request):
-        return render(request, "library.html", entries=library.all(), status="", kind="", q="", genre="")
+        return render(request, "library.html", entries=library.all(), status="", kind="", q="", genre="",
+                      backlog_size=len(library.by_status(Status.PLAN_TO_READ)))
+
+    @router.get("/pick-button")
+    def pick_button(request: Request):
+        return render(request, "_pick_button.html", tracker="reading", count=len(library.by_status(Status.PLAN_TO_READ)))
+
+    @router.get("/pick")
+    def pick(request: Request, exclude: str = "", genre: str = ""):
+        """"Wat nu?": een willekeurige serie uit Plan to Read. Alleen lezen; Start stuurt ChangeStatus."""
+        return pick_from_backlog(request, backlog(), exclude, genre)
 
     @router.get("/library/grid")
     def library_grid(request: Request, status: str = "", kind: str = "", q: str = "", genre: str = ""):

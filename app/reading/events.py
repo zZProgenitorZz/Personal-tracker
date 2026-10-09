@@ -8,6 +8,7 @@ class Status(str, Enum):
     ON_HOLD = "on_hold"
     COMPLETED = "completed"
     DROPPED = "dropped"
+    PLAN_TO_READ = "plan_to_read"  # backlog: nog niet begonnen
 
 
 class Kind(str, Enum):

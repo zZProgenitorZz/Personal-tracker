@@ -4,6 +4,7 @@ De webpagina is een dunne laag bovenop dezelfde commands en read models als de
 JSON-API. Elk domein heeft een eigen web.py met routes die HTML-fragmenten
 teruggeven; deze module bevat wat ze delen.
 """
+import random
 import zlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -88,6 +89,7 @@ ICONS = {
     "tag": '<path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
     "more": '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
     "trash": '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+    "dice": '<rect width="18" height="18" x="3" y="3" rx="3"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/>',
     "alert":'<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
 }
 templates.env.globals["ICONS"] = ICONS
@@ -110,6 +112,29 @@ def toast(request: Request, message: str, *, error: bool = False, changed: str |
     if changed:
         response.headers["HX-Trigger"] = changed
     return response
+
+
+@dataclass
+class Backlog:
+    """Plan to Read/Watch van één tracker, voor de knop "Pick something" in de Library."""
+    tracker: str                     # "reading": /ui/reading/pick
+    entries: list                    # alleen de titels in de backlog
+    item_id: Callable[[object], str]
+    status_url: str                  # met {} voor het id; Start stuurt de bestaande statuswijziging
+    start_status: str                # "reading" of "watching"
+    start_label: str
+    genre_order: list[str]
+
+
+def pick_from_backlog(request: Request, backlog: Backlog, exclude: str = "", genre: str = ""):
+    """Eén willekeurige titel uit de backlog, niet dezelfde als `exclude` (tenzij er maar één is).
+    Een hulp bij het kiezen: leest alleen, geen command of event."""
+    matching = [e for e in backlog.entries if not genre or genre in e.genres]
+    others = [e for e in matching if backlog.item_id(e) != exclude]
+    pick = random.choice(others or matching) if matching else None
+    genres = [g for g in backlog.genre_order if any(g in e.genres for e in backlog.entries)]
+    return render(request, "_pick.html", backlog=backlog, pick=pick, pick_id=pick and backlog.item_id(pick),
+                  more=len(matching) > 1, genres=genres, genre=genre)
 
 
 def save_cover(covers: CoverStore, upload: UploadFile | None, link: str, found: str) -> str | None:
@@ -140,7 +165,7 @@ class Tracker:
 
 # ---- Pagina's die niet bij één domein horen ----
 
-def create_home_router(trackers: list[Tracker]) -> APIRouter:
+def create_home_router(trackers: list[Tracker], wrapped: Callable[[], dict] | None = None) -> APIRouter:
     router = APIRouter(prefix="/ui", include_in_schema=False)
 
     @router.get("/home")
@@ -148,7 +173,7 @@ def create_home_router(trackers: list[Tracker]) -> APIRouter:
         hour = datetime.now().hour
         greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
         return render(request, "home.html", greeting=greeting,
-                      trackers=[(t, t.summary()) for t in trackers])
+                      trackers=[(t, t.summary()) for t in trackers], wrapped=wrapped() if wrapped else None)
 
     return router
 

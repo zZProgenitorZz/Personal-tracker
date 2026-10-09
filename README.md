@@ -138,6 +138,9 @@ app/
     genres.py          de genrelijst van Watching
     api.py             /watching endpoints (JSON)
     web.py             /ui/watching endpoints (HTML-fragmenten voor htmx)
+  wrapped/
+    projections.py     WrappedProjection: het jaaroverzicht uit de events van alle trackers (alleen lezen)
+    web.py             /ui/wrapped (#wrapped) en de Wrapped-kaart op het startscherm
 launch.pyw, stop.pyw   Progen starten (venster + icoon bij de klok) en stoppen; voor de snelkoppeling
 scripts/
   install_shortcut.ps1 snelkoppelingen op het bureaublad / in het Startmenu
@@ -145,7 +148,7 @@ scripts/
 tests/
   test_eventstore.py, test_api.py, test_web.py
   test_covers.py, test_cover_flow.py
-  reading/, watching/, listening/  given/when/then-tests per regel
+  reading/, watching/, listening/, wrapped/  given/when/then-tests per regel
 data/                  tracker.db, covers/ en de spotify_*-bestanden (niet in git)
 ```
 
@@ -155,7 +158,7 @@ data/                  tracker.db, covers/ en de spotify_*-bestanden (niet in gi
 
 | Onderdeel   | Inhoud                                                          |
 | ----------- | --------------------------------------------------------------- |
-| Statussen   | Reading, On-Hold, Completed, Dropped                            |
+| Statussen   | Reading, On-Hold, Completed, Dropped, Plan to Read              |
 | Events      | `SeriesStarted` (optioneel `cover`), `ProgressLogged`, `StatusChanged`, `GenresChanged`, `SeriesRemoved` |
 | Commands    | `StartSeries`, `LogProgress`, `ChangeStatus`, `SetGenres`, `RemoveSeries` |
 | Read models | CurrentlyReading, Library, ReadingActivity (per dag / per week) |
@@ -171,6 +174,7 @@ Regels:
 7. Bij het toevoegen kies je de status (standaard Reading). Een andere beginstatus wordt opgeslagen als `SeriesStarted` gevolgd door `StatusChanged`; het beginhoofdstuk telt niet mee als gelezen, zodat een afgeronde serie toevoegen je statistieken niet opblaast. Daarna kan elke status naar elke andere.
 8. Genres komen uit een vaste lijst (`GENRES` in `app/reading/genres.py`). `GenresChanged` bevat steeds de volledige nieuwe lijst; dezelfde genres opnieuw opslaan levert geen event op. Bij het toevoegen gaan genres mee als `GenresChanged` na `SeriesStarted`.
 9. Een cover is optioneel. Een cover die niet lukt (geen afbeelding, te groot, netwerkfout) blokkeert het opslaan van de serie nooit.
+10. **Plan to Read** is de backlog: series die je nog wilt beginnen. Toevoegen als Plan to Read volgt regel 7 (`SeriesStarted` + `StatusChanged(READING → PLAN_TO_READ)`). Voortgang loggen zet hem via regel 2 op Reading. Plan to Read telt nergens mee als "reading" (Currently reading, startscherm).
 
 Hoofdstukken zijn `float`, zodat hoofdstukken als 45.5 mogelijk zijn.
 
@@ -179,7 +183,7 @@ Hoofdstukken zijn `float`, zodat hoofdstukken als 45.5 mogelijk zijn.
 | Onderdeel   | Inhoud |
 | ----------- | ------ |
 | Soorten     | Series, Anime, Movie |
-| Statussen   | Watching, Completed, On hold, Dropped (geen afleveringen, geen cijfers) |
+| Statussen   | Watching, Completed, On hold, Dropped, Plan to Watch (geen afleveringen, geen cijfers) |
 | Events      | `ShowAdded` (met beginstatus en optioneel `cover`), `ShowStatusChanged`, `ShowGenresChanged`, `ShowRemoved` |
 | Commands    | `AddShow`, `ChangeShowStatus`, `SetShowGenres`, `RemoveShow` |
 | Read models | Watchlist, WatchActivity (afgerond per dag) |
@@ -191,6 +195,9 @@ Regels:
 3. Afgerond telt alleen als je iets op Completed **zet**. Toevoegen als Completed is geschiedenis en telt niet mee in "Finished this month".
 4. Genres uit een eigen vaste lijst (`WATCH_GENRES` in `app/watching/genres.py`); verder zoals bij Reading.
 5. Na verwijderen is de titel weer vrij.
+6. **Plan to Watch** is de backlog: toevoegen is gewoon `ShowAdded(status=PLAN_TO_WATCH)`. Telt niet mee als "watching"; van Plan to Watch naar Completed zetten telt wél in "Finished this month" (regel 3).
+
+**Pick something** (Library van Reading en Watching, alleen met een backlog): toont een willekeurige titel uit Plan to Read/Watch, eventueel binnen één genre. *Another one* kiest een andere; *Start* stuurt de gewone statuswijziging (`ChangeStatus`/`ChangeShowStatus`). Het kiezen zelf (`GET /ui/<tracker>/pick`) is alleen lezen: geen command, geen event.
 
 De event-klassen heten `Show...`, omdat de event store alleen de klassenaam opslaat; namen moeten uniek zijn over alle trackers heen.
 
@@ -225,6 +232,29 @@ Regels:
 Hoe het werkt (`app/listening/spotify.py`, een automation-slice): de sync vraagt `GET /v1/me/player/recently-played?limit=50&after=<laatste played_at in ms>` en stuurt voor elk nummer hetzelfde `RecordPlay` als de API, met `source="api"`. Tokens staan in `data/spotify_token.json`, niet in de event store; de access token wordt automatisch ververst met de refresh token. Bij een 429 wacht de achtergrondtaak de `Retry-After` af. Fouten worden gelogd (logger `progen.listening`) en laten de app nooit crashen; de laatste sync en een eventuele fout staan in Settings.
 
 **Beperking:** Spotify geeft per verzoek maximaal de laatste **50** nummers. Luister je tussen twee syncs meer dan 50 nummers (bij 30 minuten is dat haast onmogelijk, maar staat Progen een dag uit wel), dan zijn de oudere via de API niet meer op te halen.
+
+## Wrapped
+
+Een jaaroverzicht over Reading, Watching en Listening heen (`#wrapped`, of de Wrapped-kaart op het startscherm). Alleen lezen: geen eigen events of commands. `WrappedProjection` wordt opgebouwd uit de events die er al zijn, dus hij werkt meteen met alle oude data, en loopt daarna live mee. Wrapped is geen tracker: hij staat niet in Settings, niet in de navigatiebalk en heeft geen eigen back-up (alles zit al in de events).
+
+| Tracker   | Wat er per jaar geteld wordt |
+| --------- | ---------------------------- |
+| Reading   | Gelezen hoofdstukken, top 5 series, genres, nieuw begonnen, afgerond, langste leesreeks |
+| Watching  | Afgerond per soort, genres van wat je afrondde, de covers daarvan |
+| Listening | Minuten (en uren), top 5 artiesten, top 5 nummers, drukste luisterdag |
+| Samen     | Per maand hoofdstukken / afgerond / minuten, drukste maand, actiefste dag, de jaren met data |
+
+Regels:
+
+1. Dagen, maanden en jaren volgen de lokale tijdzone (`at` van het event, bij Listening `played_at`).
+2. Hoofdstukken: alleen vooruit telt (`chapter - previous_chapter > 0`), net als ReadingActivity.
+3. Genres van Reading: de gelezen hoofdstukken van een serie worden gelijk verdeeld over haar genres, volgens de **laatste** `GenresChanged`. Titels en covers van verwijderde series blijven in het overzicht.
+4. **Afgerond** (Reading): een `StatusChanged` naar Completed, en een serie telt maar één keer per jaar. De **beginstatus** telt niet: toevoegen als Completed wordt opgeslagen als `SeriesStarted` + `StatusChanged(READING → COMPLETED)` (Reading regel 7). Een `StatusChanged` is een beginstatus als hij direct volgt op de `SeriesStarted` van dezelfde serie (geen ander Reading-event ertussen; plays van de Spotify-sync tellen niet) **en** binnen 5 seconden. Zo telt "toegevoegd, en een uur later uitgelezen" wel.
+5. **Begonnen** (Reading): een serie telt één keer, in het jaar dat je eraan begon. Toevoegen als Plan to Read of als Completed is niet beginnen; een serie uit Plan to Read halen wel.
+6. **Afgerond** (Watching): alleen een `ShowStatusChanged` naar Completed, net als WatchActivity. Toevoegen als Completed telt niet; van Plan to Watch naar Completed wel.
+7. Listening-minuten: `ms_played` als die bekend is, anders `duration_ms` (zoals ListeningActivity).
+8. Drukste maand en actiefste dag: activiteit = hoofdstukken + afgeronde titels + gespeelde nummers.
+9. De knop **Compare with …** (vorig jaar) laat bij de grote getallen het verschil met het jaar ervoor zien.
 
 ### Covers
 
@@ -288,9 +318,10 @@ Eerst handmatig invoeren; automatisch importeren komt later (zie punt 5).
 
 ### 4. Dashboard
 
-- [ ] De webpagina uitbreiden met een sectie per domein.
-- [ ] Grafieken toevoegen (bijvoorbeeld met Chart.js via een CDN): hoofdstukken per week, slaapduur per nacht.
-- [ ] Domeinen combineren in een nieuwe projectie, bijvoorbeeld: lees ik meer na een goede nacht slaap? Dit werkt meteen met alle oude data, omdat projecties uit de events worden opgebouwd.
+- [x] De webpagina uitbreiden met een sectie per domein.
+- [x] Grafieken toevoegen: hoofdstukken per week, afgerond per maand, luisterminuten (CSS-balken, geen CDN nodig). Slaapduur volgt met het slaapdomein.
+- [x] Domeinen combineren in een nieuwe projectie: **Wrapped**, het jaaroverzicht over alle trackers (zie [Wrapped](#wrapped)). Werkt meteen met alle oude data, omdat de projectie uit de events wordt opgebouwd.
+- [ ] Verbanden tussen domeinen, bijvoorbeeld: lees ik meer na een goede nacht slaap? (zodra er een slaapdomein is)
 
 ### 5. Automatisch importeren
 
@@ -306,7 +337,6 @@ Eerst handmatig invoeren; automatisch importeren komt later (zie punt 5).
 
 ### Ideeën voor later
 
-- Status **Plan to Read** voor series die ik nog wil beginnen (alleen een extra waarde in `Status`).
 - Beoordeling of notities per serie (nieuwe events, bijv. `SeriesRated`).
 - Export van alle data naar JSON of CSV.
 - Listening: importeren van de Spotify **Extended streaming history** (de export die je bij Spotify aanvraagt). Die bevat alles sinds je account bestaat, met echte `ms_played`; importeren als `RecordPlay` met `source="export"`, dubbele plays worden vanzelf overgeslagen.

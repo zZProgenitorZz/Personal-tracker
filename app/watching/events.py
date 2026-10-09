@@ -10,6 +10,7 @@ class WatchStatus(str, Enum):
     COMPLETED = "completed"
     ON_HOLD = "on_hold"
     DROPPED = "dropped"
+    PLAN_TO_WATCH = "plan_to_watch"  # backlog: nog niet begonnen
 
 
 class WatchKind(str, Enum):

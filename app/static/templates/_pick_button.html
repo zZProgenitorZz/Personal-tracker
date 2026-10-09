@@ -1,0 +1,9 @@
+{% import "_macros.html" as ui %}
+{# Alleen zichtbaar als er iets op Plan to Read/Watch staat; ververst zich na elke wijziging. #}
+<div id="pick-button" hx-get="/ui/{{ tracker }}/pick-button" hx-trigger="{{ tracker }}-changed from:body"
+     hx-swap="outerHTML" hx-disinherit="*">
+  {% if count %}
+  <button class="btn btn-ghost" type="button" hx-get="/ui/{{ tracker }}/pick" hx-target="#pick-slot" hx-swap="innerHTML"
+          title="A random title from your {{ count }} planned">{{ ui.icon('dice', 16) }}Pick something</button>
+  {% endif %}
+</div>

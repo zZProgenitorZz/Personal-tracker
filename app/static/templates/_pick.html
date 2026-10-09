@@ -1,0 +1,40 @@
+{% import "_macros.html" as ui %}
+{# Inhoud van het venster "Pick something" (#pick-slot in index.html), voor Reading en Watching. #}
+{% set url = "/ui/" ~ backlog.tracker ~ "/pick" %}
+<div class="dialog-form">
+  <div class="dialog-head">
+    <div>
+      <p class="eyebrow">From your backlog</p>
+      <h2>What's next?</h2>
+    </div>
+    <button class="btn-close" type="button" data-close-dialog aria-label="Close">{{ ui.icon('x', 18) }}</button>
+  </div>
+  {% if genres %}
+  <select id="pick-genre" class="select" name="genre" aria-label="Only this genre"
+          hx-get="{{ url }}" hx-target="#pick-slot" hx-trigger="change">
+    <option value="">Any genre</option>
+    {%- for g in genres %}<option value="{{ g }}"{% if g == genre %} selected{% endif %}>{{ g }}</option>{% endfor %}
+  </select>
+  {% endif %}
+  {% if pick %}
+  <div class="pick-card">
+    {{ ui.cover(pick.title, pick.kind, pick.cover) }}
+    <div class="pick-body">
+      <h3 class="pick-title">{{ pick.title }}</h3>
+      {% if pick.genres %}<p class="series-genres">{{ pick.genres|join(' · ') }}</p>{% endif %}
+    </div>
+  </div>
+  {% else %}
+  <p class="pick-empty">Nothing in your backlog{% if genre %} with {{ genre }}{% endif %}.</p>
+  {% endif %}
+  <div class="dialog-actions">
+    {% if more %}
+    <button class="btn btn-ghost" type="button" hx-get="{{ url }}" hx-vals='{{ {"exclude": pick_id}|tojson }}'
+            hx-include="#pick-genre" hx-target="#pick-slot">{{ ui.icon('dice', 16) }}Another one</button>
+    {% endif %}
+    {% if pick %}
+    <button class="btn btn-primary" type="button" hx-post="{{ backlog.status_url.format(pick_id) }}"
+            hx-vals='{{ {"status": backlog.start_status}|tojson }}' hx-swap="none">{{ ui.icon('arrow-right', 16) }}{{ backlog.start_label }}</button>
+    {% endif %}
+  </div>
+</div>

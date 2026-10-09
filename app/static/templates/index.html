@@ -55,6 +55,11 @@
   <div id="genre-editor"></div>
 </dialog>
 
+{# "Pick something" in de Library: /ui/<tracker>/pick wordt hierin geladen. #}
+<dialog id="pick-dialog" class="dialog dialog-pick" aria-label="Pick something from your backlog">
+  <div id="pick-slot"></div>
+</dialog>
+
 <dialog id="confirm-dialog" class="dialog dialog-confirm" aria-labelledby="confirm-title">
   <form method="dialog" class="dialog-form">
     <span class="danger-icon">{{ ui.icon('trash', 22) }}</span>

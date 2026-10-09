@@ -40,4 +40,19 @@
     </a>
     {% endfor %}
   </div>
+
+  {% if wrapped %}
+  <a class="wrapped-card" href="#wrapped">
+    <div>
+      <p class="eyebrow">Wrapped {{ wrapped.year }}</p>
+      <h2>Your year so far</h2>
+    </div>
+    <div class="tracker-stats">
+      <div><b>{{ wrapped.chapters|chapter }}</b><span>chapters read</span></div>
+      <div><b>{{ wrapped.finished }}</b><span>titles finished</span></div>
+      <div><b>{{ wrapped.hours|chapter }}</b><span>hours listened</span></div>
+    </div>
+    <span class="tracker-open">{{ ui.icon('arrow-right', 18) }}</span>
+  </a>
+  {% endif %}
 </div>
