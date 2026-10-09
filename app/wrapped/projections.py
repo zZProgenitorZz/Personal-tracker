@@ -5,7 +5,7 @@ werkt meteen met alle oude data en heeft geen eigen events of commands. Dagen,
 maanden en jaren volgen de lokale tijdzone, net als de andere projecties.
 """
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 
 from ..listening.events import TrackPlayed
@@ -21,6 +21,11 @@ TOP = 5
 # toevoegen komt, is de beginstatus en geen echte wijziging (zie _is_start_status).
 START_STATUS_WINDOW = timedelta(seconds=5)
 MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def title_key(title: str) -> str:
+    """Dezelfde titel volgens Reading (find_by_title): hoofdletters en spaties eromheen tellen niet."""
+    return title.strip().lower()
 
 
 def _day(moment: datetime) -> date:
@@ -92,6 +97,7 @@ class YearReview:
 class _Year:
     chapters_per_day: dict[date, float] = field(default_factory=lambda: defaultdict(float))
     chapters_per_series: Counter = field(default_factory=Counter)
+    # Begonnen en afgerond per titel-sleutel, zodat alle versies van een serie één serie zijn.
     started: set[str] = field(default_factory=set)
     completed_series: dict[str, date] = field(default_factory=dict)   # eerste keer afgerond dit jaar
     finished_shows: dict[str, date] = field(default_factory=dict)
@@ -127,9 +133,13 @@ class WrappedProjection:
 
     def reset(self) -> None:
         self._years: dict[int, _Year] = defaultdict(_Year)
+        # Een verwijderde en opnieuw toegevoegde serie krijgt een nieuwe series_id (Reading regel 6).
+        # Wrapped telt alle versies met dezelfde titel als één serie: per sleutel de series_id's, oudste eerst.
         self._series: dict[str, Title] = {}            # ook van verwijderde series
         self._series_genres: dict[str, list[str]] = {}
-        self._ever_started: set[str] = set()
+        self._key: dict[str, str] = {}                 # series_id -> titel-sleutel
+        self._versions: dict[str, list[str]] = defaultdict(list)
+        self._started_by: dict[str, str] = {}          # titel-sleutel -> de series_id die hem liet beginnen
         self._just_added: SeriesStarted | None = None  # het vorige Reading-event, als dat SeriesStarted was
         self._shows: dict[str, Title] = {}
         self._show_genres: dict[str, list[str]] = {}
@@ -162,6 +172,8 @@ class WrappedProjection:
         year = self._years[day.year]
         if isinstance(event, SeriesStarted):
             self._series[event.series_id] = Title(event.title, event.kind, event.cover)
+            key = self._key[event.series_id] = title_key(event.title)
+            self._versions[key].append(event.series_id)
             self._start(event.series_id, year)  # wordt teruggedraaid als de beginstatus backlog of Completed is
         elif isinstance(event, GenresChanged):
             self._series_genres[event.series_id] = list(event.genres)
@@ -174,13 +186,16 @@ class WrappedProjection:
             if self._is_start_status(event):
                 if event.to_status in (Status.PLAN_TO_READ, Status.COMPLETED):
                     # Toegevoegd als backlog of als iets wat je al uit had: niet begonnen, niet afgerond.
-                    self._ever_started.discard(event.series_id)
-                    self._years[_day(self._just_added.at).year].started.discard(event.series_id)
+                    # Alleen terugdraaien als déze versie de serie liet beginnen, niet een eerdere.
+                    key = self._key[event.series_id]
+                    if self._started_by.get(key) == event.series_id:
+                        del self._started_by[key]
+                        self._years[_day(self._just_added.at).year].started.discard(key)
                 return
             if event.from_status is Status.PLAN_TO_READ:
                 self._start(event.series_id, year)  # uit de backlog: nu pas begonnen
-            if event.to_status is Status.COMPLETED:
-                year.completed_series.setdefault(event.series_id, day)
+            if event.to_status is Status.COMPLETED and event.series_id in self._key:
+                year.completed_series.setdefault(self._key[event.series_id], day)
 
     def _is_start_status(self, event: StatusChanged) -> bool:
         """De beginstatus uit ReadingSeries.start: volgt direct op de SeriesStarted van dezelfde serie
@@ -192,9 +207,21 @@ class WrappedProjection:
                 and abs(event.at - added.at) <= START_STATUS_WINDOW)
 
     def _start(self, series_id: str, year: _Year) -> None:
-        if series_id not in self._ever_started:
-            self._ever_started.add(series_id)
-            year.started.add(series_id)
+        """Een serie begint één keer: in het jaar van de eerste versie, niet opnieuw na verwijderen."""
+        key = self._key.get(series_id)
+        if key is not None and key not in self._started_by:
+            self._started_by[key] = series_id
+            year.started.add(key)
+
+    def _title(self, key: str) -> Title:
+        """De nieuwste versie; zonder cover de cover van de nieuwste oudere versie die er wel een heeft."""
+        versions = [self._series[s] for s in reversed(self._versions[key])]
+        cover = next((v.cover for v in versions if v.cover), None)
+        return replace(versions[0], cover=cover)
+
+    def _genres(self, key: str) -> list[str]:
+        """De genres van de nieuwste versie die genres heeft (ook voor hoofdstukken van oudere versies)."""
+        return next((g for s in reversed(self._versions[key]) if (g := self._series_genres.get(s))), [])
 
     # ---- Lezen ----
 
@@ -205,9 +232,14 @@ class WrappedProjection:
     def year(self, number: int) -> YearReview:
         y = self._years.get(number) or _Year()
 
-        reading_genres: Counter = Counter()
+        chapters_per_title: Counter = Counter()
         for series_id, chapters in y.chapters_per_series.items():
-            genres = self._series_genres.get(series_id, [])
+            if series_id in self._key:
+                chapters_per_title[self._key[series_id]] += chapters
+
+        reading_genres: Counter = Counter()
+        for key, chapters in chapters_per_title.items():
+            genres = self._genres(key)
             for genre in genres:
                 reading_genres[genre] += chapters / len(genres)
 
@@ -239,7 +271,7 @@ class WrappedProjection:
         return YearReview(
             year=number,
             chapters=sum(y.chapters_per_day.values()),
-            top_series=sorted(((self._series[s], n) for s, n in y.chapters_per_series.items() if s in self._series),
+            top_series=sorted(((self._title(key), n) for key, n in chapters_per_title.items()),
                               key=lambda tn: (-tn[1], tn[0].title.lower()))[:TOP],
             reading_genres=_ranked(reading_genres),
             series_started=len(y.started),

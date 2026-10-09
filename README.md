@@ -249,12 +249,13 @@ Regels:
 1. Dagen, maanden en jaren volgen de lokale tijdzone (`at` van het event, bij Listening `played_at`).
 2. Hoofdstukken: alleen vooruit telt (`chapter - previous_chapter > 0`), net als ReadingActivity.
 3. Genres van Reading: de gelezen hoofdstukken van een serie worden gelijk verdeeld over haar genres, volgens de **laatste** `GenresChanged`. Titels en covers van verwijderde series blijven in het overzicht.
-4. **Afgerond** (Reading): een `StatusChanged` naar Completed, en een serie telt maar één keer per jaar. De **beginstatus** telt niet: toevoegen als Completed wordt opgeslagen als `SeriesStarted` + `StatusChanged(READING → COMPLETED)` (Reading regel 7). Een `StatusChanged` is een beginstatus als hij direct volgt op de `SeriesStarted` van dezelfde serie (geen ander Reading-event ertussen; plays van de Spotify-sync tellen niet) **en** binnen 5 seconden. Zo telt "toegevoegd, en een uur later uitgelezen" wel.
-5. **Begonnen** (Reading): een serie telt één keer, in het jaar dat je eraan begon. Toevoegen als Plan to Read of als Completed is niet beginnen; een serie uit Plan to Read halen wel.
-6. **Afgerond** (Watching): alleen een `ShowStatusChanged` naar Completed, net als WatchActivity. Toevoegen als Completed telt niet; van Plan to Watch naar Completed wel.
-7. Listening-minuten: `ms_played` als die bekend is, anders `duration_ms` (zoals ListeningActivity).
-8. Drukste maand en actiefste dag: activiteit = hoofdstukken + afgeronde titels + gespeelde nummers.
-9. De knop **Compare with …** (vorig jaar) laat bij de grote getallen het verschil met het jaar ervoor zien.
+4. Een verwijderde en opnieuw toegevoegde serie (nieuwe `series_id`, bijvoorbeeld om een cover te krijgen) telt in Wrapped als **één serie**: zelfde titel zoals Reading die vergelijkt (hoofdletters en spaties eromheen tellen niet). Hoofdstukken van alle versies tellen samen; titel en cover komen van de nieuwste versie (zonder cover: de nieuwste oudere met cover), genres van de nieuwste versie met genres. Begonnen telt alleen in het jaar van de eerste versie, ook als je hem lang daarna echt opnieuw begint.
+5. **Afgerond** (Reading): een `StatusChanged` naar Completed, en een serie telt maar één keer per jaar. De **beginstatus** telt niet: toevoegen als Completed wordt opgeslagen als `SeriesStarted` + `StatusChanged(READING → COMPLETED)` (Reading regel 7). Een `StatusChanged` is een beginstatus als hij direct volgt op de `SeriesStarted` van dezelfde serie (geen ander Reading-event ertussen; plays van de Spotify-sync tellen niet) **en** binnen 5 seconden. Zo telt "toegevoegd, en een uur later uitgelezen" wel.
+6. **Begonnen** (Reading): een serie telt één keer, in het jaar dat je eraan begon. Toevoegen als Plan to Read of als Completed is niet beginnen; een serie uit Plan to Read halen wel.
+7. **Afgerond** (Watching): alleen een `ShowStatusChanged` naar Completed, net als WatchActivity. Toevoegen als Completed telt niet; van Plan to Watch naar Completed wel.
+8. Listening-minuten: `ms_played` als die bekend is, anders `duration_ms` (zoals ListeningActivity).
+9. Drukste maand en actiefste dag: activiteit = hoofdstukken + afgeronde titels + gespeelde nummers.
+10. De knop **Compare with …** (vorig jaar) laat bij de grote getallen het verschil met het jaar ervoor zien.
 
 ### Covers
 

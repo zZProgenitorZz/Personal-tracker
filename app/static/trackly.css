@@ -1061,7 +1061,7 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
 .wrapped-top .cover { width: 40px; border-radius: 8px; }
 .wrapped-top .cover-initials { font-size: 12px; }
 .wrapped-top .cover-kind { display: none; }
-.wrapped-top span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; font-weight: 500; }
+.wrapped-top li > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; font-weight: 500; }
 .wrapped-top b { color: var(--muted); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
 .wrapped-covers { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 8px; }

@@ -216,3 +216,75 @@ def test_rebuilt_projection_equals_the_live_one():
     assert rebuilt.years() == live.years() == [2025]
     assert rebuilt.year(2025) == live.year(2025)
     assert live.year(2025).series_completed == 1 and live.year(2025).finished == 2
+
+
+# ---- Verwijderd en opnieuw toegevoegd: in Wrapped één serie ----
+# Zo kregen oude series een cover: verwijderen en opnieuw toevoegen (nieuwe series_id, Reading regel 6).
+
+def test_re_added_series_shows_once_with_the_new_cover_and_all_chapters():
+    w = given(started("old", "Shadow Slave", at(2025, 1, 1)), read("old", 0, 80, at(2025, 2, 1)),
+              SeriesRemoved("old", "Shadow Slave", at=at(2025, 3, 1)),
+              started("new", "shadow slave", at(2025, 3, 1), cover="ss.webp", chapter=80))  # hoofdletters tellen niet
+    [(title, chapters)] = w.year(2025).top_series
+    assert (title.title, title.cover, chapters) == ("shadow slave", "ss.webp", 80)
+
+
+def test_chapters_of_both_versions_are_added_up():
+    w = given(started("old", "Solo Leveling", at(2025, 1, 1)), read("old", 0, 30, at(2025, 2, 1)),
+              SeriesRemoved("old", "Solo Leveling", at=at(2025, 3, 1)),
+              started("new", "Solo Leveling", at(2025, 3, 1), cover="sl.webp", chapter=30),
+              read("new", 30, 45, at(2025, 4, 1)),
+              started("other", "B", at(2025, 1, 1)), read("other", 0, 40, at(2025, 2, 1)))
+    assert [(t.title, t.cover, n) for t, n in w.year(2025).top_series] == [
+        ("Solo Leveling", "sl.webp", 45), ("B", None, 40)]
+
+
+def test_an_older_cover_is_used_when_the_newest_version_has_none():
+    w = given(started("v1", "A", at(2025, 1, 1), cover="a1.webp"), read("v1", 0, 5, at(2025, 1, 2)),
+              SeriesRemoved("v1", "A", at=at(2025, 1, 3)),
+              started("v2", "A", at(2025, 1, 4)))
+    assert w.year(2025).top_series[0][0].cover == "a1.webp"
+
+
+def test_genres_of_the_new_version_count_for_the_old_chapters():
+    w = given(started("old", "A", at(2025, 1, 1)), read("old", 0, 10, at(2025, 2, 1)),
+              SeriesRemoved("old", "A", at=at(2025, 3, 1)),
+              started("new", "A", at(2025, 3, 1), chapter=10),
+              GenresChanged("new", ["Fantasy"], at=at(2025, 3, 1)))
+    assert w.year(2025).reading_genres == [("Fantasy", 10)]
+
+
+def test_adding_again_is_not_starting_again():
+    w = given(started("old", "A", at(2024, 6, 1)), read("old", 0, 10, at(2024, 7, 1)),
+              SeriesRemoved("old", "A", at=at(2025, 3, 1)),
+              started("new", "A", at(2025, 3, 1), chapter=10),
+              # ook niet als de nieuwe versie als Completed wordt toegevoegd en daarna weer Reading wordt
+              SeriesRemoved("new", "A", at=at(2025, 4, 1)),
+              added_as("newer", "A", Status.PLAN_TO_READ, at(2025, 4, 1)),
+              status("newer", Status.PLAN_TO_READ, Status.READING, at(2025, 5, 1)))
+    assert (w.year(2024).series_started, w.year(2025).series_started) == (1, 0)
+
+
+def test_re_added_as_completed_does_not_undo_the_first_start():
+    w = given(started("old", "A", at(2025, 1, 1)),
+              SeriesRemoved("old", "A", at=at(2025, 2, 1)),
+              added_as("new", "A", Status.COMPLETED, at(2025, 2, 1)))
+    assert (w.year(2025).series_started, w.year(2025).series_completed) == (1, 0)
+
+
+def test_rebuilt_equals_live_with_re_added_series():
+    store = EventStore(":memory:", EVENT_TYPES)
+    live = WrappedProjection()
+    store.subscribe(live.apply)
+    store.append("old", [started("old", "Shadow Slave", at(2025, 1, 1)), read("old", 0, 50, at(2025, 2, 1))])
+    store.append("old", [SeriesRemoved("old", "Shadow Slave", at=at(2025, 3, 1))])
+    store.append("new", [started("new", "Shadow Slave", at(2025, 3, 1), cover="ss.webp", chapter=50),
+                         GenresChanged("new", ["Fantasy"], at=at(2025, 3, 1))])
+    store.append("new", [read("new", 50, 60, at(2025, 4, 1))])
+
+    rebuilt = WrappedProjection()
+    for event in store.load_all():
+        rebuilt.apply(event)
+    assert rebuilt.year(2025) == live.year(2025)
+    [(title, chapters)] = live.year(2025).top_series
+    assert (title.cover, chapters, live.year(2025).reading_genres) == ("ss.webp", 60, [("Fantasy", 60)])
