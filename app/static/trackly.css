@@ -1,6 +1,9 @@
 /* Progen: donker, paars met teal-accenten, grote afgeronde kaarten. */
 
 :root {
+  /* Breedte van navigatiebalk en inhoud samen: 1240px, op grote schermen 90% van
+     het venster (max 1880px). Onder 1240px precies zoals altijd. */
+  --page-max: clamp(1240px, 90vw, 1880px);
   --bg: #07060c;
   --surface-solid: #15121f;
   --border: rgba(255, 255, 255, .07);
@@ -29,6 +32,10 @@
 }
 
 * { box-sizing: border-box; }
+/* Altijd ruimte voor de scrollbalk, zodat de pagina niet ±8px opzij springt als hij
+   bij het wisselen van pagina even verdwijnt. Achtergrond ook op html, zodat die strook
+   niet wit is. */
+html { scrollbar-gutter: stable; background: var(--bg); }
 [hidden] { display: none !important; }  /* ook als een class zelf display zet */
 
 body {
@@ -75,7 +82,7 @@ code {
 .nav { position: sticky; top: 0; z-index: 20; padding: 16px 24px 0; }
 
 .nav-inner {
-  max-width: 1240px;
+  max-width: var(--page-max);
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -233,7 +240,7 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 
 /* ---- Pagina ---- */
 
-.container { max-width: 1240px; margin: 0 auto; padding: 48px 24px 96px; }
+.container { max-width: calc(var(--page-max) + 48px); margin: 0 auto; padding: 48px 24px 96px; }  /* + padding: de inhoud is even breed als de navigatiebalk */
 
 .page-head {
   display: flex;
@@ -374,7 +381,7 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
 
 .dash-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) clamp(340px, 26%, 440px);  /* 340px tot 1240px breed */
   gap: 24px;
   align-items: start;
 }
@@ -1367,6 +1374,28 @@ label.btn:focus-within { outline: 2px solid var(--purple-hi); outline-offset: 2p
 
 
 /* ---- Responsive ---- */
+
+/* Navigatie vanaf 761px als grid: merk links, links precies in het midden, Add rechts.
+   Zo schuiven de links niet als de Add-knop verschijnt of een andere tekst krijgt.
+   Op mobiel (≤760px) blijft de flex-indeling met de tabbalk onderin. */
+@media (min-width: 761px) {
+  .nav-inner { display: grid; grid-template-columns: 1fr auto 1fr; }
+  .brand { grid-column: 1; justify-self: start; }
+  .nav-links { grid-column: 2; margin: 0; }
+  .nav-add { grid-column: 3; justify-self: end; }
+}
+
+/* Grote schermen: alles een stap groter, niet alleen breder. Media queries kijken naar
+   de echte vensterbreedte; binnen een gezoomde body telt 1vw ook mee met de zoom,
+   dus de vw-waarde wordt door de zoom gedeeld (anders wordt de pagina breder dan het venster). */
+@media (min-width: 1700px) {
+  body { zoom: 1.1; }
+  :root { --page-max: clamp(1240px, calc(90vw / 1.1), 1880px); }
+}
+@media (min-width: 2300px) {
+  body { zoom: 1.25; }
+  :root { --page-max: clamp(1240px, calc(90vw / 1.25), 1880px); }
+}
 
 @media (max-width: 1080px) {
   .dash-grid, .two-col { grid-template-columns: minmax(0, 1fr); }
