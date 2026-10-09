@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from fastapi import APIRouter, File, Form, Request, UploadFile
 
 from ..covers import CoverError, CoverStore
+from .. import web as shared
 from ..web import Backlog, pick_from_backlog, render, save_cover, toast, templates
 from .aggregate import DomainError
 from ..cover_search import CoverSearch
@@ -18,6 +19,9 @@ from .genres import GENRES
 from .projections import LibraryEntry, LibraryProjection, ReadingActivityProjection
 
 CHANGED = "reading-changed"
+# Gathering dust: een serie op Reading zonder voortgang of statuswijziging in zoveel dagen.
+STALE_READING_DAYS = 21
+DUST_SHOWN = 5  # daarna "+N more"
 
 STATUS_LABELS = {
     Status.READING: "Reading",
@@ -29,6 +33,10 @@ STATUS_LABELS = {
 KIND_LABELS = {Kind.MANHWA: "Manhwa", Kind.NOVEL: "Novel"}
 
 templates.env.globals.update(STATUS_LABELS=STATUS_LABELS, KIND_LABELS=KIND_LABELS, GENRES=GENRES)
+
+
+def utc_now():
+    return shared.utc_now()
 
 
 # ---- Gegevens voor de grafieken, afgeleid uit ReadingActivity ----
@@ -76,7 +84,9 @@ def reading_summary(library: LibraryProjection, activity: ReadingActivityProject
     today = date.today()
     current = library.currently_reading()
     this_week = sum(b["value"] for b in last_days(activity.per_day(), today, 7))
+    dusty = len(library.stale(utc_now(), STALE_READING_DAYS))
     return {
+        "badge": f"{dusty} gathering dust" if dusty else None,
         "stats": [(len(current), "reading now"), (this_week, "chapters this week"),
                   (activity.streak(today), "day streak")],
         "current": current[:5],
@@ -143,6 +153,7 @@ def create_reading_web_router(
     @router.get("/dashboard")
     def dashboard(request: Request):
         today = date.today()
+        now = utc_now()
         return render(
             request, "dashboard.html",
             stats=overview(today),
@@ -150,6 +161,7 @@ def create_reading_web_router(
             week=with_height(last_days(activity.per_day(), today, 7)),
             counts=status_counts(),
             library_size=len(library.all()),
+            dust=library.stale(now, STALE_READING_DAYS), dust_days=STALE_READING_DAYS, dust_shown=DUST_SHOWN, now=now,
         )
 
     @router.get("/library")

@@ -1,6 +1,6 @@
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from .events import ShowAdded, ShowGenresChanged, ShowRemoved, ShowStatusChanged, WatchKind, WatchStatus
 
@@ -44,6 +44,13 @@ class WatchlistProjection:
 
     def currently_watching(self) -> list[WatchEntry]:
         return sorted(self.by_status(WatchStatus.WATCHING), key=lambda e: e.updated_at, reverse=True)
+
+    def stale(self, now: datetime, days: int) -> list[WatchEntry]:
+        """Gathering dust: op Watching, maar langer dan `days` dagen niet toegevoegd of van status gewisseld.
+        Langst stil eerst. (Genres aanpassen telt niet.)"""
+        limit = now - timedelta(days=days)
+        return sorted((e for e in self.by_status(WatchStatus.WATCHING) if e.updated_at < limit),
+                      key=lambda e: e.updated_at)
 
     def find(self, title: str, kind: WatchKind) -> WatchEntry | None:
         wanted = title.strip().lower()

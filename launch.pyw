@@ -10,6 +10,9 @@ Draait met pythonw, dus zonder consolevenster:
    één zo'n icoon; klik je nog eens op de snelkoppeling, dan opent alleen een venster.
 
 Het venster sluiten stopt de server niet; dat doe je met Stop Progen.
+
+Het icoon toont nooit een popup (MessageBox): die zou de thread van het icoon
+blokkeren, waardoor icoon en popup allebei niet meer reageren. Meldingen gaan als ballon.
 """
 import ctypes
 import datetime
@@ -24,12 +27,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))  # zodat app.desktop te vinden is, ook bij automatisch starten
 
-from app.desktop import HOST, PORT, URL, is_running, request_stop, show_message, sync_spotify  # noqa: E402
+from app.desktop import (  # noqa: E402
+    HOST, NOT_RUNNING, PORT, URL, is_running, request_stop, show_message, sync_spotify,
+)
 
 LOG = ROOT / "data" / "launcher.log"
 LOG_MAX_BYTES = 1_000_000  # groter: het oude log wordt launcher.log.old
 ICON = ROOT / "app" / "static" / "icon.ico"
 START_TIMEOUT = 15  # seconden
+GRACEFUL_SHUTDOWN = 5  # seconden die uvicorn krijgt om te stoppen; daarna sluit hij open verbindingen af
+EXITED_GRACE_CHECKS = 12  # stopt onze server meteen, kijk dan nog ~3 s of een andere net opstart
 WATCH_INTERVAL = 5  # seconden: verdwijnt de server (bv. via stop.pyw), dan verdwijnt het icoon ook
 TRAY_MUTEX = "Local\\ProgenTrayIcon"
 EDGE_PATHS = [
@@ -54,7 +61,10 @@ def python_executable() -> Path:
 
 def server_command() -> list[str]:
     return [str(python_executable()), "-m", "uvicorn", "app.main:create_app", "--factory",
-            "--host", HOST, "--port", str(PORT)]
+            "--host", HOST, "--port", str(PORT),
+            # Zonder grens kan uvicorn eeuwig wachten op een verbinding van het venster die
+            # weggevallen is (ConnectionResetError op Windows); dan blijft het proces hangen.
+            "--timeout-graceful-shutdown", str(GRACEFUL_SHUTDOWN)]
 
 
 def start_server() -> subprocess.Popen:
@@ -76,7 +86,13 @@ def wait_until_running(process: subprocess.Popen | None) -> bool:
     while time.monotonic() < deadline:
         if is_running():
             return True
-        if process is not None and process.poll() is not None:  # meteen gestopt: fout in de code?
+        if process is not None and process.poll() is not None:
+            # Meteen gestopt: een fout in de code, of de poort is al bezet door een server die
+            # net door een andere klik is gestart. Kijk nog even of Progen alsnog antwoordt.
+            for _ in range(EXITED_GRACE_CHECKS):
+                if is_running():
+                    return True
+                time.sleep(0.25)
             return False
         time.sleep(0.25)
     return is_running()
@@ -112,20 +128,28 @@ def claim_tray() -> bool:
     return ctypes.get_last_error() != 183  # ERROR_ALREADY_EXISTS
 
 
+def in_background(action) -> None:
+    """Acties uit het menu draaien buiten de thread van het icoon, zodat het icoon blijft reageren."""
+    threading.Thread(target=action, daemon=True).start()
+
+
 def tray_menu_actions(icon) -> list[tuple[str, object]]:
-    """De knoppen in het menu (rechtsklik). De eerste is ook de dubbelklik."""
+    """De knoppen in het menu (rechtsklik). De eerste is ook de dubbelklik.
+    Meldingen als ballon (icon.notify), nooit als popup."""
     def open_progen():
         open_window()
 
     def sync_now():
-        icon.notify(sync_spotify(), "Progen")
+        in_background(lambda: icon.notify(sync_spotify(), "Progen"))
 
     def stop_progen():
-        problem = request_stop()
-        if problem:
-            show_message(problem, error=False)
-        else:
-            icon.stop()
+        def stop():
+            problem = request_stop()
+            if problem and problem != NOT_RUNNING:
+                icon.notify(problem, "Progen")  # het icoon blijft, zodat je het nog eens kunt proberen
+            else:
+                icon.stop()  # gestopt, of draaide al niet meer: niets meer te beheren
+        in_background(stop)
 
     return [("Open Progen", open_progen), ("Sync Spotify now", sync_now), ("Stop Progen", stop_progen)]
 
@@ -167,8 +191,9 @@ def main(argv: list[str] | None = None) -> None:
     background = "--background" in (sys.argv[1:] if argv is None else argv)
     owner = claim_tray()
     if not is_running():
-        # Alleen de eigenaar van het icoon start de server; een tweede klik wacht er gewoon op.
-        process = start_server() if owner else None
+        # Ook als een andere launcher het icoon nog heeft (bijvoorbeeld een vastgelopen):
+        # dan start deze de server. Starten er twee tegelijk, dan krijgt er maar één de poort.
+        process = start_server()
         if not wait_until_running(process):
             show_message(f"Progen didn't start within {START_TIMEOUT} seconds.\n\nSee {LOG} for what went wrong.")
             return

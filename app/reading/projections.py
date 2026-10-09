@@ -55,6 +55,12 @@ class LibraryProjection:
         reading = self.by_status(Status.READING)
         return sorted(reading, key=lambda e: e.updated_at, reverse=True)
 
+    def stale(self, now: datetime, days: int) -> list[LibraryEntry]:
+        """Gathering dust: op Reading, maar langer dan `days` dagen geen voortgang of statuswijziging.
+        Langst stil eerst."""
+        limit = now - timedelta(days=days)
+        return sorted((e for e in self.by_status(Status.READING) if e.updated_at < limit), key=lambda e: e.updated_at)
+
     def find_by_title(self, title: str) -> LibraryEntry | None:
         wanted = title.strip().lower()
         return next((e for e in self._entries.values() if e.title.lower() == wanted), None)

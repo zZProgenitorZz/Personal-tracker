@@ -37,6 +37,20 @@ def ago(moment: datetime) -> str:
     return "just now"
 
 
+def utc_now() -> datetime:
+    """De klok voor de webpagina (tests zetten hem per tracker vooruit)."""
+    return datetime.now(timezone.utc)
+
+
+def quiet_for(moment: datetime, now: datetime) -> str:
+    """Hoe lang iets al stil ligt, in gewone taal: '3 weeks ago', '2 months ago'."""
+    days = (now - moment).days
+    for unit, size, below in [("day", 1, 14), ("week", 7, 60), ("month", 30, 365), ("year", 365, None)]:
+        if below is None or days < below:
+            n = max(1, days // size)
+            return f"{n} {unit}{'' if n == 1 else 's'} ago"
+
+
 def hue(text: str) -> int:
     """Een vaste kleurtoon per titel, binnen het paars-tot-teal palet."""
     return 160 + zlib.crc32(text.lower().encode()) % 140
@@ -55,7 +69,7 @@ def nice_date(moment: datetime, seconds: bool = False) -> str:
     return f"{moment:%a} {moment.day} {moment:%b %Y} · {time}"
 
 
-templates.env.filters.update(chapter=chapter, ago=ago, hue=hue, initials=initials, nice_date=nice_date)
+templates.env.filters.update(chapter=chapter, ago=ago, quiet_for=quiet_for, hue=hue, initials=initials, nice_date=nice_date)
 
 # Lijn-iconen (stijl van Lucide), te gebruiken via de macro ui.icon(naam).
 ICONS = {

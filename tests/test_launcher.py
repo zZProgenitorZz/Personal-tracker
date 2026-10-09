@@ -66,6 +66,12 @@ def test_server_always_on_localhost_without_reload():
     assert command[command.index("--port") + 1] == "8000"
 
 
+def test_server_never_waits_forever_when_stopping():
+    # Zonder grens kan uvicorn eeuwig wachten op een weggevallen verbinding van het venster.
+    command = load("launch.pyw").server_command()
+    assert int(command[command.index("--timeout-graceful-shutdown") + 1]) <= 10
+
+
 def test_uses_the_venv_python():
     launch = load("launch.pyw")
     assert launch.python_executable() == ROOT / ".venv" / "Scripts" / "python.exe"
@@ -112,6 +118,24 @@ def test_second_click_only_opens_a_window(launch, monkeypatch):
     monkeypatch.setattr(launch, "is_running", lambda: True)
     launch.main([])
     assert (launch.calls["started"], launch.calls["windows"], launch.calls["trays"]) == (0, 1, 0)
+
+
+def test_starts_the_server_even_when_an_old_icon_still_exists(launch, monkeypatch):
+    # Een vastgelopen launcher houdt het icoon vast; dan moet opstarten toch werken.
+    monkeypatch.setattr(launch, "claim_tray", lambda: False)
+    answers = iter([False, False, True])
+    monkeypatch.setattr(launch, "is_running", lambda: next(answers))
+    launch.main([])
+    assert (launch.calls["started"], launch.calls["windows"], launch.calls["trays"]) == (1, 1, 0)
+
+
+def test_own_server_stops_because_another_one_just_started(launch, monkeypatch):
+    # Twee keer snel klikken: de tweede server krijgt de poort niet, maar Progen draait wel.
+    monkeypatch.setattr(launch, "start_server", lambda: FakeProcess(exit_code=1))
+    answers = iter([False, False, False, True])
+    monkeypatch.setattr(launch, "is_running", lambda: next(answers))
+    launch.main([])
+    assert launch.calls["messages"] == [] and launch.calls["windows"] == 1
 
 
 def test_tells_you_when_the_server_does_not_start(launch, monkeypatch):
@@ -162,8 +186,25 @@ class FakeIcon:
         self.notes.append(text)
 
 
-def test_tray_menu(monkeypatch):
+def tray(monkeypatch):
+    """launch.pyw waarin acties van het icoon meteen draaien in plaats van op de achtergrond."""
     launch = load("launch.pyw")
+    monkeypatch.setattr(launch, "in_background", lambda action: action())
+    monkeypatch.setattr(launch, "show_message", lambda *a, **kw: pytest.fail("geen popup vanuit het icoon"))
+    return launch
+
+
+def test_tray_actions_run_in_the_background():
+    # Het menu van het icoon mag nooit blokkeren (anders reageert het icoon, en een popup, niet meer).
+    import threading
+    launch = load("launch.pyw")
+    ran_in, done = [], threading.Event()
+    launch.in_background(lambda: ran_in.append(threading.current_thread()) or done.set())
+    assert done.wait(5) and ran_in[0] is not threading.current_thread()
+
+
+def test_tray_menu(monkeypatch):
+    launch = tray(monkeypatch)
     icon, opened = FakeIcon(), []
     monkeypatch.setattr(launch, "open_window", lambda: opened.append(1))
     monkeypatch.setattr(launch, "sync_spotify", lambda: "Synced with Spotify · 3 new plays")
@@ -176,12 +217,20 @@ def test_tray_menu(monkeypatch):
 
 
 def test_stop_in_the_tray_keeps_the_icon_when_stopping_fails(monkeypatch):
-    launch = load("launch.pyw")
-    icon, messages = FakeIcon(), []
+    launch = tray(monkeypatch)
+    icon = FakeIcon()
     monkeypatch.setattr(launch, "request_stop", lambda: "Progen refused to stop (HTTP 403).")
-    monkeypatch.setattr(launch, "show_message", lambda text, **kw: messages.append(text))
     dict(launch.tray_menu_actions(icon))["Stop Progen"]()
-    assert not icon.stopped and messages
+    assert not icon.stopped and icon.notes == ["Progen refused to stop (HTTP 403)."]  # ballon, geen popup
+
+
+def test_stop_in_the_tray_when_progen_already_stopped_just_removes_the_icon(monkeypatch):
+    from app.desktop import NOT_RUNNING
+    launch = tray(monkeypatch)
+    icon = FakeIcon()
+    monkeypatch.setattr(launch, "request_stop", lambda: NOT_RUNNING)
+    dict(launch.tray_menu_actions(icon))["Stop Progen"]()
+    assert icon.stopped and icon.notes == []
 
 
 def test_icon_disappears_when_the_server_is_gone(monkeypatch):
@@ -252,3 +301,25 @@ def test_sync_from_the_tray_returns_the_message_as_text(monkeypatch):
     monkeypatch.setattr(desktop.urllib.request, "urlopen", lambda request, timeout: sent.append(request) or Answer(html))
     assert desktop.sync_spotify().endswith("Synced with Spotify 'now' · 2 new plays")
     assert sent[0].get_header("Hx-request") == "true"
+
+
+# ---- De server stopt altijd ----
+
+def test_stopping_also_schedules_a_hard_exit_as_safety_net(monkeypatch):
+    import app.shutdown as shutdown
+    timers = []
+
+    class FakeTimer:
+        def __init__(self, seconds, function, args=()):
+            self.seconds, self.function, self.args, self.daemon = seconds, function, args, False
+            timers.append(self)
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(shutdown.threading, "Timer", FakeTimer)
+    shutdown.stop_this_server()
+    graceful, hard = timers
+    assert graceful.seconds < 1 and graceful.args == [shutdown.signal.SIGINT]
+    assert hard.seconds >= 15 and hard.daemon  # daemon: bij een gewone stop verdwijnt hij vanzelf
+    assert hard.function is shutdown.force_exit

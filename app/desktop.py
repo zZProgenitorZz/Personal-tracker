@@ -13,6 +13,7 @@ HOST, PORT = "127.0.0.1", 8000  # nooit 0.0.0.0: Progen is alleen voor deze comp
 URL = f"http://{HOST}:{PORT}"
 SHUTDOWN_HEADER = "X-Progen-Shutdown"
 STOP_TIMEOUT = 10  # seconden
+NOT_RUNNING = "Progen isn't running."
 
 
 def is_running() -> bool:
@@ -37,7 +38,7 @@ def request_stop() -> str | None:
     except urllib.error.HTTPError as exc:
         return f"Progen refused to stop (HTTP {exc.code})."
     except (urllib.error.URLError, OSError):
-        return "Progen isn't running."
+        return NOT_RUNNING
     deadline = time.monotonic() + STOP_TIMEOUT
     while is_running() and time.monotonic() < deadline:
         time.sleep(0.25)
@@ -52,13 +53,15 @@ def sync_spotify() -> str:
         with urllib.request.urlopen(request, timeout=30) as response:
             html = response.read().decode("utf-8", "replace")
     except (urllib.error.URLError, OSError):
-        return "Progen isn't running."
+        return NOT_RUNNING
     text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()
     return text.replace("&#39;", "'").replace("&amp;", "&") or "Synced."
 
 
 def show_message(text: str, error: bool = True) -> None:
-    """Zonder console (pythonw) is een meldingsvenster de enige manier om iets te zeggen."""
+    """Zonder console (pythonw) is een meldingsvenster de enige manier om iets te zeggen.
+    Niet gebruiken vanuit het icoon in het systeemvak: daar blokkeert het venster het icoon
+    (en reageert het zelf niet meer). Het icoon gebruikt icon.notify."""
     try:
         ctypes.windll.user32.MessageBoxW(None, text, "Progen", 0x10 if error else 0x40)
     except (AttributeError, OSError):

@@ -278,6 +278,11 @@ const CONFIRM_TEXTS = {
     body: "It leaves your list. You can add it again later. Titles you finished still count in your stats.",
     action: "Remove",
   },
+  drop: {
+    title: (name) => `Drop ${name}?`,
+    body: "It moves to Dropped. Nothing is deleted: your progress stays, and you can pick it up again anytime.",
+    action: "Drop",
+  },
   restore: {
     title: (date) => `Restore the backup from ${date}?`,
     body: "All your trackers go back to how they were then. <strong>Anything you logged after that disappears from the app.</strong> Progen first saves a backup of how things are now, so you can always go back.",
@@ -304,6 +309,33 @@ el("confirm-dialog").addEventListener("close", (event) => {
   if (event.target.returnValue === "confirm" && confirmed) confirmed();
   confirmed = null;
 });
+
+
+// ---- Gathering dust: "Not now" ----
+// Verbergt een titel alleen in deze weergave: geen event, niets opgeslagen. Het dashboard
+// ververst na elke actie; deze lijst houdt de verborgen titels verborgen tot je de pagina herlaadt.
+
+const dustHidden = new Set();
+
+function hideDust(root) {
+  for (const row of root.querySelectorAll(".dust-row")) {
+    if (dustHidden.has(row.dataset.dustId)) row.hidden = true;
+  }
+  for (const panel of root.querySelectorAll(".dust")) {
+    panel.hidden = !panel.querySelector(".dust-row:not([hidden])");
+    const more = panel.querySelector(".dust-more");
+    if (more) more.hidden = !more.querySelector(".dust-row:not([hidden])");
+  }
+}
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-dust-dismiss]");
+  if (!button) return;
+  dustHidden.add(button.closest(".dust-row").dataset.dustId);
+  hideDust(document);
+});
+
+document.addEventListener("htmx:afterSwap", () => hideDust(document));
 
 
 // ---- Toasts ----

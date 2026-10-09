@@ -30,10 +30,10 @@ powershell -ExecutionPolicy Bypass -File scripts\install_shortcut.ps1 -StartMenu
 Daarna staat **Progen** op je bureaublad (met `-StartMenu` ook in het Startmenu, samen met **Stop Progen**; met `-StopOnDesktop` staat Stop Progen ook op het bureaublad).
 
 - **Progen** start `launch.pyw` met `pythonw.exe` uit `.venv`, dus zonder consolevenster. Draait de server nog niet, dan start hij op de achtergrond (alleen op `127.0.0.1:8000`, zonder `--reload`) met de uitvoer in `data/launcher.log`. Zodra hij antwoordt, opent Progen als eigen venster in Edge (`msedge --app=...`), of in je standaardbrowser als Edge er niet is. Start hij niet binnen 15 seconden, dan zegt een melding waar het log staat.
-- **Icoon bij de klok:** zolang Progen draait, staat er een Progen-icoon in het systeemvak (onder "verborgen pictogrammen", net als WhatsApp of Spotify). Dubbelklik opent Progen; rechtsklik geeft **Open Progen**, **Sync Spotify now** en **Stop Progen**. Er is altijd maar één zo'n icoon: nog eens op de snelkoppeling klikken opent alleen een nieuw venster.
+- **Icoon bij de klok:** zolang Progen draait, staat er een Progen-icoon in het systeemvak (onder "verborgen pictogrammen", net als WhatsApp of Spotify). Dubbelklik opent Progen; rechtsklik geeft **Open Progen**, **Sync Spotify now** en **Stop Progen**. Er is altijd maar één zo'n icoon: nog eens op de snelkoppeling klikken opent alleen een nieuw venster. Draait de server niet, dan start de snelkoppeling hem altijd, ook als er (nog) een ander icoon is.
 - **Het venster sluiten stopt de server niet**; hij blijft op de achtergrond draaien, zodat de Spotify-sync doorgaat.
 - **Automatisch starten bij aanmelden:** zet in Settings > App de schakelaar **Start with Windows** aan. Progen zet dan een waarde `Progen` in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (alleen voor jouw gebruiker, geen beheerdersrechten nodig) die `launch.pyw --background` start: server en icoon, zonder venster. Uitzetten haalt die waarde weer weg. Verplaats je de projectmap, zet de schakelaar dan opnieuw aan.
-- **Stop Progen** (in het menu van het icoon, of `stop.pyw`) vraagt de server netjes te stoppen via `POST /admin/shutdown`: lopende verzoeken worden afgerond en de database wordt gesloten; daarna verdwijnt het icoon. Die route werkt alleen vanaf deze computer (127.0.0.1) en met de header `X-Progen-Shutdown`, zodat een website in je browser hem niet kan aanroepen.
+- **Stop Progen** (in het menu van het icoon, of `stop.pyw`) vraagt de server netjes te stoppen via `POST /admin/shutdown`: lopende verzoeken worden afgerond en de database wordt gesloten; daarna verdwijnt het icoon. Uvicorn krijgt daar hooguit 5 seconden voor (`--timeout-graceful-shutdown`); leeft het proces na 20 seconden nog, dan stopt het zichzelf hard (`app/shutdown.py`). Het icoon toont nooit een popup maar een ballonmelding, want een popup zou het icoon blokkeren. Draaide Progen al niet meer, dan verdwijnt het icoon gewoon. Die route werkt alleen vanaf deze computer (127.0.0.1) en met de header `X-Progen-Shutdown`, zodat een website in je browser hem niet kan aanroepen.
 - Het icoon (`app/static/icon.ico`, 16 t/m 256 px) is gemaakt uit `icon.svg` met `scripts/make_icon.py`: Edge of Chrome rendert het SVG headless als transparante PNG, Pillow maakt er een .ico van. Opnieuw uitvoeren als het icoon verandert, en daarna `install_shortcut.ps1` opnieuw.
 - Wil je tijdens het programmeren automatisch herladen, stop dan eerst Progen (Stop Progen) en start zoals hierboven met `uvicorn ... --reload`; ze gebruiken dezelfde poort.
 
@@ -178,6 +178,8 @@ Regels:
 
 Hoofdstukken zijn `float`, zodat hoofdstukken als 45.5 mogelijk zijn.
 
+**Gathering dust** (paneel op het Dashboard): series op Reading zonder voortgang of statuswijziging in meer dan `STALE_READING_DAYS` = 21 dagen (bovenaan `app/reading/web.py`), langst stil eerst (`LibraryProjection.stale(now, days)`). Plan to Read, On hold, Completed en Dropped zijn nooit stoffig. Per serie: +1 hoofdstuk, On hold of Drop (met bevestiging), via de gewone endpoints; **Not now** verbergt hem alleen tot je de pagina herlaadt (geen event). Het startscherm toont "N gathering dust".
+
 ## Watching (klaar)
 
 | Onderdeel   | Inhoud |
@@ -198,6 +200,8 @@ Regels:
 6. **Plan to Watch** is de backlog: toevoegen is gewoon `ShowAdded(status=PLAN_TO_WATCH)`. Telt niet mee als "watching"; van Plan to Watch naar Completed zetten telt wél in "Finished this month" (regel 3).
 
 **Pick something** (Library van Reading en Watching, alleen met een backlog): toont een willekeurige titel uit Plan to Read/Watch, eventueel binnen één genre. *Another one* kiest een andere; *Start* stuurt de gewone statuswijziging (`ChangeStatus`/`ChangeShowStatus`). Het kiezen zelf (`GET /ui/<tracker>/pick`) is alleen lezen: geen command, geen event.
+
+**Gathering dust**: zoals bij Reading, maar voor titels op Watching die meer dan `STALE_WATCHING_DAYS` = 30 dagen niet zijn toegevoegd of van status gewisseld (bovenaan `app/watching/web.py`; `WatchlistProjection.stale(now, days)`). Ruimer, want zonder afleveringen is "lang niets veranderd" een zwakker signaal. Genres aanpassen telt niet als activiteit.
 
 De event-klassen heten `Show...`, omdat de event store alleen de klassenaam opslaat; namen moeten uniek zijn over alle trackers heen.
 

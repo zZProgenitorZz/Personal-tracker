@@ -11,6 +11,7 @@ from fastapi import APIRouter, File, Form, Request, UploadFile
 from ..cover_search import CoverSearch
 from ..covers import CoverError, CoverStore
 from ..domain import DomainError
+from .. import web as shared
 from ..web import Backlog, pick_from_backlog, render, save_cover, templates, toast
 from .commands import AddShow, ChangeShowStatus, RemoveShow, SetShowGenres, WatchingCommandHandler
 from .events import WatchKind, WatchStatus
@@ -18,6 +19,10 @@ from .genres import WATCH_GENRES
 from .projections import WatchActivityProjection, WatchEntry, WatchlistProjection
 
 CHANGED = "watching-changed"
+# Gathering dust: een titel op Watching die zoveel dagen niet is toegevoegd of van status gewisseld.
+# Ruimer dan bij Reading, want Watching houdt geen afleveringen bij: een zwakker signaal.
+STALE_WATCHING_DAYS = 30
+DUST_SHOWN = 5  # daarna "+N more"
 
 WATCH_STATUS_LABELS = {
     WatchStatus.WATCHING: "Watching",
@@ -31,6 +36,10 @@ WATCH_KIND_LABELS = {WatchKind.SERIES: "Series", WatchKind.ANIME: "Anime", Watch
 templates.env.globals.update(
     WATCH_STATUS_LABELS=WATCH_STATUS_LABELS, WATCH_KIND_LABELS=WATCH_KIND_LABELS, WATCH_GENRES=WATCH_GENRES.names,
 )
+
+
+def utc_now():
+    return shared.utc_now()
 
 
 def finished_per_month(per_day: dict[date, int], today: date, months: int) -> list[dict]:
@@ -52,6 +61,7 @@ def watching_summary(watchlist: WatchlistProjection, activity: WatchActivityProj
     """Voor het startscherm en Settings."""
     today = date.today()
     current = watchlist.currently_watching()
+    dusty = len(watchlist.stale(utc_now(), STALE_WATCHING_DAYS))
     this_month = sum(n for d, n in activity.per_day().items() if (d.year, d.month) == (today.year, today.month))
     return {
         "stats": [(len(current), "watching now"), (this_month, "finished this month"),
@@ -59,6 +69,7 @@ def watching_summary(watchlist: WatchlistProjection, activity: WatchActivityProj
         "current": current[:5],
         "count": len(watchlist.all()),
         "unit": "titles",
+        "badge": f"{dusty} gathering dust" if dusty else None,
     }
 
 
@@ -102,8 +113,11 @@ def create_watching_web_router(
     @router.get("/dashboard")
     def dashboard(request: Request):
         summary = watching_summary(watchlist, activity)
+        now = utc_now()
         return render(request, "watching_dashboard.html", summary=summary,
-                      current=watchlist.currently_watching()[:6], counts=counts())
+                      current=watchlist.currently_watching()[:6], counts=counts(),
+                      dust=watchlist.stale(now, STALE_WATCHING_DAYS), dust_days=STALE_WATCHING_DAYS,
+                      dust_shown=DUST_SHOWN, now=now)
 
     @router.get("/library")
     def library_page(request: Request):

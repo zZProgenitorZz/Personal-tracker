@@ -178,3 +178,45 @@
   {% if cta %}<button class="btn btn-primary" type="button" data-open-add>{{ icon('plus', 16) }}{{ cta_label }}</button>{% endif %}
 </div>
 {%- endmacro %}
+
+{# Gathering dust: titels op Reading/Watching die al een tijd stil liggen. Alleen lezen; de knoppen
+   sturen de gewone endpoints, waarna het dashboard zichzelf ververst. "Not now" verbergt alleen hier. #}
+{% macro dust_row(e, now, reading) -%}
+{% set base = ("/ui/reading/series/" ~ e.series_id) if reading else ("/ui/watching/shows/" ~ e.show_id) %}
+<li class="dust-row" data-dust-id="{{ e.series_id if reading else e.show_id }}">
+  {{ cover(e.title, e.kind, e.cover) }}
+  <div class="dust-text">
+    <b title="{{ e.title }}">{{ e.title }}</b>
+    <span>{% if reading %}Chapter {{ e.current_chapter|chapter }} · {% endif %}{{ e.updated_at|quiet_for(now) }}</span>
+  </div>
+  <div class="dust-actions">
+    {% if reading %}{% set next = (e.current_chapter // 1 + 1)|int %}
+    <button class="btn-plus" type="button" hx-post="{{ base }}/progress" hx-vals='{"chapter": {{ next }}}'
+            hx-swap="none" title="Log chapter {{ next }}">{{ icon('plus', 14) }}1</button>
+    {% endif %}
+    <button class="btn btn-ghost btn-sm" type="button" hx-post="{{ base }}/status" hx-vals='{"status": "on_hold"}'
+            hx-swap="none"><i class="dot dot-on_hold"></i>On hold</button>
+    <button class="btn btn-ghost btn-sm" type="button" hx-post="{{ base }}/status" hx-vals='{"status": "dropped"}'
+            hx-swap="none" hx-confirm="{{ e.title }}" data-confirm-kind="drop"><i class="dot dot-dropped"></i>Drop</button>
+    <button class="btn-link" type="button" data-dust-dismiss>Not now</button>
+  </div>
+</li>
+{%- endmacro %}
+
+{% macro dust_panel(entries, days, shown, now, reading=true) -%}
+<section class="panel dust" aria-label="Gathering dust">
+  <div class="panel-head">
+    <h2>{{ icon('clock', 18) }}Gathering dust</h2>
+    <span class="muted">On {{ 'Reading' if reading else 'Watching' }}, untouched for {{ days }}+ days</span>
+  </div>
+  <ul class="dust-list">
+    {% for e in entries[:shown] %}{{ dust_row(e, now, reading) }}{% endfor %}
+  </ul>
+  {% if entries|length > shown %}
+  <details class="dust-more">
+    <summary>+{{ entries|length - shown }} more</summary>
+    <ul class="dust-list">{% for e in entries[shown:] %}{{ dust_row(e, now, reading) }}{% endfor %}</ul>
+  </details>
+  {% endif %}
+</section>
+{%- endmacro %}

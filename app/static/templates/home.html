@@ -17,6 +17,7 @@
         <div>
           <h2>{{ tracker.name }}</h2>
           <span class="muted">{{ summary.count }} {{ summary.unit }}</span>
+          {%- if summary.badge %}<span class="tracker-badge">{{ ui.icon('clock', 12) }}{{ summary.badge }}</span>{% endif %}
         </div>
         <span class="tracker-open">{{ ui.icon('arrow-right', 18) }}</span>
       </div>

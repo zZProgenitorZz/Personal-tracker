@@ -16,6 +16,8 @@
     {{ ui.stat('layers', 'teal', summary.count, 'Titles in your list') }}
   </section>
 
+  {% if dust %}{{ ui.dust_panel(dust, dust_days, dust_shown, now, reading=false) }}{% endif %}
+
   <div class="dash-grid">
     <section class="panel">
       <div class="panel-head">
