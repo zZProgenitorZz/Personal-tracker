@@ -1024,6 +1024,251 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
   .dust-actions { grid-column: 1 / -1; justify-content: flex-start; }
 }
 
+/* ---- Planner ---- */
+
+/* Snel invoeren: één rustig veld bovenaan, met de preview eronder */
+.quick-add { margin-bottom: 28px; }
+.quick-add-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 18px;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, .035);
+  box-shadow: inset 0 0 0 1px var(--border);
+  transition: box-shadow .2s, background .2s;
+}
+.quick-add-row:focus-within { background: rgba(255, 255, 255, .05); box-shadow: inset 0 0 0 1px var(--purple-hi), 0 0 0 4px rgba(139, 92, 246, .14); }
+.quick-add-icon { display: grid; color: var(--purple-hi); }
+.quick-add-input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: 16px var(--font);
+}
+.quick-add-input::placeholder { color: var(--faint); }
+.quick-add-input:focus { outline: none; }
+.quick-add-preview { min-height: 22px; padding: 8px 18px 0; }
+.preview-text { display: inline-flex; align-items: center; gap: 8px; color: var(--teal-hi); font-size: 13.5px; font-weight: 500; }
+.quick-add-more { padding: 0 18px; }
+.quick-add-more summary {
+  width: fit-content;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  list-style: none;
+  cursor: pointer;
+}
+.quick-add-more summary::-webkit-details-marker { display: none; }
+.quick-add-more summary::after { content: " ›"; display: inline-block; transition: transform .2s; }
+.quick-add-more[open] summary::after { transform: rotate(90deg); }
+.quick-add-more summary:hover { color: var(--text); }
+.more-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, .025);
+}
+.more-days { grid-column: 1 / -1; }
+.more-grid .select { padding-top: 10px; padding-bottom: 10px; }
+
+/* Bladeren: vorige / vandaag / volgende */
+.planner-pager { display: flex; align-items: center; gap: 6px; }
+.planner-pager .btn-icon { width: 38px; height: 38px; border-radius: 12px; }
+.planner-pager .btn-icon:hover { color: var(--text); background: rgba(255, 255, 255, .06); }
+.planner-pager .btn[disabled] { opacity: .45; cursor: default; }
+
+/* Week: zeven kolommen, weinig randen */
+.week-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+.week-day {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 220px;
+  padding: 14px 10px;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, .025);
+}
+.week-day.is-today { background: rgba(139, 92, 246, .1); box-shadow: inset 0 0 0 1px rgba(167, 139, 250, .3); }
+.week-day.is-past { opacity: .62; }
+.day-head { display: flex; align-items: baseline; gap: 8px; padding: 0 4px; }
+.day-head span { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.day-head b { font: 700 20px/1 var(--font-display); letter-spacing: -.02em; }
+.is-today .day-head span, .is-today .day-head b { color: var(--purple-hi); }
+.week-empty { margin: 0; padding: 0 4px; color: var(--faint); font-size: 12.5px; }
+.plan-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.plan-chip {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .05);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .2s, transform .2s var(--ease);
+}
+.plan-chip:hover { background: rgba(139, 92, 246, .18); }
+.plan-chip:active { transform: scale(.98); }
+.plan-chip.is-all-day { background: rgba(45, 212, 191, .1); }
+.plan-chip.is-all-day:hover { background: rgba(45, 212, 191, .18); }
+.plan-chip-time { color: var(--purple-hi); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.is-all-day .plan-chip-time { color: var(--teal-hi); }
+.plan-chip-title { overflow: hidden; font-size: 13px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.plan-chip-repeat { position: absolute; top: 8px; right: 8px; display: grid; color: var(--faint); }
+.plan-chip.is-done, .tl-item.is-done .tl-card { background: rgba(255, 255, 255, .025); }
+.plan-chip.is-done .plan-chip-time, .plan-chip.is-done .plan-chip-title,
+.tl-item.is-done .tl-card b, .tl-item.is-done .tl-time { color: var(--faint); text-decoration: line-through; }
+
+/* Day: een rustige tijdlijn */
+.timeline { position: relative; display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.timeline::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 103px;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgba(167, 139, 250, .4), rgba(45, 212, 191, .25));
+}
+.tl-item { position: relative; display: grid; grid-template-columns: 90px minmax(0, 1fr); align-items: center; gap: 34px; }
+.tl-item::before {
+  content: "";
+  position: absolute;
+  left: 99px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--purple-hi);
+  box-shadow: 0 0 0 4px var(--bg);
+}
+.tl-item.is-all-day::before { background: var(--teal-hi); }
+.tl-item.is-done::before { background: var(--faint); }
+.tl-time { color: var(--muted); font-size: 13px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.tl-card {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  padding: 16px 44px 16px 18px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, .04);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .2s;
+}
+.tl-card:hover { background: rgba(139, 92, 246, .14); }
+.tl-card b { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.tl-note { color: var(--muted); font-size: 13px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tl-card .plan-chip-repeat { top: 50%; right: 16px; transform: translateY(-50%); }
+
+/* Someday */
+.someday-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.someday-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 16px 16px 20px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, .035);
+}
+.someday-text { display: grid; gap: 4px; min-width: 0; }
+.someday-text b { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.someday-text span { overflow: hidden; color: var(--muted); font-size: 13px; white-space: nowrap; text-overflow: ellipsis; }
+.someday-item .btn { flex: none; }
+
+/* De dialog van een plan */
+.dialog-plan { width: min(520px, calc(100vw - 32px)); }
+.plan-dialog h2.is-done { color: var(--faint); text-decoration: line-through; }
+.plan-dialog .dialog-head h2 { overflow-wrap: anywhere; }
+.plan-facts { display: grid; gap: 8px; margin-top: -4px; color: var(--muted); font-size: 14px; }
+.plan-facts p { display: flex; align-items: center; gap: 8px; margin: 0; }
+.plan-facts .icon { color: var(--teal-hi); }
+.plan-note { white-space: pre-wrap; }
+.plan-main { display: flex; flex-wrap: wrap; gap: 10px; }
+.plan-section { border-radius: var(--radius-md); background: rgba(255, 255, 255, .03); }
+.plan-section summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+.plan-section summary::-webkit-details-marker { display: none; }
+.plan-section summary .icon { color: var(--muted); }
+.plan-section summary::after { content: "›"; margin-left: auto; color: var(--faint); transition: transform .2s; }
+.plan-section[open] summary::after { transform: rotate(90deg); }
+.plan-form { display: grid; gap: 14px; padding: 0 16px 16px; }
+.plan-form .dialog-actions { margin-top: 0; }
+.field-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.field-pair .select { padding-top: 10px; padding-bottom: 10px; }
+.plan-hint { margin: -4px 0 0; font-size: 12.5px; }
+.plan-someday { margin: -6px 16px 14px; }
+.plan-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 2px; }
+.plan-footer .btn-link { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.weekday-picker { gap: 5px; }
+
+/* Settings: herinneringen */
+.reminders { display: grid; gap: 16px; }
+.reminder-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 14px; }
+.reminder-row > span { display: grid; gap: 4px; }
+.reminder-row .select { min-width: 160px; padding-top: 10px; padding-bottom: 10px; }
+.reminder-time { width: auto; min-width: 120px; }
+#planner-reminders .note { margin: 18px 0 0; }
+
+/* Startscherm: vandaag uit Planner in plaats van covers */
+.tracker-agenda { position: relative; display: grid; gap: 8px; }
+.tracker-next { margin: 0; color: var(--text); font-size: 15px; font-weight: 600; }
+.agenda-row { display: flex; gap: 12px; margin: 0; color: var(--muted); font-size: 13.5px; }
+.agenda-row time { flex: none; min-width: 48px; color: var(--purple-hi); font-weight: 600; font-variant-numeric: tabular-nums; }
+.agenda-row span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+@media (max-width: 1080px) {
+  .week-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  /* Smal: de week wordt een lijst per dag */
+  .week-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .week-day { flex-direction: row; align-items: flex-start; gap: 14px; min-height: 0; padding: 12px; }
+  .day-head { flex-direction: column; align-items: center; gap: 2px; width: 40px; flex: none; padding: 2px 0 0; }
+  .week-day .plan-list, .week-empty { flex: 1; min-width: 0; }
+  .week-empty { padding-top: 8px; }
+  .more-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 14px; }
+  .more-note { grid-column: 1 / -1; }
+  .quick-add-row { padding-left: 14px; }
+  .quick-add-input { font-size: 15px; }
+  .timeline::before { left: 67px; }
+  .tl-item { grid-template-columns: 54px minmax(0, 1fr); gap: 26px; }
+  .tl-item::before { left: 63px; }
+  .tl-time { font-size: 12px; }
+  .reminder-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .reminder-row > span { grid-column: 1 / -1; }
+  .reminder-row .select { min-width: 0; width: 100%; }
+  .planner .page-head { align-items: flex-start; }
+}
+@media (max-width: 420px) {
+  .field-pair { grid-template-columns: minmax(0, 1fr); }
+  .someday-item { flex-direction: column; align-items: stretch; }
+}
+
 /* Startscherm: de Wrapped-kaart onder de trackers */
 .wrapped-card {
   position: relative;

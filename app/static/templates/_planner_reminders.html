@@ -1,0 +1,19 @@
+{# Settings: herinneringen voor Planner. Eén instelling voor alle plannen; elke wijziging slaat meteen op. #}
+<div id="planner-reminders" hx-disinherit="*" hx-get="/ui/planner/reminders" hx-trigger="planner-changed from:body" hx-swap="outerHTML">
+  <form class="reminders" hx-post="/ui/planner/reminders" hx-trigger="change" hx-swap="none">
+    {% for key, label, enabled, minutes in [('first', 'First reminder', first_on, first_min), ('second', 'Second reminder', second_on, second_min)] %}
+    <div class="reminder-row">
+      <span><b>{{ label }}</b><span class="muted">For every plan with a date</span></span>
+      <select class="select" name="{{ key }}_minutes" aria-label="{{ label }}: how long before">
+        {%- for value, text in choices %}<option value="{{ value }}"{% if value == minutes %} selected{% endif %}>{{ text }}</option>{% endfor %}
+      </select>
+      <input class="switch" type="checkbox" name="{{ key }}_enabled" value="on"{% if enabled %} checked{% endif %} aria-label="{{ label }} on">
+    </div>
+    {% endfor %}
+    <div class="reminder-row">
+      <span><b>All-day plans</b><span class="muted">Their reminders come at this time</span></span>
+      <input class="input input-sm reminder-time" type="time" name="all_day_time" value="{{ all_day_time.strftime('%H:%M') }}" aria-label="Time for all-day reminders">
+    </div>
+  </form>
+  <p class="muted note">Reminders show up by the clock while Progen runs; turn on Start with Windows so it always does. Plans you send to your iPhone take these reminders along.</p>
+</div>

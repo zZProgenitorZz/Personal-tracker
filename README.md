@@ -138,6 +138,16 @@ app/
     genres.py          de genrelijst van Watching
     api.py             /watching endpoints (JSON)
     web.py             /ui/watching endpoints (HTML-fragmenten voor htmx)
+  planner/
+    events.py          PlanAdded, PlanRescheduled, PlanEdited, PlanDone, PlanReopened, PlanSkipped, PlanRemoved, ReminderSettingsChanged
+    aggregate.py       Plan, ReminderSettings
+    commands.py        AddPlan, ReschedulePlan, EditPlan, MarkPlanDone, ReopenPlan, SkipPlan, RemovePlan, ChangeReminderSettings + handler
+    schedule.py        wanneer een plan valt (herhalingen uitrekenen), en de lokale klok
+    projections.py     AgendaProjection (dag, week, Someday, herinneringen), PlannerActivityProjection
+    parse.py           snel invoeren in gewone taal (NL en EN)
+    ics.py             een plan als .ics voor je iPhone (RFC 5545)
+    api.py             /planner endpoints (JSON), waaronder /planner/due voor de meldingen
+    web.py             /ui/planner endpoints (HTML-fragmenten voor htmx)
   wrapped/
     projections.py     WrappedProjection: het jaaroverzicht uit de events van alle trackers (alleen lezen)
     web.py             /ui/wrapped (#wrapped) en de Wrapped-kaart op het startscherm
@@ -148,7 +158,7 @@ scripts/
 tests/
   test_eventstore.py, test_api.py, test_web.py
   test_covers.py, test_cover_flow.py
-  reading/, watching/, listening/, wrapped/  given/when/then-tests per regel
+  reading/, watching/, listening/, planner/, wrapped/  given/when/then-tests per regel
 data/                  tracker.db, covers/ en de spotify_*-bestanden (niet in git)
 ```
 
@@ -236,6 +246,50 @@ Regels:
 Hoe het werkt (`app/listening/spotify.py`, een automation-slice): de sync vraagt `GET /v1/me/player/recently-played?limit=50&after=<laatste played_at in ms>` en stuurt voor elk nummer hetzelfde `RecordPlay` als de API, met `source="api"`. Tokens staan in `data/spotify_token.json`, niet in de event store; de access token wordt automatisch ververst met de refresh token. Bij een 429 wacht de achtergrondtaak de `Retry-After` af. Fouten worden gelogd (logger `progen.listening`) en laten de app nooit crashen; de laatste sync en een eventuele fout staan in Settings.
 
 **Beperking:** Spotify geeft per verzoek maximaal de laatste **50** nummers. Luister je tussen twee syncs meer dan 50 nummers (bij 30 minuten is dat haast onmogelijk, maar staat Progen een dag uit wel), dan zijn de oudere via de API niet meer op te halen.
+
+## Planner (klaar)
+
+Afspraken en plannen, als vervanging voor de agenda op je iPhone (`#planner`, tabbladen **Week**, **Day** en **Someday**).
+
+| Onderdeel   | Inhoud |
+| ----------- | ------ |
+| Plannen     | Titel, datum (geen datum = Someday), tijd (geen tijd = de hele dag), duur, notitie, herhaling |
+| Herhaling   | Elke dag, elke week op één of meer weekdagen, elke maand op dezelfde dag (bij 31 in een korte maand: de laatste dag), optioneel tot een einddatum |
+| Events      | `PlanAdded`, `PlanRescheduled`, `PlanEdited`, `PlanDone`, `PlanReopened`, `PlanSkipped`, `PlanRemoved`, `ReminderSettingsChanged` (eigen stream `planner-settings`) |
+| Commands    | `AddPlan`, `ReschedulePlan`, `EditPlan`, `MarkPlanDone`, `ReopenPlan`, `SkipPlan`, `RemovePlan`, `ChangeReminderSettings` |
+| Read models | Agenda (dag, week, Someday, herinneringen), PlannerActivity (hoe vaak een plan is verzet; nog niet in beeld) |
+
+Datum en tijd zijn **lokale tijd** (de klok van de pc), niet UTC zoals `at` van een event. Herhaalde keren worden in de projectie uitgerekend (`app/planner/schedule.py`), niet als losse events opgeslagen.
+
+Regels:
+
+1. Een titel mag niet leeg zijn.
+2. Een tijd zonder datum wordt geweigerd; een herhaling zonder datum ook (een herhaling kan dus niet naar Someday).
+3. Afvinken, heropenen, verzetten, bewerken of overslaan van een verwijderd plan wordt geweigerd.
+4. Afvinken gaat per keer: bij een herhaling per voorkomen. Iets wat al af is nog eens afvinken wordt geweigerd; heropenen kan alleen als het af is. Een plan voor Someday is af op de dag dat je het afvinkt.
+5. `PlanDone` of `PlanSkipped` op een dag waarop het plan niet valt, wordt geweigerd. Overslaan kan alleen bij een herhaling, en elke keer maar één keer.
+6. Verzetten naar precies dezelfde datum en tijd, of bewerken zonder iets te veranderen, levert geen event op. Een herhaling verzetten verzet de hele reeks.
+7. Wekelijks zonder weekdagen = op de weekdag van de begindatum; een herhaling kan niet eindigen voordat hij begint.
+8. Herinneringen zijn één instelling voor alle plannen (Settings > Planner reminders): standaard 1 dag en 3 uur van tevoren, allebei aan. Plannen voor de hele dag krijgen hun herinnering om 9:00 (instelbaar): een dag of meer van tevoren op die dag, korter op de dag zelf. Dezelfde instelling opnieuw opslaan levert geen event op.
+
+**Snel invoeren in gewone taal** (`app/planner/parse.py`, een eigen kleine parser). Eén veld bovenaan; tijdens het typen toont een preview wat Progen ervan maakt, Enter slaat op. Wat niet herkend wordt, is de titel. Nederlands en Engels door elkaar:
+
+| Je typt | Progen maakt ervan |
+| ------- | ------------------ |
+| `Tandarts vr 14u` | Tandarts · de eerstvolgende vrijdag · 14:00 |
+| `overmorgen om 9 bellen` | bellen · overmorgen · 9:00 |
+| `dentist tomorrow 3pm` | dentist · morgen · 15:00 |
+| `12 okt verjaardag Sam`, `Party 12/10 20u30` | dag eerst; zonder jaar de eerstvolgende |
+| `Yoga next week tue 18:00`, `Kapper wo volgende week` | die weekdag in de volgende week |
+| `Sporten elke ma en do 7:00`, `every monday standup 9:30` | wekelijks op die dagen |
+| `Vitamines elke dag`, `Huur elke maand 1 nov` | dagelijks / maandelijks |
+| `Learn Korean` | Someday |
+
+Dagen: vandaag/today, morgen/tomorrow, overmorgen, weekdagen voluit of kort (ma … zo, mon … sun); altijd de eerstvolgende, vandaag telt mee zolang de tijd nog niet voorbij is. Tijden: `14:00`, `14.30`, `14u`, `20u30`, `om 9`, `9am`/`3pm`; alleen een tijd = vandaag (of morgen als hij voorbij is). Korte weekdagen die ook een gewoon woord zijn (`do`, `zo`, `ma`, `di`, `wo`, `sun` …) tellen alleen naast een tijd of na `op`/`on`/`elke`/`every`, zodat "do the dishes" en "zo snel mogelijk" gewoon titels blijven. Met **More** zet je notitie, duur en herhaling precies.
+
+**Naar je iPhone:** in het venster van een plan geeft **Send to iPhone** een `.ics`-bestand (`GET /ui/planner/<id>.ics`, zelf geschreven volgens RFC 5545): het plan met herhaling (RRULE), overgeslagen keren (EXDATE) en een herinnering (VALARM) per herinnering uit Settings op dat moment. Mail het naar jezelf en open het op je iPhone.
+
+**Meldingen in Windows:** het icoon bij de klok vraagt elke minuut `GET /planner/due?since=…` op (alleen lezen, geen event) en toont nieuwe herinneringen als melding, bijvoorbeeld "Tomorrow: Tandarts at 14:00" of "In 3 hours: Tandarts at 14:00". Wat al gemeld is, onthoudt het icoon in het geheugen; na een herstart meldt het niets van vóór de start. **Dit werkt alleen zolang Progen draait**: zet daarom in Settings **Start with Windows** aan.
 
 ## Wrapped
 
@@ -354,7 +408,7 @@ Eerst handmatig invoeren; automatisch importeren komt later (zie punt 5).
 Elk domein volgt dezelfde stappen als Reading en Watching. Bestaande domeinen hoeven daarvoor niet te veranderen.
 
 1. **Event model** maken: slices met trigger, command, event en read model, plus de regels als given/when/then.
-2. **`app/<domein>/events.py`**: events als `@dataclass(frozen=True)`, namen in de verleden tijd, met een `at`-veld.
+2. **`app/<domein>/events.py`**: events als `@dataclass(frozen=True)`, namen in de verleden tijd, met een `at`-veld. Velden mogen `datetime`, `date`, `time`, enums, tuples, optioneel (`X | None`) en geneste frozen dataclasses zijn; de event store zet ze terug naar het juiste type.
 3. **`aggregate.py`**: toestand opbouwen in `_apply`, regels checken in de beslismethodes. Tests in `tests/<domein>/`.
 4. **`commands.py`**: commands en een command handler (laden → beslissen → opslaan). Tests met een `:memory:` event store.
 5. **`projections.py`**: read models met een `apply(event)`-methode. Test ook dat een herbouwd read model gelijk is aan het live read model.

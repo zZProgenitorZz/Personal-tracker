@@ -1,0 +1,32 @@
+{% import "_macros.html" as ui %}
+{% import "_planner_macros.html" as pm %}
+{# Planner · Week: zeven kolommen, maandag tot zondag. Op een smal scherm een lijst per dag. #}
+<div class="page planner" hx-disinherit="*" hx-get="/ui/planner/week?start={{ monday }}"
+     hx-trigger="planner-changed from:body" hx-swap="outerHTML">
+  {{ ui.tracker_tabs('planner', 'week', tabs) }}
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Planner · Week</p>
+      <h1>Your <span class="grad-text">week</span></h1>
+      <p class="lede">{{ label }} · {{ total }} plan{{ '' if total == 1 else 's' }}</p>
+    </div>
+    {{ pm.pager("/ui/planner/week?start=", previous, monday, following, this_week, "Previous week", "Next week") }}
+  </header>
+
+  {{ pm.quick_add() }}
+
+  <div class="week-grid">
+    {% for d, items in days %}
+    <section class="week-day{% if d == today %} is-today{% elif d < today %} is-past{% endif %}" aria-label="{{ d.strftime('%A %d %B') }}">
+      <header class="day-head"><span>{{ short_days[d.weekday()] }}</span><b>{{ d.day }}</b></header>
+      {% if items %}
+      <ul class="plan-list">
+        {% for o in items %}<li>{{ pm.chip(o) }}</li>{% endfor %}
+      </ul>
+      {% else %}
+      <p class="week-empty">Free</p>
+      {% endif %}
+    </section>
+    {% endfor %}
+  </div>
+</div>

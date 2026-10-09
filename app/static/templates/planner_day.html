@@ -1,0 +1,40 @@
+{% import "_macros.html" as ui %}
+{% import "_planner_macros.html" as pm %}
+{# Planner · Day: één dag als rustige lijst met een tijdlijn. #}
+<div class="page planner" hx-disinherit="*" hx-get="/ui/planner/day?d={{ day }}"
+     hx-trigger="planner-changed from:body" hx-swap="outerHTML">
+  {{ ui.tracker_tabs('planner', 'day', tabs) }}
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Planner · {{ 'Today' if day == today else 'Day' }}</p>
+      <h1>{{ label.split(' ')[0] }} <span class="grad-text">{{ label.split(' ', 1)[1] }}</span></h1>
+      <p class="lede">
+        {%- if items %}{{ items|length }} plan{{ '' if items|length == 1 else 's' }}{% if items|selectattr('done')|list %}, {{ items|selectattr('done')|list|length }} done{% endif %}.
+        {%- else %}A free day.{% endif -%}
+      </p>
+    </div>
+    {{ pm.pager("/ui/planner/day?d=", previous, day, following, today, "Previous day", "Next day") }}
+  </header>
+
+  {{ pm.quick_add() }}
+
+  {% if items %}
+  <ol class="timeline">
+    {% for o in items %}
+    <li class="tl-item{% if o.done %} is-done{% endif %}{% if not o.time %} is-all-day{% endif %}">
+      <span class="tl-time">{{ when_text(o) }}</span>
+      <button class="tl-card" type="button" hx-get="/ui/planner/plans/{{ o.plan.plan_id }}?on={{ o.on }}"
+              hx-target="#plan-slot" hx-swap="innerHTML">
+        <b>{{ o.title }}</b>
+        {%- if o.plan.note %}<span class="tl-note">{{ o.plan.note }}</span>{% endif %}
+        {%- if o.is_repeat %}<span class="plan-chip-repeat" data-repeat aria-label="Repeats">{{ ui.icon('repeat', 13) }}</span>{% endif %}
+      </button>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <section class="panel">
+    {{ ui.empty('calendar', 'Nothing planned', 'Type a plan above, like “Lunch with Sam 12:30”.', cta=false) }}
+  </section>
+  {% endif %}
+</div>

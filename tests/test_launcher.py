@@ -400,3 +400,72 @@ def test_page_offers_sharp_png_icons_and_a_manifest():
     assert manifest["name"] == "Progen" and manifest["start_url"] == "/"
     for icon in manifest["icons"]:
         assert client.get(icon["src"]).status_code == 200
+
+
+# ---- Herinneringen van Planner bij de klok ----
+
+def test_reminders_are_notified_once_each(monkeypatch):
+    import datetime as dt
+    launch = load("launch.pyw")
+    icon, seen, asked = FakeIcon(), set(), []
+    answers = [[{"key": "p/2026-10-09/1", "text": "Tomorrow: Dentist at 14:00"}],
+               [{"key": "p/2026-10-09/1", "text": "Tomorrow: Dentist at 14:00"},   # overlap: niet nog eens
+                {"key": "g/2026-10-09/2", "text": "In 3 hours: Gym at 18:00"},
+                {"key": "s/2026-10-09/2", "text": "Today: Birthday Sam"}]]
+    clock = iter([dt.datetime(2026, 10, 8, 14, 0, 30), dt.datetime(2026, 10, 8, 14, 1, 30)])
+    monkeypatch.setattr(launch, "datetime_now", lambda: next(clock))
+
+    def fetch(since):
+        asked.append(since)
+        return answers.pop(0)
+
+    start = dt.datetime(2026, 10, 8, 13, 59, 40)
+    since = launch.check_reminders(icon, seen, start, fetch)
+    since = launch.check_reminders(icon, seen, since, fetch)
+    assert asked == [start, dt.datetime(2026, 10, 8, 14, 0, 30)]  # steeds vanaf de vorige controle
+    # Twee tegelijk in één melding (een tweede ballon zou de eerste wegdrukken).
+    assert icon.notes == ["Tomorrow: Dentist at 14:00", "In 3 hours: Gym at 18:00\nToday: Birthday Sam"]
+
+
+def test_reminders_keep_their_window_while_progen_is_unreachable(monkeypatch):
+    import datetime as dt
+    launch = load("launch.pyw")
+    monkeypatch.setattr(launch, "datetime_now", lambda: dt.datetime(2026, 10, 8, 14, 5))
+    icon, start = FakeIcon(), dt.datetime(2026, 10, 8, 14, 0)
+    assert launch.check_reminders(icon, set(), start, lambda since: None) == start  # niets gemist
+    assert icon.notes == []
+
+
+def test_reminder_watch_starts_from_now_and_stops(monkeypatch):
+    import datetime as dt
+    import threading
+    launch = load("launch.pyw")
+    start = dt.datetime(2026, 10, 8, 9, 0)
+    monkeypatch.setattr(launch, "datetime_now", lambda: start)
+    asked, stopped = [], threading.Event()
+
+    def fetch(since):
+        asked.append(since)
+        stopped.set()
+        return []
+
+    monkeypatch.setattr(launch, "fetch_due", fetch)
+    monkeypatch.setattr(launch, "REMINDER_INTERVAL", 0.01)
+    launch.watch_reminders(FakeIcon(), stopped)
+    assert asked == [start]  # nooit iets van vóór de start van de launcher
+
+
+def test_due_is_asked_since_the_previous_check(monkeypatch):
+    import datetime as dt
+    from app import desktop
+    sent = []
+    monkeypatch.setattr(desktop.urllib.request, "urlopen",
+                        lambda request, timeout: sent.append(request) or Answer(b'[{"key": "k", "text": "t"}]'))
+    assert desktop.fetch_due(dt.datetime(2026, 10, 8, 14, 0, 30)) == [{"key": "k", "text": "t"}]
+    assert sent[0].full_url == "http://127.0.0.1:8000/planner/due?since=2026-10-08T14%3A00%3A30"
+
+    def refused(request, timeout):
+        raise desktop.urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr(desktop.urllib.request, "urlopen", refused)
+    assert desktop.fetch_due(dt.datetime(2026, 10, 8, 14, 0)) is None

@@ -1,0 +1,62 @@
+{% import "_macros.html" as ui %}
+{# Onderdelen van Planner: snel invoeren, een plan als blokje, en de velden voor een herhaling. #}
+
+{% macro weekday_picker(selected=(), days=("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")) -%}
+<div class="genre-picker weekday-picker" role="group" aria-label="Weekdays">
+  {%- for name in days %}
+  <label class="genre-chip"><input type="checkbox" name="weekdays" value="{{ loop.index0 }}"{% if loop.index0 in selected %} checked{% endif %}><span>{{ name }}</span></label>
+  {%- endfor %}
+</div>
+{%- endmacro %}
+
+{# Eén invoerveld bovenaan elke Planner-pagina. Enter slaat op; de preview toont wat de app ervan maakt. #}
+{% macro quick_add() -%}
+<form class="quick-add" hx-post="/ui/planner/plans" hx-swap="none" autocomplete="off">
+  <div class="quick-add-row">
+    <span class="quick-add-icon" aria-hidden="true">{{ ui.icon('plus', 18) }}</span>
+    <input id="plan-text" class="quick-add-input" name="text" aria-label="Add a plan" enterkeyhint="done"
+           placeholder="Add a plan… like “Dentist fri 14:00”"
+           hx-get="/ui/planner/preview" hx-trigger="input changed delay:250ms" hx-target="#plan-preview" hx-swap="innerHTML">
+    <button class="btn btn-primary btn-sm">Add</button>
+  </div>
+  <div id="plan-preview" class="quick-add-preview" aria-live="polite"></div>
+  <details class="quick-add-more">
+    <summary>More</summary>
+    <div class="more-grid">
+      <label class="field more-note"><span>Note</span><input class="input input-sm" name="note" placeholder="Optional"></label>
+      <label class="field"><span>Duration <small>minutes</small></span>
+        <input class="input input-sm" type="number" name="duration_min" min="5" step="5" placeholder="60"></label>
+      <label class="field"><span>Repeat</span>
+        <select class="select" name="repeat">
+          <option value="auto">From the text</option><option value="none">Doesn't repeat</option>
+          <option value="daily">Every day</option><option value="weekly">Every week</option><option value="monthly">Every month</option>
+        </select></label>
+      <label class="field"><span>Until <small>optional</small></span><input class="input input-sm" type="date" name="until"></label>
+      <div class="field more-days"><span>On <small>for every week</small></span>{{ weekday_picker() }}</div>
+    </div>
+  </details>
+</form>
+{%- endmacro %}
+
+{# Een plan in de week: tijd en titel; klik opent de dialog. #}
+{% macro chip(o) -%}
+<button class="plan-chip{% if o.done %} is-done{% endif %}{% if not o.time %} is-all-day{% endif %}" type="button"
+        hx-get="/ui/planner/plans/{{ o.plan.plan_id }}?on={{ o.on }}" hx-target="#plan-slot" hx-swap="innerHTML"
+        title="{{ o.title }}">
+  <span class="plan-chip-time">{{ o.time.strftime('%H:%M') if o.time else 'All day' }}</span>
+  <span class="plan-chip-title">{{ o.title }}</span>
+  {%- if o.is_repeat %}<span class="plan-chip-repeat" data-repeat aria-label="Repeats">{{ ui.icon('repeat', 12) }}</span>{% endif %}
+</button>
+{%- endmacro %}
+
+{# Vorige / vandaag / volgende, voor Week en Day. #}
+{% macro pager(url, previous, current, following, today_value, label_prev, label_next) -%}
+<div class="planner-pager">
+  <button class="btn-icon" type="button" hx-get="{{ url }}{{ previous }}" hx-target="closest .page" hx-swap="outerHTML"
+          aria-label="{{ label_prev }}" title="{{ label_prev }}">{{ ui.icon('chevron-left', 18) }}</button>
+  <button class="btn btn-ghost btn-sm" type="button" hx-get="{{ url }}{{ today_value }}" hx-target="closest .page"
+          hx-swap="outerHTML"{% if current == today_value %} disabled{% endif %}>Today</button>
+  <button class="btn-icon" type="button" hx-get="{{ url }}{{ following }}" hx-target="closest .page" hx-swap="outerHTML"
+          aria-label="{{ label_next }}" title="{{ label_next }}">{{ ui.icon('chevron-right', 18) }}</button>
+</div>
+{%- endmacro %}

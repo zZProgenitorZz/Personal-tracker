@@ -24,6 +24,11 @@ from .listening.projections import (
 )
 from .listening.spotify import ListeningSync, ProfileStore, Spotify, TokenFile, sync_interval_seconds
 from .listening.web import create_listening_web_router, create_spotify_router, listening_summary
+from .planner.api import create_planner_router
+from .planner.commands import PlannerCommandHandler
+from .planner.events import EVENT_TYPES as PLANNER_EVENT_TYPES
+from .planner.projections import AgendaProjection, PlannerActivityProjection
+from .planner.web import create_planner_web_router, planner_summary
 from .reading.api import create_reading_router
 from .reading.commands import ReadingCommandHandler
 from .cover_search import CoverSearch
@@ -51,6 +56,7 @@ EVENT_TYPES = [
     SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved, GenresChanged,   # reading
     ShowAdded, ShowStatusChanged, ShowGenresChanged, ShowRemoved,                 # watching
     TrackPlayed,                                                                  # listening
+    *PLANNER_EVENT_TYPES,                                                         # planner
 ]
 
 
@@ -92,8 +98,10 @@ def create_app(
     top_artists = TopArtistsProjection()
     top_tracks = TopTracksProjection()
     wrapped = WrappedProjection()  # jaaroverzicht over alle trackers heen, uit dezelfde events
+    agenda = AgendaProjection()
+    planner_activity = PlannerActivityProjection()
     projections = [library, activity, watchlist, watch_activity, recent_plays, listen_activity, top_artists, top_tracks,
-                   wrapped]
+                   wrapped, agenda, planner_activity]
 
     def rebuild() -> None:
         """Read models opnieuw opbouwen uit alle events (bij start en na terugzetten)."""
@@ -111,6 +119,7 @@ def create_app(
     handler = ReadingCommandHandler(store, library)
     watching = WatchingCommandHandler(store, watchlist)
     listening = ListeningCommandHandler(store)
+    planner = PlannerCommandHandler(store)
     # Spotify-tokens en de laatste sync in losse bestanden: niet in de event store en niet in een back-up.
     spotify = Spotify.from_environment(http, TokenFile(Path(data_dir) / "spotify_token.json"))
     listening_sync = ListeningSync(spotify, listening, recent_plays, Path(data_dir) / "spotify_sync.json",
@@ -121,6 +130,7 @@ def create_app(
         Tracker("watching", "Watching", "eye", "watching-changed", lambda: watching_summary(watchlist, watch_activity)),
         Tracker("listening", "Listening", "music", "listening-changed",
                 lambda: listening_summary(recent_plays, listen_activity, top_artists)),
+        Tracker("planner", "Planner", "calendar", "planner-changed", lambda: planner_summary(agenda)),
     ]
 
     @asynccontextmanager
@@ -153,6 +163,8 @@ def create_app(
                                                    spotify_connected=lambda: spotify.connected,
                                                    spotify_profile=lambda: spotify.connected and listening_sync.profiles.load()))
     app.include_router(create_spotify_router(listening_sync))
+    app.include_router(create_planner_router(planner, agenda))
+    app.include_router(create_planner_web_router(planner, agenda))
     app.include_router(create_wrapped_web_router(wrapped))
     # Wrapped is geen tracker (niet in Settings of back-ups), alleen een kaart op het startscherm.
     app.include_router(create_home_router(trackers, wrapped=lambda: wrapped_teaser(wrapped)))

@@ -37,6 +37,7 @@
       <a href="#reading" data-page="reading">{{ ui.icon('book') }}<span>Reading</span></a>
       <a href="#watching" data-page="watching">{{ ui.icon('eye') }}<span>Watching</span></a>
       <a href="#listening" data-page="listening">{{ ui.icon('music') }}<span>Listening</span></a>
+      <a href="#planner" data-page="planner">{{ ui.icon('calendar') }}<span>Planner</span></a>
       <a href="#settings" data-page="settings">{{ ui.icon('settings') }}<span>Settings</span></a>
     </nav>
 
@@ -65,6 +66,11 @@
 {# "Pick something" in de Library: /ui/<tracker>/pick wordt hierin geladen. #}
 <dialog id="pick-dialog" class="dialog dialog-pick" aria-label="Pick something from your backlog">
   <div id="pick-slot"></div>
+</dialog>
+
+{# Eén plan uit Planner: /ui/planner/plans/<id> wordt hierin geladen. #}
+<dialog id="plan-dialog" class="dialog dialog-plan" aria-labelledby="plan-title">
+  <div id="plan-slot"></div>
 </dialog>
 
 <dialog id="confirm-dialog" class="dialog dialog-confirm" aria-labelledby="confirm-title">

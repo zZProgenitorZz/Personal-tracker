@@ -60,3 +60,43 @@ def test_restore_replaces_all_events(tmp_path):
     assert store.count() == 1
     store.append("3", [SeriesStarted("3", "Na terugzetten", Kind.NOVEL, "x", 1)])
     assert store.count() == 2
+
+
+# ---- Datums, tijden, optionele velden en geneste dataclasses (voor Planner) ----
+
+import datetime as dt  # noqa: E402
+from dataclasses import dataclass, field  # noqa: E402
+from enum import Enum  # noqa: E402
+
+
+class Every(str, Enum):
+    WEEKLY = "weekly"
+
+
+@dataclass(frozen=True)
+class Rule:
+    every: Every
+    weekdays: tuple[int, ...] = ()
+    until: dt.date | None = None
+
+
+@dataclass(frozen=True)
+class SomethingPlanned:
+    plan_id: str
+    day: dt.date | None
+    time: dt.time | None
+    rule: Rule | None
+    minutes: int | None = None
+    at: dt.datetime = field(default_factory=lambda: dt.datetime(2026, 10, 9, 12, tzinfo=dt.timezone.utc))
+
+
+def test_dates_times_optionals_and_nested_dataclasses_survive_storage():
+    store = EventStore(":memory:", [SomethingPlanned])
+    full = SomethingPlanned("p1", dt.date(2026, 10, 12), dt.time(14, 30),
+                            Rule(Every.WEEKLY, (0, 3), dt.date(2026, 12, 31)), 45)
+    empty = SomethingPlanned("p2", None, None, None)
+    store.append("p1", [full])
+    store.append("p2", [empty])
+    assert store.load_all() == [full, empty]
+    [back] = store.load_stream("p1")
+    assert type(back.rule.every) is Every and type(back.rule.weekdays) is tuple and type(back.day) is dt.date

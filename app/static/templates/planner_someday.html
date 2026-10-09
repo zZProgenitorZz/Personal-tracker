@@ -1,0 +1,35 @@
+{% import "_macros.html" as ui %}
+{% import "_planner_macros.html" as pm %}
+{# Planner · Someday: plannen zonder datum. "Plan it" opent de dialog met datum en tijd. #}
+<div class="page planner" hx-disinherit="*" hx-get="/ui/planner/someday"
+     hx-trigger="planner-changed from:body" hx-swap="outerHTML">
+  {{ ui.tracker_tabs('planner', 'someday', tabs) }}
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Planner · Someday</p>
+      <h1>One <span class="grad-text">day</span></h1>
+      <p class="lede">Plans without a date. Give one a day when you're ready for it.</p>
+    </div>
+  </header>
+
+  {{ pm.quick_add() }}
+
+  {% if plans %}
+  <ul class="someday-list">
+    {% for plan in plans %}
+    <li class="someday-item">
+      <div class="someday-text">
+        <b>{{ plan.title }}</b>
+        <span>{% if plan.note %}{{ plan.note }} · {% endif %}added {{ plan.added_at|ago }}</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" type="button" hx-get="/ui/planner/plans/{{ plan.plan_id }}"
+              hx-target="#plan-slot" hx-swap="innerHTML">{{ ui.icon('calendar', 15) }}Plan it</button>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <section class="panel">
+    {{ ui.empty('calendar', 'Nothing for someday', 'Plans without a day land here. Type one above, like “Learn Korean”.', cta=false) }}
+  </section>
+  {% endif %}
+</div>

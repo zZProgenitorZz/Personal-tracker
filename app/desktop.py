@@ -3,10 +3,13 @@ stop.pyw en het icoon in het systeemvak. Alleen standaardbibliotheek, zodat het
 snel laadt zonder de hele app te importeren.
 """
 import ctypes
+import datetime
+import json
 import re
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 HOST, PORT = "127.0.0.1", 8000  # nooit 0.0.0.0: Progen is alleen voor deze computer
@@ -43,6 +46,16 @@ def request_stop() -> str | None:
     while is_running() and time.monotonic() < deadline:
         time.sleep(0.25)
     return "Progen is still running. Try again, or close it from Task Manager." if is_running() else None
+
+
+def fetch_due(since: datetime.datetime) -> list[dict] | None:
+    """Herinneringen van Planner sinds `since` (lokale tijd). None als Progen niet antwoordt."""
+    query = urllib.parse.urlencode({"since": since.replace(microsecond=0).isoformat()})
+    try:
+        with urllib.request.urlopen(urllib.request.Request(f"{URL}/planner/due?{query}"), timeout=5) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
 
 
 def sync_spotify() -> str:

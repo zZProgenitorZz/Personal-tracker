@@ -13,6 +13,10 @@ Het venster sluiten stopt de server niet; dat doe je met Stop Progen.
 
 Het icoon toont nooit een popup (MessageBox): die zou de thread van het icoon
 blokkeren, waardoor icoon en popup allebei niet meer reageren. Meldingen gaan als ballon.
+
+Herinneringen van Planner: elke minuut vraagt het icoon /planner/due op (sinds de vorige
+keer) en toont ze als melding. Wat al gemeld is, onthoudt het in het geheugen; na een
+herstart meldt het niets van vóór de start. Alleen zolang Progen draait.
 """
 import ctypes
 import datetime
@@ -28,7 +32,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))  # zodat app.desktop te vinden is, ook bij automatisch starten
 
 from app.desktop import (  # noqa: E402
-    HOST, NOT_RUNNING, PORT, URL, is_running, make_dpi_aware, request_stop, show_message, sync_spotify,
+    HOST, NOT_RUNNING, PORT, URL, fetch_due, is_running, make_dpi_aware, request_stop, show_message, sync_spotify,
 )
 
 LOG = ROOT / "data" / "launcher.log"
@@ -38,6 +42,7 @@ START_TIMEOUT = 15  # seconden
 GRACEFUL_SHUTDOWN = 5  # seconden die uvicorn krijgt om te stoppen; daarna sluit hij open verbindingen af
 EXITED_GRACE_CHECKS = 12  # stopt onze server meteen, kijk dan nog ~3 s of een andere net opstart
 WATCH_INTERVAL = 5  # seconden: verdwijnt de server (bv. via stop.pyw), dan verdwijnt het icoon ook
+REMINDER_INTERVAL = 60  # seconden tussen twee keer kijken naar herinneringen van Planner
 TRAY_MUTEX = "Local\\ProgenTrayIcon"
 SM_CXSMICON, IMAGE_ICON, LR_LOADFROMFILE = 49, 1, 0x10  # Windows-constanten voor het icoon bij de klok
 EDGE_PATHS = [
@@ -177,6 +182,32 @@ def tray_icon_handle(icon_path: Path = ICON):
     return user32.LoadImageW(None, str(icon_path), IMAGE_ICON, size, size, LR_LOADFROMFILE) or None
 
 
+def datetime_now() -> datetime.datetime:
+    return datetime.datetime.now()  # lokale tijd, net als de plannen; tests zetten hem vast
+
+
+def check_reminders(icon, seen: set, since: datetime.datetime, fetch=None) -> datetime.datetime:
+    """Meld nieuwe herinneringen sinds `since` en geef terug vanaf wanneer de volgende keer kijkt.
+    Meerdere tegelijk in één melding: een tweede ballon zou de eerste meteen wegdrukken."""
+    now = datetime_now()
+    due = (fetch or fetch_due)(since)
+    if due is None:
+        return since  # Progen antwoordt even niet: de volgende keer vanaf hetzelfde moment
+    new = [item for item in due if item["key"] not in seen]
+    seen.update(item["key"] for item in new)
+    if new:
+        icon.notify("\n".join(item["text"] for item in new), "Progen")
+    return now
+
+
+def watch_reminders(icon, stopped: threading.Event) -> None:
+    """Elke minuut kijken, vanaf het moment dat het icoon er is (dus niets van vóór de start)."""
+    seen: set = set()
+    since = datetime_now()
+    while not stopped.wait(REMINDER_INTERVAL):
+        since = check_reminders(icon, seen, since, fetch_due)
+
+
 def run_tray() -> None:
     import pystray
     from PIL import Image
@@ -203,6 +234,7 @@ def run_tray() -> None:
     )
     stopped = threading.Event()
     threading.Thread(target=watch_server, args=(icon, stopped), daemon=True).start()
+    threading.Thread(target=watch_reminders, args=(icon, stopped), daemon=True).start()
     try:
         icon.run()
     finally:

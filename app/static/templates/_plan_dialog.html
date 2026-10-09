@@ -1,0 +1,84 @@
+{% import "_macros.html" as ui %}
+{% import "_planner_macros.html" as pm %}
+{# Inhoud van het venster van één plan (#plan-slot in index.html). Eén primaire knop: Mark done. #}
+{% set base = "/ui/planner/plans/" ~ plan.plan_id %}
+{% set on_vals = {"on": on.isoformat()}|tojson %}
+<div class="dialog-form plan-dialog">
+  <div class="dialog-head">
+    <div>
+      <p class="eyebrow">{{ when }}</p>
+      <h2 id="plan-title"{% if o.done %} class="is-done"{% endif %}>{{ plan.title }}</h2>
+    </div>
+    <button class="btn-close" type="button" data-close-dialog aria-label="Close">{{ ui.icon('x', 18) }}</button>
+  </div>
+
+  {% if plan.repeat or plan.note %}
+  <div class="plan-facts">
+    {% if plan.repeat %}<p>{{ ui.icon('repeat', 15) }}<span>Repeats {{ repeat_text }}</span></p>{% endif %}
+    {% if plan.note %}<p class="plan-note">{{ plan.note }}</p>{% endif %}
+  </div>
+  {% endif %}
+
+  <div class="plan-main">
+    {% if o.done %}
+    <button class="btn btn-ghost" type="button" hx-post="{{ base }}/reopen" hx-vals='{{ on_vals }}' hx-swap="none">{{ ui.icon('refresh', 16) }}Not done</button>
+    {% else %}
+    <button class="btn btn-primary" type="button" hx-post="{{ base }}/done" hx-vals='{{ on_vals }}' hx-swap="none">{{ ui.icon('check', 16) }}Mark done</button>
+    {% endif %}
+    {% if plan.repeat and not o.done %}
+    <button class="btn btn-ghost" type="button" hx-post="{{ base }}/skip" hx-vals='{{ on_vals }}' hx-swap="none">Skip this time</button>
+    {% endif %}
+  </div>
+
+  <details class="plan-section"{% if plan.day is none %} open{% endif %}>
+    <summary>{{ ui.icon('calendar', 15) }}{{ 'Plan it' if plan.day is none else 'Reschedule' }}</summary>
+    <form class="plan-form" hx-post="{{ base }}/reschedule" hx-swap="none">
+      <div class="field-pair">
+        <label class="field"><span>Date</span>
+          <input class="input input-sm" type="date" name="day" value="{{ plan.day or '' }}"{% if plan.repeat %} required{% endif %}></label>
+        <label class="field"><span>Time <small>empty = all day</small></span>
+          <input class="input input-sm" type="time" name="time" value="{{ plan.time.strftime('%H:%M') if plan.time else '' }}"></label>
+      </div>
+      {% if plan.repeat %}<p class="muted plan-hint">This moves the whole series.</p>{% endif %}
+      <div class="dialog-actions"><button class="btn btn-ghost btn-sm">Save</button></div>
+    </form>
+    {% if plan.day and not plan.repeat %}
+    <button class="btn-link plan-someday" type="button" hx-post="{{ base }}/reschedule" hx-vals='{"day": "", "time": ""}'
+            hx-swap="none">Move to Someday</button>
+    {% endif %}
+  </details>
+
+  <details class="plan-section">
+    <summary>{{ ui.icon('tag', 15) }}Edit</summary>
+    <form class="plan-form" hx-post="{{ base }}/edit" hx-swap="none">
+      <label class="field"><span>Title</span><input class="input input-sm" name="title" value="{{ plan.title }}" required></label>
+      <label class="field"><span>Note</span><input class="input input-sm" name="note" value="{{ plan.note }}" placeholder="Optional"></label>
+      <div class="field-pair">
+        <label class="field"><span>Duration <small>minutes</small></span>
+          <input class="input input-sm" type="number" name="duration_min" min="5" step="5" value="{{ plan.duration_min or '' }}" placeholder="60"></label>
+        <label class="field"><span>Repeat</span>
+          <select class="select" name="repeat"{% if plan.day is none %} disabled{% endif %}>
+            {% set current = plan.repeat.every.value if plan.repeat else 'none' %}
+            {% for value, label in [('none', "Doesn't repeat"), ('daily', 'Every day'), ('weekly', 'Every week'), ('monthly', 'Every month')] %}
+            <option value="{{ value }}"{% if value == current %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select></label>
+      </div>
+      {% if plan.day %}
+      <div class="field"><span>On <small>for every week</small></span>{{ pm.weekday_picker(plan.repeat.weekdays if plan.repeat else (plan.day.weekday(),)) }}</div>
+      <label class="field"><span>Until <small>optional</small></span>
+        <input class="input input-sm" type="date" name="until" value="{{ plan.repeat.until if plan.repeat and plan.repeat.until else '' }}"></label>
+      {% endif %}
+      <div class="dialog-actions"><button class="btn btn-ghost btn-sm">Save changes</button></div>
+    </form>
+  </details>
+
+  <div class="plan-footer">
+    {% if plan.day %}
+    <a class="btn btn-ghost btn-sm" href="/ui/planner/{{ plan.plan_id }}.ics" download
+       title="Mail the file to yourself and open it on your iPhone.">{{ ui.icon('smartphone', 15) }}Send to iPhone</a>
+    {% endif %}
+    <button class="btn-link" type="button" hx-delete="{{ base }}" hx-swap="none"
+            hx-confirm="{{ plan.title }}" data-confirm-kind="remove-plan">{{ ui.icon('trash', 15) }}Remove</button>
+  </div>
+</div>

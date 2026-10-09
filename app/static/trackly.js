@@ -12,13 +12,15 @@ const TRACKERS = {
   reading: { add: "Add series", tabs: ["dashboard", "library", "progress"] },
   watching: { add: "Add title", tabs: ["dashboard", "library", "progress"] },
   listening: { add: null, tabs: ["dashboard", "history", "progress"] },  // plays komen uit Spotify
+  planner: { add: null, tabs: ["week", "day", "someday"] },  // invoeren gaat via het veld bovenaan
 };
 const OLD_ADDRESSES = { dashboard: "reading", library: "reading/library", progress: "reading/progress" };
 
 function currentRoute() {
   let hash = location.hash.slice(1);
   hash = OLD_ADDRESSES[hash] || hash;  // bladwijzers van vóór het startscherm blijven werken
-  const [section, tab = "dashboard"] = hash.split("/");
+  const [section, given] = hash.split("/");
+  const tab = given || (TRACKERS[section] ? TRACKERS[section].tabs[0] : "");  // zonder tabblad: het eerste
   if (TRACKERS[section] && TRACKERS[section].tabs.includes(tab)) return { section, tab, url: `/ui/${section}/${tab}` };
   if (section === "settings") return { section, url: "/ui/settings" };
   if (section === "wrapped") {  // #wrapped, #wrapped/2025, #wrapped/2025/compare
@@ -49,7 +51,7 @@ function showPage() {
   if (tracker && tracker.add) el("nav-add-label").textContent = tracker.add;
 
   const name = route.section[0].toUpperCase() + route.section.slice(1);
-  document.title = `${name}${route.tab && route.tab !== "dashboard" ? " · " + route.tab : ""} · Progen`;
+  document.title = `${name}${route.tab && route.tab !== tracker.tabs[0] ? " · " + route.tab : ""} · Progen`;
 
   htmx.ajax("GET", route.url, { target: "#page", swap: "innerHTML" }).then(() => {
     // Alleen bij navigeren animeren, niet bij het verversen na een actie.
@@ -86,7 +88,7 @@ document.addEventListener("click", (event) => {
 });
 
 // De server stuurt een van deze events mee als een actie gelukt is.
-for (const changed of ["reading-changed", "watching-changed"]) {  // listening heeft geen formulier
+for (const changed of ["reading-changed", "watching-changed", "planner-changed"]) {  // listening heeft geen formulier
   document.addEventListener(changed, () => {
     if (el("add-dialog").open) {
       el("add-dialog").close();
@@ -94,6 +96,7 @@ for (const changed of ["reading-changed", "watching-changed"]) {  // listening h
     }
     el("genre-dialog").close();
     el("pick-dialog").close();  // na Start
+    el("plan-dialog").close();  // na een actie in een plan
   });
 }
 
@@ -101,6 +104,7 @@ for (const changed of ["reading-changed", "watching-changed"]) {  // listening h
 document.addEventListener("htmx:afterSwap", (event) => {
   if (event.detail.target.id === "genre-editor") el("genre-dialog").showModal();
   if (event.detail.target.id === "pick-slot" && !el("pick-dialog").open) el("pick-dialog").showModal();
+  if (event.detail.target.id === "plan-slot" && !el("plan-dialog").open) el("plan-dialog").showModal();
 });
 
 
@@ -273,6 +277,11 @@ const CONFIRM_TEXTS = {
     body: "The series leaves your library, <strong>including its progress</strong>. You can add it again later, but it starts over as a new series. Chapters you've read still count in your stats.",
     action: "Remove",
   },
+  "remove-plan": {
+    title: (name) => `Remove ${name}?`,
+    body: "It leaves your planner, including every time it repeats. Plans you sent to your iPhone stay there.",
+    action: "Remove",
+  },
   "remove-show": {
     title: (name) => `Remove ${name}?`,
     body: "It leaves your list. You can add it again later. Titles you finished still count in your stats.",
@@ -336,6 +345,21 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("htmx:afterSwap", () => hideDust(document));
+
+
+// ---- Planner: na "Add" kun je meteen het volgende plan typen ----
+// De pagina ververst na elke wijziging; stond de cursor in het invoerveld, dan komt hij terug.
+
+let planTextHadFocus = false;
+document.addEventListener("planner-changed", () => {
+  planTextHadFocus = document.activeElement && document.activeElement.id === "plan-text";
+});
+document.addEventListener("htmx:afterSwap", () => {
+  if (planTextHadFocus && el("plan-text")) {
+    el("plan-text").focus();
+    planTextHadFocus = false;
+  }
+});
 
 
 // ---- Toasts ----
