@@ -355,3 +355,48 @@ def test_stopping_also_schedules_a_hard_exit_as_safety_net(monkeypatch):
     assert graceful.seconds < 1 and graceful.args == [shutdown.signal.SIGINT]
     assert hard.seconds >= 15 and hard.daemon  # daemon: bij een gewone stop verdwijnt hij vanzelf
     assert hard.function is shutdown.force_exit
+
+
+# ---- Scherpe iconen ----
+
+def test_tray_icon_is_the_real_ico_at_the_small_icon_size(monkeypatch):
+    launch = load("launch.pyw")
+    loaded = []
+
+    class LoadImage:
+        def __call__(self, instance, path, kind, cx, cy, flags):
+            loaded.append((path, kind, cx, cy, flags))
+            return 1234
+
+    class User32:
+        LoadImageW = LoadImage()
+
+        def GetSystemMetrics(self, index):
+            return {launch.SM_CXSMICON: 20}[index]  # 125%: 20 px
+
+    monkeypatch.setattr(launch.ctypes, "WinDLL", lambda name, **kw: User32(), raising=False)
+    assert launch.tray_icon_handle() == 1234
+    assert loaded == [(str(launch.ICON), launch.IMAGE_ICON, 20, 20, launch.LR_LOADFROMFILE)]
+
+
+def test_tray_icon_falls_back_when_windows_cannot_load_it(monkeypatch):
+    launch = load("launch.pyw")
+    monkeypatch.setattr(launch.ctypes, "WinDLL", lambda name, **kw: (_ for _ in ()).throw(OSError()), raising=False)
+    assert launch.tray_icon_handle() is None  # pystray maakt dan zelf een icoon
+
+
+def test_page_offers_sharp_png_icons_and_a_manifest():
+    import json
+    from PIL import Image
+    client = TestClient(create_app(":memory:"))
+    page = client.get("/").text
+    for size in (32, 48, 64, 96):
+        href = f"/static/icons/icon-{size}.png"
+        assert f'href="{href}" sizes="{size}x{size}"' in page
+        with Image.open(ROOT / "app" / "static" / "icons" / f"icon-{size}.png") as png:
+            assert png.size == (size, size) and png.mode == "RGBA"
+    assert 'rel="manifest" href="/static/manifest.json"' in page
+    manifest = json.loads(client.get("/static/manifest.json").text)
+    assert manifest["name"] == "Progen" and manifest["start_url"] == "/"
+    for icon in manifest["icons"]:
+        assert client.get(icon["src"]).status_code == 200

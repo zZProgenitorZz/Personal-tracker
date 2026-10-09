@@ -39,6 +39,7 @@ GRACEFUL_SHUTDOWN = 5  # seconden die uvicorn krijgt om te stoppen; daarna sluit
 EXITED_GRACE_CHECKS = 12  # stopt onze server meteen, kijk dan nog ~3 s of een andere net opstart
 WATCH_INTERVAL = 5  # seconden: verdwijnt de server (bv. via stop.pyw), dan verdwijnt het icoon ook
 TRAY_MUTEX = "Local\\ProgenTrayIcon"
+SM_CXSMICON, IMAGE_ICON, LR_LOADFROMFILE = 49, 1, 0x10  # Windows-constanten voor het icoon bij de klok
 EDGE_PATHS = [
     Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
     Path(r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
@@ -162,14 +163,37 @@ def watch_server(icon, stopped: threading.Event) -> None:
             return
 
 
+def tray_icon_handle(icon_path: Path = ICON):
+    """Laad icon.ico op precies de maat van een icoon in het systeemvak (20 px bij 125%).
+    Het .ico heeft per maat een eigen, scherpe versie; Windows kiest de passende. Geeft None
+    als het niet lukt (dan maakt pystray zelf een icoon uit het plaatje)."""
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+    except (AttributeError, OSError):
+        return None
+    user32.LoadImageW.restype = ctypes.c_void_p
+    user32.LoadImageW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_uint, ctypes.c_int, ctypes.c_int, ctypes.c_uint]
+    size = user32.GetSystemMetrics(SM_CXSMICON)  # na make_dpi_aware: de echte maat op dit scherm
+    return user32.LoadImageW(None, str(icon_path), IMAGE_ICON, size, size, LR_LOADFROMFILE) or None
+
+
 def run_tray() -> None:
     import pystray
     from PIL import Image
 
+    class SharpIcon(pystray.Icon):
+        """pystray maakt zelf een .ico uit één plaatje, zonder de 20 px-versie: wazig bij 125%.
+        Daarom geven we het echte icon.ico mee, geladen op de maat die Windows wil."""
+        def _assert_icon_handle(self):
+            if not self._icon_handle:
+                self._icon_handle = tray_icon_handle()
+            if not self._icon_handle:
+                super()._assert_icon_handle()
+
     with Image.open(ICON) as ico:
         ico.size = (64, 64)  # de 64-px-versie uit het .ico
         image = ico.convert("RGBA")
-    icon = pystray.Icon("Progen", image, "Progen")
+    icon = SharpIcon("Progen", image, "Progen")
     actions = dict(tray_menu_actions(icon))
     icon.menu = pystray.Menu(
         pystray.MenuItem("Open Progen", lambda: actions["Open Progen"](), default=True),
