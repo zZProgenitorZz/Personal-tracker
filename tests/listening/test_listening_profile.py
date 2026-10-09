@@ -52,7 +52,7 @@ def setup(tmp_path, fake, monkeypatch):
     monkeypatch.delenv("SPOTIFY_REDIRECT_URI", raising=False)
     http = httpx.Client(transport=httpx.MockTransport(fake))
     app = create_app(":memory:", http_client=http, data_dir=tmp_path, backup_dir=tmp_path / "backups")
-    return TestClient(app, follow_redirects=False), tmp_path
+    return TestClient(app, follow_redirects=False, headers={"HX-Request": "true"}), tmp_path
 
 
 def connect(client):

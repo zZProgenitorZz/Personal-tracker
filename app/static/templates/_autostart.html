@@ -1,0 +1,15 @@
+{# Schakelaar in Settings: Progen starten bij aanmelden in Windows. #}
+<div id="autostart" hx-disinherit="*" hx-get="/ui/autostart" hx-trigger="autostart-changed from:body" hx-swap="outerHTML">
+  {% if available %}
+  <label class="switch-row">
+    <span>
+      <b>Start with Windows</b>
+      <span class="muted">When you sign in, Progen starts in the background with an icon by the clock (in hidden icons). Spotify keeps syncing even when the window is closed.</span>
+    </span>
+    <input class="switch" type="checkbox" name="enabled" value="on"{% if enabled %} checked{% endif %}
+           hx-post="/ui/autostart" hx-trigger="change" hx-swap="none" aria-label="Start Progen with Windows">
+  </label>
+  {% else %}
+  <p class="muted">Starting with Windows works only on Windows, when Progen runs from its <code>.venv</code>.</p>
+  {% endif %}
+</div>

@@ -4,7 +4,7 @@ from app.main import create_app
 
 
 def make_client() -> TestClient:
-    return TestClient(create_app(":memory:"))
+    return TestClient(create_app(":memory:"), headers={"HX-Request": "true"})
 
 
 def add_series(client: TestClient, title: str = "Solo Leveling"):
@@ -80,7 +80,7 @@ def test_removing_series_via_web():
 
 
 def test_backup_and_restore_via_settings(tmp_path):
-    client = TestClient(create_app(":memory:", backup_dir=tmp_path / "backups"))
+    client = TestClient(create_app(":memory:", backup_dir=tmp_path / "backups"), headers={"HX-Request": "true"})
     add_series(client, "Shadow Slave")
 
     response = client.post("/ui/backups")
@@ -98,7 +98,7 @@ def test_backup_and_restore_via_settings(tmp_path):
 
 
 def test_restoring_unknown_backup_gives_error_toast(tmp_path):
-    client = TestClient(create_app(":memory:", backup_dir=tmp_path / "backups"))
+    client = TestClient(create_app(":memory:", backup_dir=tmp_path / "backups"), headers={"HX-Request": "true"})
     assert "toast-error" in client.post("/ui/backups/bestaat-niet/restore").text
 
 

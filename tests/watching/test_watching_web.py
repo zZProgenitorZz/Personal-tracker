@@ -36,7 +36,7 @@ def fake_internet(request: httpx.Request) -> httpx.Response:
 @pytest.fixture
 def client(tmp_path):
     http = httpx.Client(transport=httpx.MockTransport(fake_internet))
-    return TestClient(create_app(":memory:", covers_dir=tmp_path / "covers", http_client=http))
+    return TestClient(create_app(":memory:", covers_dir=tmp_path / "covers", http_client=http), headers={"HX-Request": "true"})
 
 
 def add(client, title="Frieren", kind="anime", **fields):

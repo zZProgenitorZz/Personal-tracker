@@ -1,0 +1,65 @@
+"""De lokale Progen-server aanspreken vanaf het bureaublad: gedeeld door launch.pyw,
+stop.pyw en het icoon in het systeemvak. Alleen standaardbibliotheek, zodat het
+snel laadt zonder de hele app te importeren.
+"""
+import ctypes
+import re
+import sys
+import time
+import urllib.error
+import urllib.request
+
+HOST, PORT = "127.0.0.1", 8000  # nooit 0.0.0.0: Progen is alleen voor deze computer
+URL = f"http://{HOST}:{PORT}"
+SHUTDOWN_HEADER = "X-Progen-Shutdown"
+STOP_TIMEOUT = 10  # seconden
+
+
+def is_running() -> bool:
+    """Antwoordt er iets op het adres van Progen?"""
+    try:
+        with urllib.request.urlopen(URL + "/", timeout=1):
+            return True
+    except urllib.error.HTTPError:
+        return True  # er antwoordt iets, al is het met een foutcode
+    except (urllib.error.URLError, OSError):
+        return False
+
+
+def request_stop() -> str | None:
+    """Vraag de server netjes te stoppen en wacht tot hij weg is.
+    Geeft None als het gelukt is, anders een melding voor de gebruiker."""
+    request = urllib.request.Request(URL + "/admin/shutdown", method="POST", data=b"",
+                                     headers={SHUTDOWN_HEADER: "1"})
+    try:
+        with urllib.request.urlopen(request, timeout=5):
+            pass
+    except urllib.error.HTTPError as exc:
+        return f"Progen refused to stop (HTTP {exc.code})."
+    except (urllib.error.URLError, OSError):
+        return "Progen isn't running."
+    deadline = time.monotonic() + STOP_TIMEOUT
+    while is_running() and time.monotonic() < deadline:
+        time.sleep(0.25)
+    return "Progen is still running. Try again, or close it from Task Manager." if is_running() else None
+
+
+def sync_spotify() -> str:
+    """Hetzelfde als "Sync now" in Settings; geeft de melding van de server als tekst terug."""
+    request = urllib.request.Request(URL + "/ui/listening/spotify/sync", method="POST", data=b"",
+                                     headers={"HX-Request": "true"})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            html = response.read().decode("utf-8", "replace")
+    except (urllib.error.URLError, OSError):
+        return "Progen isn't running."
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()
+    return text.replace("&#39;", "'").replace("&amp;", "&") or "Synced."
+
+
+def show_message(text: str, error: bool = True) -> None:
+    """Zonder console (pythonw) is een meldingsvenster de enige manier om iets te zeggen."""
+    try:
+        ctypes.windll.user32.MessageBoxW(None, text, "Progen", 0x10 if error else 0x40)
+    except (AttributeError, OSError):
+        print(text, file=sys.stderr)

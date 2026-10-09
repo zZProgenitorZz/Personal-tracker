@@ -11,6 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .autostart import Autostart, launcher_command
 from .backup import Backups, default_backup_dir
 from .covers import CoverStore
 from .domain import DomainError
@@ -30,6 +31,8 @@ from .reading.cover_sources import SOURCES as READING_SOURCES
 from .reading.events import GenresChanged, ProgressLogged, SeriesRemoved, SeriesStarted, StatusChanged
 from .reading.projections import LibraryProjection, ReadingActivityProjection
 from .reading.web import create_reading_web_router, reading_summary
+from .security import ALLOWED_HOSTS, protect
+from .shutdown import create_shutdown_router, stop_this_server
 from .watching.api import create_watching_router
 from .watching.commands import WatchingCommandHandler
 from .watching.cover_sources import SOURCES as WATCHING_SOURCES
@@ -134,6 +137,9 @@ def create_app(
     app = FastAPI(title="Personal Tracker", lifespan=lifespan)
     if scratch:
         weakref.finalize(app, shutil.rmtree, scratch, ignore_errors=True)
+    app.state.request_shutdown = stop_this_server  # tests vervangen dit door iets onschuldigs
+    # Tests (":memory:") raken het echte Windows-register nooit aan.
+    app.state.autostart = Autostart(None, launcher_command()) if scratch else Autostart.for_this_computer()
     app.include_router(create_reading_router(handler, library, activity, covers))
     app.include_router(create_reading_web_router(handler, library, activity, covers, reading_search))
     app.include_router(create_watching_router(watching, watchlist, watch_activity, covers))
@@ -145,6 +151,7 @@ def create_app(
     app.include_router(create_spotify_router(listening_sync))
     app.include_router(create_home_router(trackers))
     app.include_router(create_settings_router(db_path, trackers, backups))
+    app.include_router(create_shutdown_router())
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     app.mount("/covers", StaticFiles(directory=covers.directory), name="covers")
 
@@ -157,6 +164,10 @@ def create_app(
         if not request.url.path.startswith("/covers/"):
             response.headers.setdefault("Cache-Control", "no-cache")
         return response
+
+    # Alleen 127.0.0.1/localhost, en geen wijzigingen vanaf andere websites (zie app/security.py).
+    # Tests spreken de app aan als "testserver".
+    protect(app, ALLOWED_HOSTS + ["testserver"] if scratch else ALLOWED_HOSTS)
 
     @app.exception_handler(DomainError)
     def handle_domain_error(request: Request, exc: DomainError):

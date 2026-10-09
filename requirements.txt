@@ -42,6 +42,7 @@ pydantic-settings==2.15.0
 pydantic==2.13.5
 pydantic_core==2.46.5
 Pygments==2.21.0
+pystray==0.19.5
 pytest==9.1.1
 python-dotenv==1.2.3
 python-multipart==0.0.32
@@ -52,6 +53,7 @@ rich==15.0.0
 rignore==0.8.1
 sentry-sdk==2.71.0
 shellingham==1.5.4
+six==1.17.0
 starlette==1.7.0
 truststore==0.10.4
 typer==0.27.2

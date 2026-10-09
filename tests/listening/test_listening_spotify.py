@@ -280,7 +280,7 @@ def app_client(tmp_path, fake, monkeypatch):
     monkeypatch.delenv("SPOTIFY_REDIRECT_URI", raising=False)
     http = httpx.Client(transport=httpx.MockTransport(fake))
     app = create_app(":memory:", http_client=http, data_dir=tmp_path, backup_dir=tmp_path / "backups")
-    return TestClient(app, follow_redirects=False), tmp_path
+    return TestClient(app, follow_redirects=False, headers={"HX-Request": "true"}), tmp_path
 
 
 def connect(client):
@@ -343,7 +343,7 @@ def test_sync_now_reports_rate_limit(app_client, fake):
 def test_settings_explains_setup_without_client_id(tmp_path, monkeypatch):
     monkeypatch.setenv("SPOTIFY_CLIENT_ID", "")
     monkeypatch.setenv("SPOTIFY_CLIENT_SECRET", "")
-    client = TestClient(create_app(":memory:", data_dir=tmp_path))
+    client = TestClient(create_app(":memory:", data_dir=tmp_path), headers={"HX-Request": "true"})
     panel = client.get("/ui/listening/spotify").text
     assert "SPOTIFY_CLIENT_ID" in panel and "Connect Spotify" not in panel
     assert client.get("/listening/spotify/connect").status_code == 400

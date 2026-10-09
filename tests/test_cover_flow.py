@@ -48,7 +48,7 @@ def covers(tmp_path):
 @pytest.fixture
 def client(covers):
     http = httpx.Client(transport=httpx.MockTransport(fake_internet))
-    return TestClient(create_app(":memory:", covers_dir=covers, http_client=http))
+    return TestClient(create_app(":memory:", covers_dir=covers, http_client=http), headers={"HX-Request": "true"})
 
 
 def add(client, title="Solo Leveling", files=None, **fields):

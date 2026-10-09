@@ -62,9 +62,11 @@ def test_homepage_is_served():
 def test_remove_series():
     client = make_client()
     series_id = start_solo_leveling(client)
-    assert client.delete(f"/reading/series/{series_id}").status_code == 204
+    script = {"Content-Type": "application/json"}  # zo laat een script zien dat het geen andere website is
+    assert client.delete(f"/reading/series/{series_id}").status_code == 403
+    assert client.delete(f"/reading/series/{series_id}", headers=script).status_code == 204
     assert client.get("/reading/library").json() == []
-    assert client.delete(f"/reading/series/{series_id}").status_code == 404
+    assert client.delete(f"/reading/series/{series_id}", headers=script).status_code == 404
 
 
 def test_settings_are_read_from_env_file(tmp_path, monkeypatch):

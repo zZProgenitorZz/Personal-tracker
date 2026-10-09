@@ -19,6 +19,24 @@ pip install -r requirements.txt
 uvicorn app.main:create_app --factory --reload
 ```
 
+### Starten met een icoon (Windows)
+
+Eén keer de snelkoppeling installeren (vanuit de projectmap, nadat de venv bestaat):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install_shortcut.ps1 -StartMenu
+```
+
+Daarna staat **Progen** op je bureaublad (met `-StartMenu` ook in het Startmenu, samen met **Stop Progen**; met `-StopOnDesktop` staat Stop Progen ook op het bureaublad).
+
+- **Progen** start `launch.pyw` met `pythonw.exe` uit `.venv`, dus zonder consolevenster. Draait de server nog niet, dan start hij op de achtergrond (alleen op `127.0.0.1:8000`, zonder `--reload`) met de uitvoer in `data/launcher.log`. Zodra hij antwoordt, opent Progen als eigen venster in Edge (`msedge --app=...`), of in je standaardbrowser als Edge er niet is. Start hij niet binnen 15 seconden, dan zegt een melding waar het log staat.
+- **Icoon bij de klok:** zolang Progen draait, staat er een Progen-icoon in het systeemvak (onder "verborgen pictogrammen", net als WhatsApp of Spotify). Dubbelklik opent Progen; rechtsklik geeft **Open Progen**, **Sync Spotify now** en **Stop Progen**. Er is altijd maar één zo'n icoon: nog eens op de snelkoppeling klikken opent alleen een nieuw venster.
+- **Het venster sluiten stopt de server niet**; hij blijft op de achtergrond draaien, zodat de Spotify-sync doorgaat.
+- **Automatisch starten bij aanmelden:** zet in Settings > App de schakelaar **Start with Windows** aan. Progen zet dan een waarde `Progen` in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (alleen voor jouw gebruiker, geen beheerdersrechten nodig) die `launch.pyw --background` start: server en icoon, zonder venster. Uitzetten haalt die waarde weer weg. Verplaats je de projectmap, zet de schakelaar dan opnieuw aan.
+- **Stop Progen** (in het menu van het icoon, of `stop.pyw`) vraagt de server netjes te stoppen via `POST /admin/shutdown`: lopende verzoeken worden afgerond en de database wordt gesloten; daarna verdwijnt het icoon. Die route werkt alleen vanaf deze computer (127.0.0.1) en met de header `X-Progen-Shutdown`, zodat een website in je browser hem niet kan aanroepen.
+- Het icoon (`app/static/icon.ico`, 16 t/m 256 px) is gemaakt uit `icon.svg` met `scripts/make_icon.py`: Edge of Chrome rendert het SVG headless als transparante PNG, Pillow maakt er een .ico van. Opnieuw uitvoeren als het icoon verandert, en daarna `install_shortcut.ps1` opnieuw.
+- Wil je tijdens het programmeren automatisch herladen, stop dan eerst Progen (Stop Progen) en start zoals hierboven met `uvicorn ... --reload`; ze gebruiken dezelfde poort.
+
 Instellingen staan in `.env` in de projectmap (niet in git). Begin met een kopie van `.env.example`: `copy .env.example .env`. Alle instellingen zijn optioneel:
 
 ```
@@ -81,6 +99,10 @@ Principes:
 app/
   main.py              koppelt alles: event store, projecties, handlers, routers
   eventstore.py        SQLite event store (append, load_stream, load_all, subscribe)
+  security.py          bescherming tegen andere websites (CSRF) en DNS rebinding
+  shutdown.py          POST /admin/shutdown: netjes stoppen, alleen vanaf deze computer (voor stop.pyw)
+  desktop.py           de server aanspreken vanaf het bureaublad (launcher, icoon, stop.pyw)
+  autostart.py         Start with Windows (Run-sleutel in het register), aan/uit in Settings
   backup.py            back-ups maken, bewaren (10 nieuwste) en terugzetten; ook los te draaien
   domain.py            DomainError (gedeeld door alle trackers)
   covers.py            covers downloaden, controleren en als 300×450 WebP bewaren (gedeeld)
@@ -116,6 +138,10 @@ app/
     genres.py          de genrelijst van Watching
     api.py             /watching endpoints (JSON)
     web.py             /ui/watching endpoints (HTML-fragmenten voor htmx)
+launch.pyw, stop.pyw   Progen starten (venster + icoon bij de klok) en stoppen; voor de snelkoppeling
+scripts/
+  install_shortcut.ps1 snelkoppelingen op het bureaublad / in het Startmenu
+  make_icon.py         app/static/icon.ico maken uit icon.svg
 tests/
   test_eventstore.py, test_api.py, test_web.py
   test_covers.py, test_cover_flow.py
@@ -218,6 +244,19 @@ Hoe het werkt (`app/listening/spotify.py`, een automation-slice): de sync vraagt
 - Bij het opslaan wordt de cover gedownload en met Pillow gecontroleerd, rechtgezet (EXIF), vanuit het midden bijgesneden tot 300×450 (2:3) en als WebP met een UUID-naam in `data/covers/` gezet. Alleen http/https, maximaal 5 MB, timeout 10 s. Alleen de bestandsnaam staat in het event.
 - Genres: AniList (genres en tags met rank ≥ 60), MangaUpdates (genres), Google Books (categorieën) en Open Library (onderwerpen) leveren genres mee. Die worden vertaald naar de vaste lijst en in het formulier alvast aangevinkt; wat je zelf aan- of uitvinkt, blijft staan als je naar een volgende cover bladert. Later aanpassen kan via ⋯ > *Edit genres* op een kaart.
 - Een cover van een bestaande serie wijzigen kan nog niet; daar is een apart event voor nodig (bijvoorbeeld `SeriesCoverChanged`).
+
+## Beveiliging
+
+Progen draait alleen op je eigen computer (`127.0.0.1`), maar je browser kan ook verzoeken sturen namens een website die je open hebt. Daarom (`app/security.py`, geldt automatisch voor elke route):
+
+- **Alleen `127.0.0.1` en `localhost` als adres.** Een website die zijn eigen naam naar 127.0.0.1 laat wijzen (*DNS rebinding*), krijgt overal `400`, ook bij lezen.
+- **Wijzigingen (POST, PUT, PATCH, DELETE) moeten aantonen dat ze van Progen of een eigen script komen**, met iets wat een andere website niet zonder toestemming (CORS) kan meesturen, en die geeft Progen niet:
+  - `HX-Request: true`: de webpagina zelf (htmx stuurt dit altijd mee);
+  - `Content-Type: application/json`: de JSON-API en scripts (ook bij een `DELETE` zonder body);
+  - `X-Progen-Shutdown: 1`: Stop Progen.
+- **Zegt de browser dat een verzoek van een andere site komt** (`Origin` of `Sec-Fetch-Site: cross-site`), dan wordt het geweigerd, ook met de juiste header.
+- Lezen (`GET`) is altijd toegestaan; een andere website kan de antwoorden toch niet lezen (same-origin policy).
+- Komt Progen ooit buiten je eigen computer (zie Roadmap 6), dan is daarnaast inloggen nodig.
 
 ---
 

@@ -17,7 +17,7 @@ def body(played_at=NOW, **fields) -> dict:
 
 @pytest.fixture
 def client():
-    return TestClient(create_app(":memory:"))
+    return TestClient(create_app(":memory:"), headers={"HX-Request": "true"})
 
 
 # ---- JSON-API ----

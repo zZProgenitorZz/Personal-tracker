@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from fastapi import APIRouter, Request, UploadFile
+from fastapi import APIRouter, Form, Request, UploadFile
 from fastapi.templating import Jinja2Templates
 
 from .backup import KEEP_BACKUPS, BackupError, Backups, is_cloud_synced
@@ -167,6 +167,25 @@ def create_settings_router(db_path: str, trackers: list[Tracker], backups: Backu
         location = db_path if db_path == ":memory:" else str(Path(db_path).resolve())
         counts = [(t, t.summary()) for t in trackers]
         return render(request, "settings.html", db_path=location, counts=counts, **backup_context())
+
+    # ---- Automatisch starten bij aanmelden in Windows ----
+
+    @router.get("/autostart")
+    def autostart_panel(request: Request):
+        autostart = request.app.state.autostart
+        return render(request, "_autostart.html", available=autostart.available, enabled=autostart.enabled)
+
+    @router.post("/autostart")
+    def set_autostart(request: Request, enabled: str = Form("")):
+        # Dat dit van de app zelf komt, controleert app/security.py voor alle wijzigingen.
+        autostart = request.app.state.autostart
+        try:
+            autostart.enable() if enabled else autostart.disable()
+        except (RuntimeError, OSError) as exc:
+            return toast(request, f"Couldn't change this: {exc}", error=True, changed="autostart-changed")
+        message = ("Progen now starts when you sign in to Windows (in the background, with an icon by the clock)."
+                   if enabled else "Progen no longer starts when you sign in.")
+        return toast(request, message, changed="autostart-changed")
 
     @router.get("/backups")
     def backup_overview(request: Request):
