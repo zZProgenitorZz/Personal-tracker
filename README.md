@@ -127,7 +127,8 @@ app/
     commands.py        RecordPlay + ListeningCommandHandler, stream_id()
     projections.py     RecentlyPlayed, ListeningActivity, TopArtists, TopTracks
     spotify.py         de Spotify-koppeling: inloggen, tokens, sync (automation-slice)
-    import_export.py   je hele geschiedenis importeren uit de Extended streaming history (automation-slice)
+    export_import.py   je hele geschiedenis importeren uit de Extended streaming history (automation-slice)
+    import_web.py      Settings > Import streaming history: voorbeeld en import in de achtergrond
     api.py             /listening endpoints (JSON)
     web.py             /ui/listening endpoints, en connect/callback/sync voor Spotify
   watching/
@@ -246,36 +247,37 @@ Regels:
 
 Hoe het werkt (`app/listening/spotify.py`, een automation-slice): de sync vraagt `GET /v1/me/player/recently-played?limit=50&after=<laatste played_at in ms>` en stuurt voor elk nummer hetzelfde `RecordPlay` als de API, met `source="api"`. Tokens staan in `data/spotify_token.json`, niet in de event store; de access token wordt automatisch ververst met de refresh token. Bij een 429 wacht de achtergrondtaak de `Retry-After` af. Fouten worden gelogd (logger `progen.listening`) en laten de app nooit crashen; de laatste sync en een eventuele fout staan in Settings.
 
-**Beperking:** Spotify geeft per verzoek maximaal de laatste **50** nummers. Luister je tussen twee syncs meer dan 50 nummers (bij 30 minuten is dat haast onmogelijk, maar staat Progen een dag uit wel), dan zijn de oudere via de API niet meer op te halen. Je hele geschiedenis importeer je zoals hieronder.
+**Beperking:** Spotify geeft per verzoek maximaal de laatste **50** nummers. Luister je tussen twee syncs meer dan 50 nummers (bij 30 minuten is dat haast onmogelijk, maar staat Progen een dag uit wel), dan zijn de oudere via de API niet meer op te halen. Gemiste nummers vul je aan met een import (hieronder).
 
 ### Spotify-geschiedenis importeren
 
-De live sync ziet alleen de laatste 50 nummers. Je hele geschiedenis haal je binnen met de **Extended streaming history** van Spotify:
+De live sync krijgt van Spotify hooguit de laatste 50 nummers. Je hele geschiedenis, en wat de sync miste (de pc stond een dag uit), haal je binnen met de **Extended streaming history**:
 
-1. Vraag hem aan op [spotify.com/account/privacy](https://www.spotify.com/account/privacy/) (Extended streaming history). Het duurt een paar dagen tot weken; je krijgt een zip.
-2. Pak de zip uit en zet de JSON-bestanden (`Streaming_History_Audio_*.json`, eventueel ook `..._Video_*`) in `data/import/spotify/`. Die map staat niet in git.
-3. Kijk eerst wat er zou gebeuren, zonder iets op te slaan:
-   ```
-   .venv\Scripts\python.exe -m app.listening.import_export --dry-run
-   ```
-   Je ziet hoeveel records er zijn, wat er overgeslagen wordt en waarom, de periode en je top 5 artiesten.
-4. Importeer:
-   ```
-   .venv\Scripts\python.exe -m app.listening.import_export
-   ```
-   Eerst wordt automatisch een back-up gemaakt (met `app/backup.py`, reden `before-import`), daarna gaat hij bestand voor bestand. Een andere map kan als argument: `... import_export D:\Downloads\spotify`.
-5. Start Progen (opnieuw): de projecties worden bij het starten opgebouwd, dus een draaiende server ziet de plays pas na een herstart. Het script zegt dat ook aan het eind.
+1. Vraag hem aan in Spotify: **Account › Privacy › Extended streaming history**. Het duurt een paar dagen tot weken; je krijgt een zip.
+2. Pak de zip uit. Ga in Progen naar **Settings › Spotify › Import streaming history** en kies de `Streaming_History_Audio_*.json`-bestanden (meerdere tegelijk mag).
+3. Je ziet eerst een voorbeeld, er is dan nog niets opgeslagen: hoeveel records, hoeveel nieuw, wat er overgeslagen wordt en waarom, de periode en de top 5 artiesten van de nieuwe plays. Een bestand dat geen export is, wordt bij naam genoemd.
+4. Klik **Import N plays**. Progen maakt eerst automatisch een back-up ("saved automatically before an import") en importeert dan in de achtergrond, met voortgang in het paneel. Je kunt Progen intussen gewoon gebruiken, ook de Spotify-sync loopt door. Aan het eind volgt een melding; de nieuwe plays staan meteen in Listening en Wrapped, zonder herstart.
 
-Het werkt ook als de server niet draait, net als `python -m app.backup`. Elke play gaat als hetzelfde `RecordPlay` als de live sync, met `source="export"` (`app/listening/import_export.py`, een automation-slice). Uit de export bewaren we alleen wat in `TrackPlayed` staat; `ip_addr`, `platform`, `conn_country` en de rest gaan nergens heen. `ms_played` is de echte luistertijd; de lengte van een nummer zit niet in de export, dus `duration_ms` = `ms_played` (alle minuten rekenen met `ms_played`).
+**Je kunt dit zo vaak doen als je wilt**: vraag later een nieuwe export aan en importeer die; alleen wat Progen nog niet heeft komt erbij. Zo vul je gaten op die de live sync miste.
+
+Vanaf de opdrachtregel kan het ook (bijvoorbeeld als de app niet start), met dezelfde code:
+
+```
+.venv\Scripts\python.exe -m app.listening.export_import <bestanden of map> --dry-run
+.venv\Scripts\python.exe -m app.listening.export_import <bestanden of map>
+```
+
+Ook dan eerst een back-up. Een draaiende server ziet plays die zo zijn geïmporteerd pas na een herstart (de projecties worden bij het starten opgebouwd); het script zegt dat aan het eind.
 
 Wat er overgeslagen wordt, en waarom:
 
 - **Geen nummer** (geen `spotify_track_uri`): podcasts, audiobooks en lokale bestanden.
 - **Korter dan 30 seconden** (`MIN_MS_PLAYED`): dezelfde grens die Spotify gebruikt voor een "stream". Anders blazen doorgeklikte nummers Top tracks op.
-- **Van na je eerste live sync**: vanaf de eerste play met `source="api"` heeft Progen alles al. De API geeft tijden met milliseconden, de export hele seconden, dus dezelfde play zou anders twee keer binnenkomen (andere stream). Daarom worden alleen export-plays van vóór de eerste live play geïmporteerd, met 15 seconden marge.
-- **Al in Progen**: hetzelfde moment staat er al (dubbel in de export, of een tweede keer importeren). Dat regelt de bestaande regel 1; twee keer importeren levert niets dubbel op.
+- **Al in Progen**: **hetzelfde nummer binnen 30 seconden** (`MATCH_WINDOW`) van een play die er al is. De API geeft tijden met milliseconden, de export hele seconden, en ze kunnen een paar seconden verschillen; daarom is "precies hetzelfde moment" niet genoeg. Zo komt een play die de sync al had er niet nog eens bij, ook niet als je hetzelfde bestand twee keer importeert of een nieuwere export de oude overlapt.
 
-Snelheid: de event store heeft een index op `stream_id`, en de import slaat elk bestand op in één transactie (`EventStore.transaction()`), waarbij elk `RecordPlay` nog steeds langs de aggregate gaat. Gemeten: 100.000 plays in ±10 seconden (met een commit per play zou het ±6 minuten duren). Met zoveel plays duurt het starten van Progen een paar seconden langer, omdat alle events dan worden ingelezen.
+Hoe het werkt (`app/listening/export_import.py`, een automation-slice; het paneel in `import_web.py`): elk nummer gaat als hetzelfde `RecordPlay` als de live sync, met `source="export"`; de regels van de aggregate blijven zoals ze zijn. Voor "binnen 30 seconden" bouwt de import bij het begin een index van alle bestaande plays (per nummer de gesorteerde tijden). Uit de export bewaren we alleen wat in `TrackPlayed` staat; `ip_addr`, `platform`, `conn_country` en de rest gaan nergens heen, en het geüploade bestand wordt niet bewaard. `ms_played` is de echte luistertijd; de lengte van een nummer zit niet in de export, dus `duration_ms` = `ms_played` (alle minuten rekenen met `ms_played`).
+
+Snelheid: de event store heeft een index op `stream_id`, en de import slaat per 2.000 plays op in één transactie (`EventStore.transaction()`), waarbij elk `RecordPlay` nog steeds langs de aggregate gaat. Tussen twee porties kunnen de app en de sync gewoon verder. Gemeten: 100.000 plays in ±10 seconden, met alle projecties live (met een commit per play zou het ±6 minuten duren). Met zoveel plays duurt het starten van Progen een paar seconden langer.
 
 ## Planner (klaar)
 

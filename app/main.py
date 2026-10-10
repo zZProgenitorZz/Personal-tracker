@@ -19,6 +19,7 @@ from .eventstore import EventStore
 from .listening.api import create_listening_router
 from .listening.commands import ListeningCommandHandler
 from .listening.events import TrackPlayed
+from .listening.import_web import ImportJob, create_import_router
 from .listening.projections import (
     ListeningActivityProjection, RecentlyPlayedProjection, TopArtistsProjection, TopTracksProjection,
 )
@@ -163,6 +164,8 @@ def create_app(
                                                    spotify_connected=lambda: spotify.connected,
                                                    spotify_profile=lambda: spotify.connected and listening_sync.profiles.load()))
     app.include_router(create_spotify_router(listening_sync))
+    # Je hele Spotify-geschiedenis importeren (Settings); de projecties lopen live mee.
+    app.include_router(create_import_router(ImportJob(store, backups)))
     app.include_router(create_planner_router(planner, agenda))
     app.include_router(create_planner_web_router(planner, agenda))
     app.include_router(create_wrapped_web_router(wrapped))

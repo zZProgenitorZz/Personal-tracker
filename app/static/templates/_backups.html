@@ -11,6 +11,7 @@
         <span>
           {{- b.events if b.events is not none else '?' }} events · {{ b.covers if b.covers is not none else '?' }} covers
           {%- if b.reason == 'before-restore' %} · saved automatically before a restore{% endif -%}
+          {%- if b.reason == 'before-import' %} · saved automatically before an import{% endif -%}
         </span>
       </div>
       {% if loop.first %}<span class="badge badge-on">Latest</span>{% endif %}

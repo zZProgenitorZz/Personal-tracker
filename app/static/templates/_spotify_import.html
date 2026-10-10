@@ -1,0 +1,66 @@
+{% import "_macros.html" as ui %}
+{# Settings > Spotify: je hele geschiedenis importeren. Peilt elke seconde zolang de import loopt. #}
+<div id="spotify-import" class="spotify-import" hx-disinherit="*"
+     {%- if job.busy %} hx-get="/ui/listening/import" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
+  <div class="import-head">
+    <b>Import streaming history</b>
+    <span class="muted">Request it in Spotify under Account › Privacy › Extended streaming history, then choose the <code>Streaming_History_Audio_*.json</code> files. Only plays Progen doesn't have yet are added.</span>
+  </div>
+
+  {% if job.state == "backup" %}
+  <p class="import-status"><span class="spinner is-on" aria-hidden="true"></span>Making a backup…</p>
+
+  {% elif job.state == "running" %}
+  {% set pct = (100 * job.done / job.total)|round|int if job.total else 0 %}
+  <p class="import-status"><span class="spinner is-on" aria-hidden="true"></span>Importing… {{ thousands(job.done) }} / {{ thousands(job.total) }}</p>
+  <div class="import-bar" role="progressbar" aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100"><i style="width: {{ pct }}%"></i></div>
+  <p class="muted">You can keep using Progen; new plays show up as they're saved.</p>
+
+  {% elif job.state == "preview" %}
+  {% set p = job.preview %}
+  <dl class="kv import-preview">
+    <div><dt>Records</dt><dd>{{ thousands(p.records) }} records in {{ p.files|length }} file{{ '' if p.files|length == 1 else 's' }}</dd></div>
+    <div><dt>New plays</dt><dd><b>{{ thousands(p.new) }} new</b></dd></div>
+    {% if p.skipped %}
+    <div><dt>Skipped</dt><dd>{% for reason, n in p.skipped.most_common() %}<span class="import-skip">{{ thousands(n) }} {{ reasons[reason] }}</span>{% endfor %}</dd></div>
+    {% endif %}
+    {% if p.first %}<div><dt>Period</dt><dd>{{ p.first.day }} {{ p.first.strftime('%b %Y') }} – {{ p.last.day }} {{ p.last.strftime('%b %Y') }}</dd></div>{% endif %}
+    {% if p.artists %}<div><dt>Top artists</dt><dd>{% for a, n in p.top_artists(5) %}{{ a }} <span class="muted">({{ thousands(n) }})</span>{% if not loop.last %}, {% endif %}{% endfor %}</dd></div>{% endif %}
+  </dl>
+  <div class="spotify-actions">
+    {% if p.new %}
+    <button class="btn btn-primary btn-sm" type="button" hx-post="/ui/listening/import/start" hx-target="#spotify-import" hx-swap="outerHTML">
+      {{ ui.icon('upload', 15) }}Import {{ thousands(p.new) }} plays</button>
+    {% else %}
+    <span class="muted">Nothing new to import: Progen already has all of these.</span>
+    {% endif %}
+    <button class="btn btn-ghost btn-sm" type="button" hx-post="/ui/listening/import/clear" hx-target="#spotify-import" hx-swap="outerHTML">Choose other files</button>
+  </div>
+  {% if p.new %}<p class="muted note">Progen makes a backup first. Nothing is saved until you import.</p>{% endif %}
+
+  {% elif job.state in ("done", "failed") %}
+  {% if job.state == "done" %}
+  <p class="import-status">{{ ui.icon('check', 16) }}Imported {{ thousands(job.stored) }} play{{ '' if job.stored == 1 else 's' }}. A backup was saved first.</p>
+  {% else %}
+  <p class="import-status warn">{{ job.problem }}</p>
+  {% endif %}
+  <div class="spotify-actions">
+    <button class="btn btn-ghost btn-sm" type="button" hx-post="/ui/listening/import/clear" hx-target="#spotify-import" hx-swap="outerHTML">Import more</button>
+  </div>
+
+  {% else %}
+  <form class="import-pick" hx-post="/ui/listening/import/preview" hx-encoding="multipart/form-data" hx-trigger="change"
+        hx-target="#spotify-import" hx-swap="outerHTML" hx-indicator="#spotify-import">
+    <label class="btn btn-ghost btn-sm">
+      {{ ui.icon('upload', 15) }}Choose files
+      <input class="sr-only" type="file" name="files" multiple accept=".json">
+    </label>
+    <span class="import-reading muted"><span class="spinner" aria-hidden="true"></span>Reading…</span>
+  </form>
+  {% if job.problem %}<p class="warn import-problem">{{ job.problem }}</p>{% endif %}
+  {% endif %}
+
+  {% if report %}
+  <div hx-swap-oob="beforeend:#toasts">{% with message=report.message, error=report.error %}{% include "_toast.html" %}{% endwith %}</div>
+  {% endif %}
+</div>

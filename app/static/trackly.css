@@ -1785,6 +1785,29 @@ label.btn:focus-within { outline: 2px solid var(--purple-hi); outline-offset: 2p
   animation: spin .7s linear infinite;
 }
 .cover-picker.htmx-request #find-cover { pointer-events: none; opacity: .75; }
+
+/* Settings > Spotify: geschiedenis importeren */
+.spotify-import { display: grid; gap: 14px; }
+.import-head { display: grid; gap: 4px; }
+.import-head .muted { max-width: 72ch; }
+.import-pick { display: flex; align-items: center; gap: 12px; }
+.import-pick .btn { cursor: pointer; }
+.import-reading { display: none; align-items: center; gap: 8px; font-size: 13px; }
+.spotify-import.htmx-request .import-reading { display: inline-flex; }
+.spotify-import.htmx-request .import-reading .spinner, .spinner.is-on { display: inline-block; }
+.import-status { display: flex; align-items: center; gap: 10px; margin: 0; font-weight: 600; }
+.import-status .icon { color: var(--teal-hi); }
+.import-bar { height: 8px; overflow: hidden; border-radius: 999px; background: rgba(255, 255, 255, .06); }
+.import-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--purple), var(--teal)); transition: width .6s var(--ease); }
+.import-head code { white-space: nowrap; word-break: normal; }
+.import-preview { display: grid; gap: 10px; margin: 0; }
+.import-preview > div { display: grid; grid-template-columns: 130px minmax(0, 1fr); align-items: baseline; gap: 16px; }
+.import-preview dt { margin: 0; }
+.import-preview dd { margin: 0; }
+.import-skip { display: block; }
+@media (max-width: 760px) { .import-preview > div { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+.import-problem { margin: 0; font-size: 14px; }
+.spotify-import .note { margin: 0; }
 .cover-picker.htmx-request #find-cover .icon { display: none; }
 .cover-picker.htmx-request #find-cover .spinner { display: inline-block; }
 
