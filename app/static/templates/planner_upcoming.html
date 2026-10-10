@@ -1,0 +1,74 @@
+{% import "_macros.html" as ui %}
+{% import "_planner_macros.html" as pm %}
+{# Planner · Upcoming: al je komende plannen in één rustige lijst. Alleen lezen. #}
+{% macro row(o, when, repeat_text=none) -%}
+<li>
+  <button class="someday-item upcoming-item" type="button" hx-get="/ui/planner/plans/{{ o.plan.plan_id }}?on={{ o.on }}"
+          hx-target="#plan-slot" hx-swap="innerHTML" data-search="{{ (o.title ~ ' ' ~ o.plan.note)|trim|lower }}">
+    {% if repeat_text %}
+    <span class="upcoming-when is-repeat" aria-hidden="true">{{ ui.icon('repeat', 18) }}</span>
+    {% else %}
+    <span class="upcoming-when">
+      <b>{{ when }}</b>
+      <span>{{ o.time.strftime('%H:%M') if o.time else 'All day' }}</span>
+    </span>
+    {% endif %}
+    <span class="someday-text">
+      <b>{{ o.title }}</b>
+      {%- if repeat_text %}<span class="upcoming-repeat" data-repeat>{{ repeat_text }}</span>{% endif %}
+      {%- if repeat_text %}<span>Next: {{ nice_day(o.on) }}{% if o.plan.note %} · {{ o.plan.note }}{% endif %}</span>
+      {%- elif o.plan.note %}<span>{{ o.plan.note }}</span>{% endif %}
+    </span>
+  </button>
+</li>
+{%- endmacro %}
+
+<div class="page planner" hx-disinherit="*" hx-get="/ui/planner/upcoming"
+     hx-trigger="planner-changed from:body" hx-swap="outerHTML">
+  {{ ui.tracker_tabs('planner', 'upcoming', tabs) }}
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Planner · Upcoming</p>
+      <h1>What's <span class="grad-text">coming up</span></h1>
+      <p class="lede upcoming-totals">
+        {{ totals.plans }} plan{{ '' if totals.plans == 1 else 's' }} ·
+        {{ totals.repeating }} repeating ·
+        <a class="link" href="#planner/someday">{{ totals.someday }} someday</a>
+      </p>
+    </div>
+  </header>
+
+  {{ pm.quick_add() }}
+
+  {% if groups or repeats %}
+  <div class="upcoming-tools">
+    <label class="search upcoming-search">
+      {{ ui.icon('search', 16) }}
+      <input type="search" placeholder="Search plans" autocomplete="off" aria-label="Search plans" data-upcoming-search>
+    </label>
+  </div>
+
+  {% for label, items in groups %}
+  <section class="upcoming-group" aria-label="{{ label }}">
+    <h2 class="wrapped-sub upcoming-head">{{ label }}</h2>
+    <ul class="someday-list">
+      {% for o in items %}{{ row(o, nice_day(o.on)) }}{% endfor %}
+    </ul>
+  </section>
+  {% endfor %}
+
+  {% if repeats %}
+  <section class="upcoming-group upcoming-repeating" aria-label="Repeating">
+    <h2 class="wrapped-sub upcoming-head">Repeating</h2>
+    <ul class="someday-list">
+      {% for r in repeats %}{{ row(r.o, nice_day(r.on), r.text) }}{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+  <p class="muted upcoming-nomatch" hidden>No plans match your search.</p>
+  {% else %}
+  <section class="panel">
+    {{ ui.empty('calendar', 'Nothing coming up', 'Type a plan above, like “Dentist fri 14:00”. Plans without a date wait in Someday.', cta=false) }}
+  </section>
+  {% endif %}
+</div>

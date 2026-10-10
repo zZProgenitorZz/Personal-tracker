@@ -7,7 +7,7 @@ from .events import (
     PlanAdded, PlanDone, PlanEdited, PlanRemoved, PlanReopened, PlanRescheduled, PlanSkipped,
     ReminderSettingsChanged, Repeat,
 )
-from .schedule import occurs_on
+from .schedule import next_occurrence, occurs_on
 
 
 @dataclass
@@ -132,6 +132,22 @@ class AgendaProjection:
 
     def someday(self) -> list[PlanEntry]:
         return [p for p in self.all() if p.day is None and not p.done]
+
+    def upcoming(self, today: dt.date) -> tuple[list[Occurrence], list[tuple[PlanEntry, dt.date]]]:
+        """Wat er komt: eenmalige plannen vanaf vandaag die nog niet af zijn (op datum en tijd, hele dag
+        eerst), en elke herhaling één keer met haar eerstvolgende keer. Someday staat er niet in."""
+        one_offs, repeating = [], []
+        for plan in self._plans.values():
+            upcoming = next_occurrence(plan, today)
+            if upcoming is None:
+                continue
+            if plan.repeat is None:
+                one_offs.append(Occurrence(plan, upcoming))
+            else:
+                repeating.append((plan, upcoming))
+        one_offs.sort(key=lambda o: (o.on, *_sort_key(o)))
+        repeating.sort(key=lambda item: (item[1], *_sort_key(Occurrence(*item))))
+        return one_offs, repeating
 
     def someday_done(self, limit: int = 10) -> list[tuple[PlanEntry, dt.date]]:
         """Afgevinkte plannen zonder datum, met de dag waarop ze af waren; de nieuwste eerst."""

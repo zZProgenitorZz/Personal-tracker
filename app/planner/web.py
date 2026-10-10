@@ -24,7 +24,7 @@ from .parse import SHORT_DAYS, Parsed, describe, describe_repeat, nice_day, pars
 from .projections import AgendaProjection, Occurrence
 
 CHANGED = "planner-changed"
-TABS = [("week", "Week"), ("day", "Day"), ("someday", "Someday")]
+TABS = [("week", "Week"), ("upcoming", "Upcoming"), ("day", "Day"), ("someday", "Someday")]
 REMINDER_CHOICES = [(15, "15 minutes before"), (30, "30 minutes before"), (60, "1 hour before"),
                     (180, "3 hours before"), (24 * 60, "1 day before"), (2 * 24 * 60, "2 days before"),
                     (7 * 24 * 60, "1 week before")]
@@ -58,6 +58,24 @@ def when_text(o: Occurrence) -> str:
     if o.time is None:
         return "All day"
     return f"{o.time:%H:%M}–{o.ends_at:%H:%M}" if o.ends_at else f"{o.time:%H:%M}"
+
+
+def upcoming_group(day: dt.date, today: dt.date) -> str:
+    """Today, Tomorrow, This week, Next week, en daarna per maand ("November", "January 2027")."""
+    if day == today:
+        return "Today"
+    if day == today + dt.timedelta(days=1):
+        return "Tomorrow"
+    this_monday = monday_of(today)
+    if day < this_monday + dt.timedelta(days=7):
+        return "This week"
+    if day < this_monday + dt.timedelta(days=14):
+        return "Next week"
+    return f"{day:%B}" if day.year == today.year else f"{day:%B %Y}"
+
+
+def capital(text: str) -> str:
+    return text[:1].upper() + text[1:]
 
 
 def week_label(monday: dt.date) -> str:
@@ -137,6 +155,24 @@ def create_planner_web_router(handler: PlannerCommandHandler, agenda: AgendaProj
                       previous=monday - dt.timedelta(days=7), following=monday + dt.timedelta(days=7),
                       this_week=monday_of(today()), when_text=when_text, short_days=SHORT_DAYS)
 
+    @router.get("/upcoming")
+    def upcoming(request: Request):
+        now_day = today()
+        one_offs, repeating = agenda.upcoming(now_day)
+        groups: list[tuple[str, list[Occurrence]]] = []
+        for o in one_offs:
+            label = upcoming_group(o.on, now_day)
+            if not groups or groups[-1][0] != label:
+                groups.append((label, []))
+            groups[-1][1].append(o)
+        repeats = [{"plan": plan, "on": on, "o": Occurrence(plan, on),
+                    "text": capital(describe_repeat(plan.repeat, plan.day))
+                    + (f" · {plan.time:%H:%M}" if plan.time else "")} for plan, on in repeating]
+        return render(request, "planner_upcoming.html", tabs=TABS, groups=groups, repeats=repeats,
+                      totals={"plans": len(one_offs), "repeating": len(repeating),
+                              "someday": len(agenda.someday())},
+                      nice_day=lambda d: nice_day(d, now_day))
+
     @router.get("/day")
     def day(request: Request, d: str = ""):
         shown = parse_day(d, today())
@@ -168,7 +204,7 @@ def create_planner_web_router(handler: PlannerCommandHandler, agenda: AgendaProj
         if plan.day is not None and plan.time:
             when += f" · {when_text(occurrence)}"
         return render(request, "_plan_dialog.html", plan=plan, o=occurrence, on=shown, when=when,
-                      repeat_text=describe_repeat(plan.repeat) if plan.repeat else "",
+                      repeat_text=describe_repeat(plan.repeat, plan.day) if plan.repeat else "",
                       short_days=SHORT_DAYS, frequencies=[f.value for f in Frequency])
 
     @router.get("/{plan_id}.ics")

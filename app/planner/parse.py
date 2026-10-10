@@ -259,11 +259,18 @@ def nice_day(day: dt.date, today: dt.date) -> str:
     return text if day.year == today.year else f"{text} {day.year}"
 
 
-def describe_repeat(repeat: Repeat) -> str:
+def ordinal(n: int) -> str:
+    """1 -> '1st', 2 -> '2nd', 12 -> '12th', 22 -> '22nd'."""
+    suffix = "th" if 11 <= n % 100 <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def describe_repeat(repeat: Repeat, start: dt.date | None = None) -> str:
+    """'every Mon, Thu', 'every day', 'every month on the 12th' (met `start`), eventueel 'until ...'."""
     if repeat.every is Frequency.DAILY:
         text = "every day"
     elif repeat.every is Frequency.MONTHLY:
-        text = "every month"
+        text = f"every month on the {ordinal(start.day)}" if start else "every month"
     else:
         text = "every " + ", ".join(SHORT_DAYS[d] for d in repeat.weekdays)
     return f"{text} until {repeat.until.day} {repeat.until:%b %Y}" if repeat.until else text
@@ -281,5 +288,5 @@ def describe(parsed: Parsed, today: dt.date) -> str:
     elif parsed.time:
         parts.append(f"{parsed.time:%H:%M}")
     if parsed.repeat:
-        parts.append(describe_repeat(parsed.repeat))
+        parts.append(describe_repeat(parsed.repeat, parsed.day))
     return " · ".join(parts)

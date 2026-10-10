@@ -27,6 +27,26 @@ def occurs_on(start: dt.date | None, repeat: Repeat | None, day: dt.date) -> boo
     return day.day == min(start.day, last)  # MONTHLY
 
 
+LOOK_AHEAD_DAYS = 400  # ruim een jaar: genoeg voor elke herhaling (dagelijks, wekelijks, maandelijks)
+
+
+def next_occurrence(plan, from_day: dt.date) -> dt.date | None:
+    """De eerste dag vanaf `from_day` waarop `plan` valt en die niet is overgeslagen of afgevinkt.
+    `plan` heeft day, repeat, done en skipped (een PlanEntry of Plan). None: niets meer, of Someday."""
+    if plan.day is None:
+        return None
+    if plan.repeat is None:
+        return plan.day if plan.day >= from_day and plan.day not in plan.done else None
+    day = max(from_day, plan.day)
+    for _ in range(LOOK_AHEAD_DAYS):
+        if plan.repeat.until is not None and day > plan.repeat.until:
+            return None
+        if occurs_on(plan.day, plan.repeat, day) and day not in plan.skipped and day not in plan.done:
+            return day
+        day += dt.timedelta(days=1)
+    return None
+
+
 def with_weekdays(start: dt.date, repeat: Repeat | None) -> Repeat | None:
     """Wekelijks zonder weekdagen = op de weekdag van de begindatum."""
     if repeat is not None and repeat.every is Frequency.WEEKLY and not repeat.weekdays:

@@ -281,7 +281,7 @@ Snelheid: de event store heeft een index op `stream_id`, en de import slaat per 
 
 ## Planner (klaar)
 
-Afspraken en plannen, als vervanging voor de agenda op je iPhone (`#planner`, tabbladen **Week**, **Day** en **Someday**). Onder Someday staat een lijstje **Done** met de laatste 10 afgevinkte plannen zonder datum; **Not done** zet er een terug (`ReopenPlan`).
+Afspraken en plannen, als vervanging voor de agenda op je iPhone (`#planner`, tabbladen **Week**, **Upcoming**, **Day** en **Someday**). **Upcoming** is één lijst met alles wat er komt: eenmalige plannen vanaf vandaag die nog niet af zijn, onder Today, Tomorrow, This week, Next week en daarna per maand, en daaronder elke herhaling één keer ("Every Mon, Thu · 18:00", "Every month on the 12th") met de eerstvolgende keer die niet is overgeslagen of afgevinkt. Een zoekveld filtert op titel en notitie; een klik opent het plan. Alleen lezen (`AgendaProjection.upcoming`, `next_occurrence` in `schedule.py`). Onder Someday staat een lijstje **Done** met de laatste 10 afgevinkte plannen zonder datum; **Not done** zet er een terug (`ReopenPlan`).
 
 | Onderdeel   | Inhoud |
 | ----------- | ------ |

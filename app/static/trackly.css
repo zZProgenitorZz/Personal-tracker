@@ -1191,6 +1191,37 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
 .someday-text span { overflow: hidden; color: var(--muted); font-size: 13px; white-space: nowrap; text-overflow: ellipsis; }
 .someday-item .btn { flex: none; }
 .someday-clear { margin: 0; padding: 4px 4px 0; color: var(--muted); font-size: 14px; }
+
+/* Planner · Upcoming: dezelfde rijen als Someday, met een datumkolom; een rij opent de dialog */
+.upcoming-tools { display: flex; justify-content: flex-end; margin: -6px 0 18px; }
+.upcoming-search { flex: 0 1 280px; }
+.upcoming-head { margin-top: 0; }
+.upcoming-group + .upcoming-group { margin-top: 30px; }
+.upcoming-item {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 20px;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .2s;
+}
+.upcoming-item:hover { background: rgba(139, 92, 246, .12); }
+.upcoming-when { display: grid; gap: 3px; flex: none; width: 108px; }
+.upcoming-when.is-repeat { color: var(--teal-hi); }
+.upcoming-when b { font-size: 13.5px; font-weight: 600; }
+.upcoming-when span { color: var(--purple-hi); font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.someday-text .upcoming-repeat { display: inline-flex; align-items: center; gap: 6px; color: var(--teal-hi); }
+.upcoming-repeating { margin-top: 36px; }
+.upcoming-nomatch { margin: 0; padding: 8px 4px; }
+@media (max-width: 760px) {
+  .upcoming-tools { justify-content: stretch; }
+  .upcoming-search { flex: 1 1 auto; }
+  .upcoming-item { gap: 14px; padding-left: 16px; }
+  .upcoming-when { width: 74px; }
+}
 .someday-done { margin-top: 36px; }
 .someday-done .wrapped-sub { margin-top: 0; }
 .someday-item.is-done { background: rgba(255, 255, 255, .02); }

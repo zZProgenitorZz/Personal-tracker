@@ -12,7 +12,7 @@ const TRACKERS = {
   reading: { add: "Add series", tabs: ["dashboard", "library", "progress"] },
   watching: { add: "Add title", tabs: ["dashboard", "library", "progress"] },
   listening: { add: null, tabs: ["dashboard", "history", "progress"] },  // plays komen uit Spotify
-  planner: { add: null, tabs: ["week", "day", "someday"] },  // invoeren gaat via het veld bovenaan
+  planner: { add: null, tabs: ["week", "upcoming", "day", "someday"] },  // invoeren gaat via het veld bovenaan
 };
 const OLD_ADDRESSES = { dashboard: "reading", library: "reading/library", progress: "reading/progress" };
 
@@ -360,6 +360,37 @@ document.addEventListener("htmx:afterSwap", () => {
     planTextHadFocus = false;
   }
 });
+
+
+// ---- Planner · Upcoming: zoeken in de lijst (alleen in de browser) ----
+// Verbergt plannen die niet passen, en groepen die daardoor leeg raken. Blijft staan na een verversing.
+
+let upcomingQuery = "";
+
+function filterUpcoming() {
+  const field = document.querySelector("[data-upcoming-search]");
+  if (!field) return;
+  if (field.value !== upcomingQuery) field.value = upcomingQuery;
+  const words = upcomingQuery.toLowerCase().split(/\s+/).filter(Boolean);
+  let shown = 0;
+  for (const row of document.querySelectorAll("[data-search]")) {
+    const match = words.every((w) => row.dataset.search.includes(w));
+    row.closest("li").hidden = !match;
+    shown += match;
+  }
+  for (const group of document.querySelectorAll(".upcoming-group")) {
+    group.hidden = !group.querySelector("li:not([hidden])");
+  }
+  const none = document.querySelector(".upcoming-nomatch");
+  if (none) none.hidden = shown > 0 || !words.length;
+}
+
+document.addEventListener("input", (event) => {
+  if (!event.target.matches("[data-upcoming-search]")) return;
+  upcomingQuery = event.target.value;
+  filterUpcoming();
+});
+document.addEventListener("htmx:afterSwap", filterUpcoming);
 
 
 // ---- Toasts ----
