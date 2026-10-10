@@ -147,7 +147,8 @@ def create_planner_web_router(handler: PlannerCommandHandler, agenda: AgendaProj
 
     @router.get("/someday")
     def someday(request: Request):
-        return render(request, "planner_someday.html", tabs=TABS, plans=agenda.someday())
+        return render(request, "planner_someday.html", tabs=TABS, plans=agenda.someday(), done=agenda.someday_done(),
+                      nice_day=lambda d: nice_day(d, today()))
 
     @router.get("/preview")
     def preview(request: Request, text: str = ""):
@@ -189,10 +190,12 @@ def create_planner_web_router(handler: PlannerCommandHandler, agenda: AgendaProj
         chosen = _repeat_from_form(repeat, weekdays, until, parsed.repeat)
         day = parsed.day if parsed.day or chosen is None else today()  # een herhaling begint op zijn vroegst vandaag
         try:
-            handler.handle(AddPlan(parsed.title, day, parsed.time, _minutes(duration_min), note, chosen))
+            handler.handle(AddPlan(parsed.title, day, parsed.time, _minutes(duration_min) or parsed.duration_min,
+                                   note, chosen))
         except DomainError as exc:
             return toast(request, str(exc), error=True)
-        return toast(request, f"Added {describe(Parsed(parsed.title, day, parsed.time, chosen), today())}",
+        shown = Parsed(parsed.title, day, parsed.time, chosen, _minutes(duration_min) or parsed.duration_min)
+        return toast(request, f"Added {describe(shown, today())}",
                      changed=CHANGED)
 
     @router.post("/plans/{plan_id}/done")

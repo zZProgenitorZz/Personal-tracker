@@ -98,7 +98,7 @@ Principes:
 ```
 app/
   main.py              koppelt alles: event store, projecties, handlers, routers
-  eventstore.py        SQLite event store (append, load_stream, load_all, subscribe)
+  eventstore.py        SQLite event store (append, transaction, load_stream, load_type, load_all, subscribe)
   security.py          bescherming tegen andere websites (CSRF) en DNS rebinding
   shutdown.py          POST /admin/shutdown: netjes stoppen, alleen vanaf deze computer (voor stop.pyw)
   desktop.py           de server aanspreken vanaf het bureaublad (launcher, icoon, stop.pyw)
@@ -127,6 +127,7 @@ app/
     commands.py        RecordPlay + ListeningCommandHandler, stream_id()
     projections.py     RecentlyPlayed, ListeningActivity, TopArtists, TopTracks
     spotify.py         de Spotify-koppeling: inloggen, tokens, sync (automation-slice)
+    import_export.py   je hele geschiedenis importeren uit de Extended streaming history (automation-slice)
     api.py             /listening endpoints (JSON)
     web.py             /ui/listening endpoints, en connect/callback/sync voor Spotify
   watching/
@@ -245,11 +246,40 @@ Regels:
 
 Hoe het werkt (`app/listening/spotify.py`, een automation-slice): de sync vraagt `GET /v1/me/player/recently-played?limit=50&after=<laatste played_at in ms>` en stuurt voor elk nummer hetzelfde `RecordPlay` als de API, met `source="api"`. Tokens staan in `data/spotify_token.json`, niet in de event store; de access token wordt automatisch ververst met de refresh token. Bij een 429 wacht de achtergrondtaak de `Retry-After` af. Fouten worden gelogd (logger `progen.listening`) en laten de app nooit crashen; de laatste sync en een eventuele fout staan in Settings.
 
-**Beperking:** Spotify geeft per verzoek maximaal de laatste **50** nummers. Luister je tussen twee syncs meer dan 50 nummers (bij 30 minuten is dat haast onmogelijk, maar staat Progen een dag uit wel), dan zijn de oudere via de API niet meer op te halen.
+**Beperking:** Spotify geeft per verzoek maximaal de laatste **50** nummers. Luister je tussen twee syncs meer dan 50 nummers (bij 30 minuten is dat haast onmogelijk, maar staat Progen een dag uit wel), dan zijn de oudere via de API niet meer op te halen. Je hele geschiedenis importeer je zoals hieronder.
+
+### Spotify-geschiedenis importeren
+
+De live sync ziet alleen de laatste 50 nummers. Je hele geschiedenis haal je binnen met de **Extended streaming history** van Spotify:
+
+1. Vraag hem aan op [spotify.com/account/privacy](https://www.spotify.com/account/privacy/) (Extended streaming history). Het duurt een paar dagen tot weken; je krijgt een zip.
+2. Pak de zip uit en zet de JSON-bestanden (`Streaming_History_Audio_*.json`, eventueel ook `..._Video_*`) in `data/import/spotify/`. Die map staat niet in git.
+3. Kijk eerst wat er zou gebeuren, zonder iets op te slaan:
+   ```
+   .venv\Scripts\python.exe -m app.listening.import_export --dry-run
+   ```
+   Je ziet hoeveel records er zijn, wat er overgeslagen wordt en waarom, de periode en je top 5 artiesten.
+4. Importeer:
+   ```
+   .venv\Scripts\python.exe -m app.listening.import_export
+   ```
+   Eerst wordt automatisch een back-up gemaakt (met `app/backup.py`, reden `before-import`), daarna gaat hij bestand voor bestand. Een andere map kan als argument: `... import_export D:\Downloads\spotify`.
+5. Start Progen (opnieuw): de projecties worden bij het starten opgebouwd, dus een draaiende server ziet de plays pas na een herstart. Het script zegt dat ook aan het eind.
+
+Het werkt ook als de server niet draait, net als `python -m app.backup`. Elke play gaat als hetzelfde `RecordPlay` als de live sync, met `source="export"` (`app/listening/import_export.py`, een automation-slice). Uit de export bewaren we alleen wat in `TrackPlayed` staat; `ip_addr`, `platform`, `conn_country` en de rest gaan nergens heen. `ms_played` is de echte luistertijd; de lengte van een nummer zit niet in de export, dus `duration_ms` = `ms_played` (alle minuten rekenen met `ms_played`).
+
+Wat er overgeslagen wordt, en waarom:
+
+- **Geen nummer** (geen `spotify_track_uri`): podcasts, audiobooks en lokale bestanden.
+- **Korter dan 30 seconden** (`MIN_MS_PLAYED`): dezelfde grens die Spotify gebruikt voor een "stream". Anders blazen doorgeklikte nummers Top tracks op.
+- **Van na je eerste live sync**: vanaf de eerste play met `source="api"` heeft Progen alles al. De API geeft tijden met milliseconden, de export hele seconden, dus dezelfde play zou anders twee keer binnenkomen (andere stream). Daarom worden alleen export-plays van vóór de eerste live play geïmporteerd, met 15 seconden marge.
+- **Al in Progen**: hetzelfde moment staat er al (dubbel in de export, of een tweede keer importeren). Dat regelt de bestaande regel 1; twee keer importeren levert niets dubbel op.
+
+Snelheid: de event store heeft een index op `stream_id`, en de import slaat elk bestand op in één transactie (`EventStore.transaction()`), waarbij elk `RecordPlay` nog steeds langs de aggregate gaat. Gemeten: 100.000 plays in ±10 seconden (met een commit per play zou het ±6 minuten duren). Met zoveel plays duurt het starten van Progen een paar seconden langer, omdat alle events dan worden ingelezen.
 
 ## Planner (klaar)
 
-Afspraken en plannen, als vervanging voor de agenda op je iPhone (`#planner`, tabbladen **Week**, **Day** en **Someday**).
+Afspraken en plannen, als vervanging voor de agenda op je iPhone (`#planner`, tabbladen **Week**, **Day** en **Someday**). Onder Someday staat een lijstje **Done** met de laatste 10 afgevinkte plannen zonder datum; **Not done** zet er een terug (`ReopenPlan`).
 
 | Onderdeel   | Inhoud |
 | ----------- | ------ |
@@ -283,9 +313,11 @@ Regels:
 | `Yoga next week tue 18:00`, `Kapper wo volgende week` | die weekdag in de volgende week |
 | `Sporten elke ma en do 7:00`, `every monday standup 9:30` | wekelijks op die dagen |
 | `Vitamines elke dag`, `Huur elke maand 1 nov` | dagelijks / maandelijks |
+| `Kapper volgende maandag`, `Film vanavond 20u`, `Tandarts om 9 uur` | de eerstvolgende maandag / vandaag 20:00 / 9:00 |
+| `Meeting 14:00-15:30`, `Lunch 12u-13u` | een begintijd met een duur |
 | `Learn Korean` | Someday |
 
-Dagen: vandaag/today, morgen/tomorrow, overmorgen, weekdagen voluit of kort (ma … zo, mon … sun); altijd de eerstvolgende, vandaag telt mee zolang de tijd nog niet voorbij is. Tijden: `14:00`, `14.30`, `14u`, `20u30`, `om 9`, `9am`/`3pm`; alleen een tijd = vandaag (of morgen als hij voorbij is). Korte weekdagen die ook een gewoon woord zijn (`do`, `zo`, `ma`, `di`, `wo`, `sun` …) tellen alleen naast een tijd of na `op`/`on`/`elke`/`every`, zodat "do the dishes" en "zo snel mogelijk" gewoon titels blijven. Met **More** zet je notitie, duur en herhaling precies.
+Dagen: vandaag/today, morgen/tomorrow, overmorgen, weekdagen voluit of kort (ma … zo, mon … sun); altijd de eerstvolgende, vandaag telt mee zolang de tijd nog niet voorbij is. Tijden: `14:00`, `14.30`, `14u`, `20u30`, `14 uur`, `om 9`, `9am`/`3pm`, en een tijdvak als `14:00-15:30` (dan ook de duur); vanochtend/vanmiddag/vanavond/tonight = vandaag, morgenavond = morgen; alleen een tijd = vandaag (of morgen als hij voorbij is). Korte weekdagen die ook een gewoon woord zijn (`do`, `zo`, `ma`, `di`, `wo`, `sun` …) tellen alleen naast een tijd of na `op`/`on`/`elke`/`every`, zodat "do the dishes" en "zo snel mogelijk" gewoon titels blijven. Met **More** zet je notitie, duur en herhaling precies.
 
 **Naar je iPhone:** in het venster van een plan geeft **Send to iPhone** een `.ics`-bestand (`GET /ui/planner/<id>.ics`, zelf geschreven volgens RFC 5545): het plan met herhaling (RRULE), overgeslagen keren (EXDATE) en een herinnering (VALARM) per herinnering uit Settings op dat moment. Mail het naar jezelf en open het op je iPhone.
 
@@ -398,7 +430,6 @@ Eerst handmatig invoeren; automatisch importeren komt later (zie punt 5).
 
 - Beoordeling of notities per serie (nieuwe events, bijv. `SeriesRated`).
 - Export van alle data naar JSON of CSV.
-- Listening: importeren van de Spotify **Extended streaming history** (de export die je bij Spotify aanvraagt). Die bevat alles sinds je account bestaat, met echte `ms_played`; importeren als `RecordPlay` met `source="export"`, dubbele plays worden vanzelf overgeslagen.
 - Nieuwe domeinen naar behoefte.
 
 ---

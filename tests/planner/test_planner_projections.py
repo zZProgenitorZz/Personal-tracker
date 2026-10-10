@@ -3,7 +3,7 @@ import datetime as dt
 
 from app.eventstore import EventStore
 from app.planner.events import (
-    EVENT_TYPES, Frequency, PlanAdded, PlanDone, PlanEdited, PlanRemoved, PlanRescheduled, PlanSkipped,
+    EVENT_TYPES, Frequency, PlanAdded, PlanDone, PlanEdited, PlanRemoved, PlanReopened, PlanRescheduled, PlanSkipped,
     ReminderSettingsChanged, Repeat,
 )
 from app.planner.projections import AgendaProjection, PlannerActivityProjection
@@ -136,3 +136,18 @@ def test_rebuilt_agenda_equals_the_live_one():
     assert rebuilt.week(MON) == live.week(MON) and rebuilt.reminder_settings == live.reminder_settings
     assert rebuilt.due(dt.datetime(2026, 10, 15, 13, 0), dt.timedelta(minutes=1)) == \
         live.due(dt.datetime(2026, 10, 15, 13, 0), dt.timedelta(minutes=1))
+
+
+def test_someday_done_lists_the_latest_first_and_at_most_ten():
+    events = [plan(str(i), f"Plan {i}", day=None) for i in range(12)]
+    events += [PlanDone(str(i), MON + dt.timedelta(days=i)) for i in range(12)]
+    events += [plan("x", "Dentist"), PlanDone("x", MON)]                     # met datum: niet in Someday
+    agenda = given(*events)
+    done = agenda.someday_done()
+    assert [p.title for p, _ in done] == [f"Plan {i}" for i in range(11, 1, -1)]
+    assert done[0][1] == MON + dt.timedelta(days=11)                         # wanneer het af was
+
+
+def test_reopened_someday_plan_goes_back_to_someday():
+    agenda = given(plan("1", "Paint the hall", day=None), PlanDone("1", MON), PlanReopened("1", MON))
+    assert agenda.someday_done() == [] and [p.title for p in agenda.someday()] == ["Paint the hall"]

@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from contextlib import contextmanager
 import threading
 import types
 import typing
@@ -61,7 +62,11 @@ class EventStore:
                 at        TEXT NOT NULL
             )"""
         )
+        # load_stream zoekt op stream_id; zonder index wordt dat trager naarmate er meer events zijn.
+        # IF NOT EXISTS: ook veilig voor een bestaande database.
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_events_stream ON events(stream_id)")
         self._conn.commit()
+        self._pending: list | None = None  # events van een lopende transaction(), nog niet gemeld
 
     def close(self) -> None:
         self._closer()
@@ -70,17 +75,37 @@ class EventStore:
         self._subscribers.append(callback)
 
     def append(self, stream_id: str, events: list) -> None:
-        with self._lock, self._conn:
-            for event in events:
-                self._conn.execute(
-                    "INSERT INTO events (stream_id, type, data, at) VALUES (?, ?, ?, ?)",
-                    (
-                        stream_id,
-                        type(event).__name__,
-                        json.dumps(asdict(event), default=_to_json),
-                        event.at.isoformat(),
-                    ),
-                )
+        with self._lock:
+            rows = [(stream_id, type(event).__name__, json.dumps(asdict(event), default=_to_json), event.at.isoformat())
+                    for event in events]
+            if self._pending is not None:  # binnen transaction(): opslaan gebeurt aan het eind
+                self._conn.executemany("INSERT INTO events (stream_id, type, data, at) VALUES (?, ?, ?, ?)", rows)
+                self._pending.extend(events)
+                return
+            with self._conn:
+                self._conn.executemany("INSERT INTO events (stream_id, type, data, at) VALUES (?, ?, ?, ?)", rows)
+        self._notify(events)
+
+    @contextmanager
+    def transaction(self):
+        """Veel appends in één keer opslaan (bijvoorbeeld een import). Elk command gaat nog steeds
+        langs zijn aggregate: load_stream ziet binnen de transactie wat er al bijgekomen is. Pas na
+        het opslaan horen de subscribers ervan; gaat er iets mis, dan wordt niets opgeslagen."""
+        with self._lock:
+            if self._pending is not None:
+                raise RuntimeError("Er loopt al een transactie")
+            self._pending = []
+            try:
+                yield
+            except BaseException:
+                self._conn.rollback()
+                self._pending = None
+                raise
+            self._conn.commit()
+            events, self._pending = self._pending, None
+        self._notify(events)
+
+    def _notify(self, events: list) -> None:
         for event in events:
             for callback in self._subscribers:
                 callback(event)
@@ -115,6 +140,11 @@ class EventStore:
             "SELECT type, data FROM events WHERE stream_id = ? ORDER BY id",
             (stream_id,),
         )
+        return [self._rebuild(t, d) for t, d in rows]
+
+    def load_type(self, event_type: type) -> list:
+        """Alleen de events van één soort, in volgorde (bijvoorbeeld alle TrackPlayed)."""
+        rows = self._conn.execute("SELECT type, data FROM events WHERE type = ? ORDER BY id", (event_type.__name__,))
         return [self._rebuild(t, d) for t, d in rows]
 
     def load_all(self) -> list:

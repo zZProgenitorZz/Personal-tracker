@@ -100,3 +100,51 @@ def test_dates_times_optionals_and_nested_dataclasses_survive_storage():
     assert store.load_all() == [full, empty]
     [back] = store.load_stream("p1")
     assert type(back.rule.every) is Every and type(back.rule.weekdays) is tuple and type(back.day) is dt.date
+
+
+# ---- Snel genoeg voor een grote import ----
+
+def test_streams_are_indexed_also_in_an_existing_database(tmp_path):
+    import sqlite3
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)  # een database van vóór de index
+    old.execute("CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, stream_id TEXT NOT NULL, "
+                "type TEXT NOT NULL, data TEXT NOT NULL, at TEXT NOT NULL)")
+    old.commit()
+    old.close()
+    store = EventStore(str(path), [SeriesStarted])
+    plan = store._conn.execute("EXPLAIN QUERY PLAN SELECT type, data FROM events WHERE stream_id = ? ORDER BY id",
+                               ("x",)).fetchall()
+    assert "idx_events_stream" in str(plan)
+    store.close()
+
+
+def test_a_transaction_stores_many_streams_at_once_and_notifies_after_commit():
+    store = EventStore(":memory:", [SeriesStarted])
+    seen = []
+    store.subscribe(seen.append)
+    with store.transaction():
+        store.append("1", [SeriesStarted("1", "A", Kind.MANHWA, "x", 1)])
+        assert store.load_stream("1")  # binnen de transactie al te lezen (regels blijven werken)
+        store.append("2", [SeriesStarted("2", "B", Kind.MANHWA, "x", 1)])
+        assert seen == []              # pas na het opslaan
+    assert store.count() == 2 and [e.series_id for e in seen] == ["1", "2"]
+
+
+def test_a_failed_transaction_stores_nothing():
+    import pytest
+    store = EventStore(":memory:", [SeriesStarted])
+    seen = []
+    store.subscribe(seen.append)
+    with pytest.raises(RuntimeError):
+        with store.transaction():
+            store.append("1", [SeriesStarted("1", "A", Kind.MANHWA, "x", 1)])
+            raise RuntimeError("halverwege mis")
+    assert store.count() == 0 and seen == []
+
+
+def test_load_type_reads_only_events_of_one_kind():
+    store = EventStore(":memory:", [SeriesStarted, StatusChanged])
+    store.append("1", [SeriesStarted("1", "A", Kind.MANHWA, "x", 1),
+                       StatusChanged("1", Status.READING, Status.COMPLETED)])
+    assert [type(e) for e in store.load_type(SeriesStarted)] == [SeriesStarted]

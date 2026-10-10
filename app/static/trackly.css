@@ -1190,6 +1190,11 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
 .someday-text b { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
 .someday-text span { overflow: hidden; color: var(--muted); font-size: 13px; white-space: nowrap; text-overflow: ellipsis; }
 .someday-item .btn { flex: none; }
+.someday-clear { margin: 0; padding: 4px 4px 0; color: var(--muted); font-size: 14px; }
+.someday-done { margin-top: 36px; }
+.someday-done .wrapped-sub { margin-top: 0; }
+.someday-item.is-done { background: rgba(255, 255, 255, .02); }
+.someday-item.is-done b { color: var(--faint); text-decoration: line-through; }
 
 /* De dialog van een plan */
 .dialog-plan { width: min(520px, calc(100vw - 32px)); }

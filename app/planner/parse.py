@@ -6,7 +6,8 @@ herkend = een plan voor Someday. Alles is "de eerstvolgende": een weekdag of dat
 jaar die al voorbij is, schuift door. Vandaag telt mee zolang de tijd nog niet voorbij is.
 
 Korte weekdagen die ook gewone woorden zijn ("do the dishes", "zo snel mogelijk", "bellen met
-ma") tellen alleen naast een tijd, of na "op", "on", "elke" of "every".
+ma") tellen alleen naast een tijd, of na "op", "on", "volgende", "next", "elke" of "every".
+Een tijdvak ("14:00-15:30", "12u-13u") wordt een begintijd met een duur.
 """
 import datetime as dt
 import re
@@ -44,6 +45,9 @@ EVERY = r"(?:elke|iedere|every|each)"
 NEXT_WEEK = r"(?:volgende\s+week|next\s+week)"
 B, E = r"(?<![\w])", r"(?![\w])"  # woordgrenzen (ook rond ":" en ".")
 CONNECTORS = {"om", "at", "op", "on", "en", "and", "@", "-", "–", "&"}
+COMING = r"(?:volgende|komende|aanstaande|deze|next|this|coming)"  # "volgende maandag" = de eerstvolgende
+# Een tijd met een herkenbaar teken: 14:00, 14.30, 14u, 20u30, 14 uur.
+CLOCK = r"(\d{1,2})(?:[:.](\d{2})|u(\d{2})?(?!\w)|\s*uur(?!\w))"
 
 
 @dataclass(frozen=True)
@@ -52,6 +56,7 @@ class Parsed:
     day: dt.date | None = None
     time: dt.time | None = None
     repeat: Repeat | None = None
+    duration_min: int | None = None  # uit een tijdvak, zoals "14:00-15:30"
 
 
 class _Text:
@@ -90,7 +95,9 @@ def parse(text: str, now: dt.datetime) -> Parsed:
     today = now.date()
     repeat = _repeat(t)
     day = _next_week(t, today) or _relative(t, today) or _date(t, today)
-    time, time_span = _time(t)
+    time, time_span, duration = _time_range(t)
+    if time is None:
+        time, time_span = _time(t)
     weekday = None if day else _weekday(t, time_span, has_repeat=repeat is not None)
 
     if weekday is not None:
@@ -105,7 +112,7 @@ def parse(text: str, now: dt.datetime) -> Parsed:
     if time is not None and day is None:
         # Alleen een tijd: vandaag als die nog komt, anders morgen.
         day = today if time > now.time() else today + dt.timedelta(days=1)
-    return Parsed(t.rest(), day, time, repeat)
+    return Parsed(t.rest(), day, time, repeat, duration)
 
 
 # ---- De onderdelen ----
@@ -136,7 +143,9 @@ def _next_week(t: _Text, today: dt.date) -> dt.date | None:
 
 def _relative(t: _Text, today: dt.date) -> dt.date | None:
     for pattern, days in [(rf"{B}(?:overmorgen|day after tomorrow){E}", 2),
-                          (rf"{B}(?:vandaag|today){E}", 0), (rf"{B}(?:morgen|tomorrow){E}", 1)]:
+                          (rf"{B}(?:morgenochtend|morgenmiddag|morgenavond|tomorrow\s+(?:morning|afternoon|night|evening)){E}", 1),
+                          (rf"{B}(?:vandaag|today|vanochtend|vanmiddag|vanavond|tonight|this\s+(?:morning|afternoon|evening)){E}", 0),
+                          (rf"{B}(?:morgen|tomorrow){E}", 1)]:
         for match in t.find(pattern):
             t.take(match)
             return today + dt.timedelta(days=days)
@@ -147,7 +156,9 @@ def _date(t: _Text, today: dt.date) -> dt.date | None:
     patterns = [
         (rf"{B}(?:op\s+|on\s+)?(\d{{1,2}})\s*({MONTH})\.?{E}(?:\s+(\d{{4}}){E})?", lambda m: (m[1], MONTHS[m[2]], m[3])),
         (rf"{B}(?:op\s+|on\s+)?({MONTH})\.?\s+(\d{{1,2}}){E}(?:,?\s+(\d{{4}}){E})?", lambda m: (m[2], MONTHS[m[1]], m[3])),
-        (rf"{B}(?:op\s+|on\s+)?(\d{{1,2}})[/-](\d{{1,2}})(?:[/-](\d{{4}}|\d{{2}}))?{E}", lambda m: (m[1], m[2], m[3])),
+        # Niet vast aan een tijd: in "10:30-12:15" is "30-12" geen datum.
+        (rf"(?<![\w:.])(?:op\s+|on\s+)?(\d{{1,2}})[/-](\d{{1,2}})(?:[/-](\d{{4}}|\d{{2}}))?{E}(?![:.]\d)",
+         lambda m: (m[1], m[2], m[3])),
     ]
     for pattern, parts in patterns:
         for match in t.find(pattern):
@@ -169,10 +180,26 @@ def _valid_date(day: int, month: int, year: str | None, today: dt.date) -> dt.da
         return None
 
 
+def _time_range(t: _Text):
+    """ "14:00-15:30", "van 9.00 tot 10.15", "12u-13u": begintijd en duur."""
+    end = r"(\d{1,2})(?:[:.](\d{2})|u(\d{2})?(?!\w)|\s*uur(?!\w))?"
+    pattern = rf"{B}(?:om\s+|at\s+|van\s+|from\s+)?{CLOCK}\s*(?:-|–|tot|to|until)\s*{end}{E}"
+    for match in t.find(pattern):
+        h1, m1a, m1b, h2, m2a, m2b = match.groups()
+        start = _valid_time(int(h1), int(m1a or m1b or 0), None)
+        stop = _valid_time(int(h2), int(m2a or m2b or 0), None)
+        if start and stop:
+            minutes = (stop.hour * 60 + stop.minute) - (start.hour * 60 + start.minute)
+            if minutes > 0:
+                t.take(match)
+                return start, (match.start(), match.end()), minutes
+    return None, None, None
+
+
 def _time(t: _Text) -> tuple[dt.time | None, tuple[int, int] | None]:
     patterns = [
         rf"{B}(?:om\s+|at\s+|@\s*)?(\d{{1,2}})[:.](\d{{2}})\s*(am|pm)?{E}",
-        rf"{B}(?:om\s+|at\s+|@\s*)?(\d{{1,2}})u(\d{{2}})?{E}",
+        rf"{B}(?:om\s+|at\s+|@\s*)?(\d{{1,2}})(?:u(\d{{2}})?|\s*uur){E}",
         rf"{B}(?:om\s+|at\s+|@\s*)?(\d{{1,2}})\s*(am|pm){E}",
         rf"{B}(?:om|at|@)\s*(\d{{1,2}}){E}(?![:./-]\d)",
     ]
@@ -205,9 +232,9 @@ def _valid_time(hour: int, minute: int, half: str | None) -> dt.time | None:
 def _weekday(t: _Text, time_span, has_repeat: bool) -> int | None:
     if has_repeat:
         return None
-    for match in t.find(rf"{B}(?:(op|on)\s+)?({WD}){E}"):
-        name = match.group(2)
-        if name in AMBIGUOUS and not match.group(1):
+    for match in t.find(rf"{B}(?:(op|on)\s+)?(?:({COMING})\s+)?({WD}){E}"):
+        name = match.group(3)
+        if name in AMBIGUOUS and not (match.group(1) or match.group(2)):
             near_time = time_span and (t.gap_is_blank(match.end(), time_span[0])
                                        or t.gap_is_blank(time_span[1], match.start()))
             if not near_time:
@@ -248,7 +275,10 @@ def describe(parsed: Parsed, today: dt.date) -> str:
         parts.append("Someday")
     else:
         parts.append(("from " if parsed.repeat else "") + nice_day(parsed.day, today))
-    if parsed.time:
+    if parsed.time and parsed.duration_min:
+        end = dt.datetime.combine(dt.date.today(), parsed.time) + dt.timedelta(minutes=parsed.duration_min)
+        parts.append(f"{parsed.time:%H:%M}–{end:%H:%M}")
+    elif parsed.time:
         parts.append(f"{parsed.time:%H:%M}")
     if parsed.repeat:
         parts.append(describe_repeat(parsed.repeat))

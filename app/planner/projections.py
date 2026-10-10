@@ -133,6 +133,11 @@ class AgendaProjection:
     def someday(self) -> list[PlanEntry]:
         return [p for p in self.all() if p.day is None and not p.done]
 
+    def someday_done(self, limit: int = 10) -> list[tuple[PlanEntry, dt.date]]:
+        """Afgevinkte plannen zonder datum, met de dag waarop ze af waren; de nieuwste eerst."""
+        done = [(p, max(p.done)) for p in self._plans.values() if p.day is None and p.done]
+        return sorted(done, key=lambda item: (item[1], item[0].added_at), reverse=True)[:limit]
+
     def due(self, now: dt.datetime, window: dt.timedelta) -> list[Reminder]:
         """Herinneringen die vielen in (now - window, now]. `now` is lokale tijd zonder tijdzone."""
         first_on, first_min, second_on, second_min, all_day_time = self.reminder_settings

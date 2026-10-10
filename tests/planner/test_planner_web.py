@@ -198,3 +198,18 @@ def test_due_since_the_previous_check_never_reaches_before_it(client, monkeypatc
     monkeypatch.setattr(schedule, "local_now", lambda: dt.datetime(2026, 10, 8, 14, 1))
     assert len(client.get("/planner/due", params={"since": "2026-10-08T13:59:30"}).json()) == 1
     assert client.get("/planner/due", params={"since": "2026-10-08T14:00:00"}).json() == []  # viel er net vóór
+
+
+def test_done_someday_plans_are_listed_and_can_be_reopened(client):
+    add(client, "Learn Korean")
+    pid = plan_id(client, "Learn Korean")
+    assert 'class="someday-done"' not in client.get("/ui/planner/someday").text  # nog niets af
+    client.post(f"/ui/planner/plans/{pid}/done", data={"on": "2026-10-08"})
+    page = client.get("/ui/planner/someday").text
+    done = page.split('class="someday-done"', 1)[1]
+    assert "Learn Korean" in done and "done Thu 8 Oct" in done and "Not done" in done
+    assert f'hx-post="/ui/planner/plans/{pid}/reopen"' in done and '"on": "2026-10-08"' in done
+    assert "Nothing left for someday" in page.split('class="someday-done"', 1)[0]
+    response = client.post(f"/ui/planner/plans/{pid}/reopen", data={"on": "2026-10-08"})
+    assert response.headers["HX-Trigger"] == "planner-changed"
+    assert 'class="someday-done"' not in client.get("/ui/planner/someday").text

@@ -27,9 +27,30 @@
     </li>
     {% endfor %}
   </ul>
+  {% elif done %}
+  <p class="someday-clear">Nothing left for someday.</p>
   {% else %}
   <section class="panel">
     {{ ui.empty('calendar', 'Nothing for someday', 'Plans without a day land here. Type one above, like “Learn Korean”.', cta=false) }}
+  </section>
+  {% endif %}
+
+  {% if done %}
+  {# Wat je uit Someday hebt afgevinkt; "Not done" zet het terug. #}
+  <section class="someday-done" aria-label="Done">
+    <h2 class="wrapped-sub">Done</h2>
+    <ul class="someday-list">
+      {% for plan, on in done %}
+      <li class="someday-item is-done">
+        <div class="someday-text">
+          <b>{{ plan.title }}</b>
+          <span>done {{ nice_day(on) }}</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" type="button" hx-post="/ui/planner/plans/{{ plan.plan_id }}/reopen"
+                hx-vals='{{ {"on": on.isoformat()}|tojson }}' hx-swap="none">{{ ui.icon('refresh', 15) }}Not done</button>
+      </li>
+      {% endfor %}
+    </ul>
   </section>
   {% endif %}
 </div>

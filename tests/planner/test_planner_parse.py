@@ -87,3 +87,35 @@ def test_describe_shows_what_the_app_makes_of_it():
     assert describe(p("Ski 5 jan 2027"), TODAY) == "Ski · Tue 5 Jan 2027"
     assert describe(p("Vitamines elke dag"), TODAY) == "Vitamines · from Thu 8 Oct · every day"
     assert describe(p("morgen 14u"), TODAY) == "Add a title · Fri 9 Oct · 14:00"
+
+
+# ---- Gevonden bij de dubbele controle ----
+
+@pytest.mark.parametrize("text, title, day, time", [
+    ("Kapper volgende maandag", "Kapper", D(10, 12), None),        # "volgende" hoort bij de dag
+    ("Call next fri", "Call", D(10, 9), None),
+    ("Kapper komende za 10:00", "Kapper", D(10, 10), T(10)),
+    ("Tandarts om 9 uur", "Tandarts", D(10, 9), T(9)),             # 9:00 is voorbij: morgen
+    ("Tandarts vr 14 uur", "Tandarts", D(10, 9), T(14)),
+    ("Film vanavond 20u", "Film", TODAY, T(20)),
+    ("Film tonight", "Film", TODAY, None),
+])
+def test_more_everyday_phrases(text, title, day, time):
+    parsed = p(text)
+    assert (parsed.title, parsed.day, parsed.time) == (title, day, time)
+
+
+@pytest.mark.parametrize("text, time, minutes", [
+    ("Meeting 14:00-15:30", T(14), 90),
+    ("Meeting vr 9.00 – 10.15", T(9), 75),
+    ("Lunch 12u-13u", T(12), 60),
+    ("Meeting 10:30-12:15", T(10, 30), 105),   # "30-12" is hier geen datum
+])
+def test_a_time_range_gives_a_duration(text, time, minutes):
+    parsed = p(text)
+    assert (parsed.title.split()[0], parsed.time, parsed.duration_min) == (text.split()[0], time, minutes)
+    assert "-" not in parsed.title and "–" not in parsed.title
+
+
+def test_describe_shows_the_range():
+    assert describe(p("Meeting vr 14:00-15:30"), TODAY) == "Meeting · Fri 9 Oct · 14:00–15:30"

@@ -56,8 +56,8 @@ def create_planner_router(handler: PlannerCommandHandler, agenda: AgendaProjecti
     @router.post("/plans", status_code=201)
     def add(body: AddPlanBody):
         parsed = parse(body.text, schedule.local_now())
-        [added] = handler.handle(AddPlan(parsed.title, parsed.day, parsed.time, body.duration_min, body.note,
-                                         parsed.repeat))
+        [added] = handler.handle(AddPlan(parsed.title, parsed.day, parsed.time,
+                                         body.duration_min or parsed.duration_min, body.note, parsed.repeat))
         return plan_json(agenda.get(added.plan_id))
 
     return router
