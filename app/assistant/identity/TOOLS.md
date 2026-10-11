@@ -2,30 +2,27 @@
 
 One agent, one lane: Sunny only works on the tracker data. Tools call the existing **command handlers and projections directly** (no HTTP round trip). Every tool returns **compact JSON** (only the fields needed) to save tokens.
 
-## Read tools (run straight away, no confirmation)
-| Tool | Input | Built on | Status |
-|---|---|---|---|
-| `find_item` | `query`, optional `domain` (reading/watching/plan) | library / watchlist / agenda, fuzzy title search | new (small) |
-| `reading_overview` | optional `status` | library projection: title, chapter, status, `updated_at` | exists |
-| `watching_overview` | optional `status` | watchlist projection | exists |
-| `top_tracks` | `from`, `to`, `limit` | listening plays | **needs a free period** (now per month only) |
-| `top_artists` | `from`, `to`, `limit` | listening plays | **needs a free period** |
-| `listening_minutes` | `from`, `to` | activity projection | exists (per day) |
-| `plans_between` | `from`, `to` | agenda | **new: range** (now per day only) |
-| `history_between` | `from`, `to`, optional `domain` (reading/watching) | reading and watch history projections: chapters (first → last), status changes, finished shows, totals | new |
-| `notices` | none | the same notices as on Sunny's button (overdue plans, a streak about to end, dusty titles, an old backlog), minus the ones put away with "Not today"; fixed lines, no AI | new |
-| `item_history` | `domain` (reading/watching), `id` from `find_item` | the same history: added, every status change with its date, times completed/rewatched, reading days; earlier removed versions included | new |
+16 tools: 7 read, 9 write. Only the write tools are **strict** (the API allows at most 20 strict tools); read tools turn bad input into an error the model can fix, and may leave out a nullable field.
+
+## Read tools (run straight away, no confirmation; not strict)
+| Tool | Input | Built on |
+|---|---|---|
+| `find_item` | `query`, optional `domain` (reading/watching/plan) | library / watchlist / agenda, fuzzy title search |
+| `library` | `domain` (reading/watching), optional `status` (checked against that domain) | library projection (title, chapter, status, `updated_at`) or watchlist projection (title, kind, status) |
+| `listening_stats` | `from`, `to`, optional `limit` (5, max 25) | listening projections: minutes, days listened, top artists and top tracks |
+| `plans_between` | `from`, `to` | agenda, repeats worked out |
+| `history_between` | `from`, `to`, optional `domain` (reading/watching) | reading and watch history projections: chapters (first → last), status changes, finished shows, totals |
+| `notices` | none | the same notices as on Sunny's button (overdue plans, a streak about to end, dusty titles, an old backlog), minus the ones put away with "Not today"; fixed lines, no AI |
+| `item_history` | `domain` (reading/watching), `id` from `find_item` | the same history: added, every status change with its date, times completed/rewatched, reading days; earlier removed versions included |
 
 History comes from the events that already exist, so it covers all old data. Limits: a show added as already completed has no finish date, and Watching has no episodes, only status periods. A chapter correction on the same day (12 → 120 → 12) takes the typo back.
 
-## Write tools (only propose; execute after Confirm)
+## Write tools (only propose; execute after Confirm; strict)
 | Tool | Input | Built on |
 |---|---|---|
 | `set_reading_progress` | `series_id`, `chapter` | reading progress command |
-| `set_reading_status` | `series_id`, `status` | reading status command |
-| `add_series` | title, kind | reading add command |
-| `set_watch_status` | `show_id`, `status` (incl. **new `rewatching`**) | watching status command |
-| `add_show` | title / TMDB id | watching add command |
+| `set_status` | `domain` (reading/watching), `id`, `status` (checked against the domain; incl. `rewatching` for watching) | reading or watching status command |
+| `add_item` | `title`, `kind` (novel/manhwa → reading, movie/series/anime → watching), optional `status` (default reading / watching) | reading or watching add command |
 | `add_plan` | `text` in plain language, e.g. "elke ma 12:00 gym" | existing planner parser (`app/planner/parse.py`) |
 | `plan_done` / `plan_skip` / `plan_reschedule` / `plan_edit` | `plan_id`, ... | planner commands |
 | `delete_item` | domain + id | delete commands; **extra confirmation with the name** |

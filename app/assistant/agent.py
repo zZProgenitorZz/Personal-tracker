@@ -48,11 +48,10 @@ PROBLEM_TEXTS = {
 # What the thinking bubble says while a tool runs (one line per tool); others get DEFAULT_STATUS.
 TOOL_STATUS = {
     "find_item": "Looking for it…",
-    "reading_overview": "Checking your library…",
-    "watching_overview": "Checking your watch list…",
-    "top_tracks": "Digging through your plays…",
-    "top_artists": "Digging through your plays…",
-    "listening_minutes": "Counting your minutes…",
+    "library": "Checking your library…",
+    "listening_stats": "Counting your plays…",
+    "set_status": "Lining that up…",
+    "add_item": "Lining that up…",
     "plans_between": "Checking your planner…",
     "history_between": "Looking through your history…",
     "item_history": "Looking through your history…",
