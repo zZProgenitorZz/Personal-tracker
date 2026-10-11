@@ -1,0 +1,39 @@
+{% import "_macros.html" as ui %}
+{# Sunny: ballonnen en de kaart met voorgestelde acties. #}
+
+{% macro bubble(entry) -%}
+{% if entry.kind == "user" %}
+<div class="sunny-msg from-user">{{ entry.text }}</div>
+{% elif entry.kind == "sunny" %}
+<div class="sunny-msg from-sunny sunny-bubble{% if entry.error %} is-error{% endif %}">{{ entry.text }}</div>
+{% elif entry.kind == "unavailable" %}
+<p class="sunny-unavailable">{{ ui.icon('moon', 16) }}Add ANTHROPIC_API_KEY to .env to summon Sunny from the shadows</p>
+{% endif %}
+{%- endmacro %}
+
+{% macro card(proposal) -%}
+{% set names = proposal.delete_names %}
+<div class="sunny-card is-{{ proposal.state }}" id="sunny-card-{{ proposal.id }}">
+  <p class="sunny-card-title">{{ 'I’m going to do this:' if proposal.state == 'pending' else 'Proposed:' }}</p>
+  <ul class="sunny-actions">
+    {% for action in proposal.actions %}
+    <li{% if action.delete_name %} class="is-delete"{% endif %}>{{ ui.icon('trash' if action.delete_name else 'check', 14) }}<span>{{ action.label }}</span></li>
+    {% endfor %}
+  </ul>
+  {% if proposal.state == "pending" %}
+  <div class="sunny-card-buttons">
+    <button class="btn btn-primary btn-sm" type="button" hx-post="/ui/assistant/confirm/{{ proposal.id }}"
+            hx-target="#sunny-card-{{ proposal.id }}" hx-swap="outerHTML"
+            {%- if names %} hx-confirm="{{ names|join(', ') }}" data-confirm-kind="sunny-delete"{% endif %}>Confirm</button>
+    <button class="btn btn-ghost btn-sm" type="button" hx-post="/ui/assistant/cancel/{{ proposal.id }}"
+            hx-target="#sunny-card-{{ proposal.id }}" hx-swap="outerHTML">Cancel</button>
+  </div>
+  {% else %}
+  <p class="sunny-card-state">{{ {'confirmed': 'Confirmed', 'cancelled': 'Cancelled', 'failed': 'Not (fully) saved'}[proposal.state] }}</p>
+  {% endif %}
+</div>
+{%- endmacro %}
+
+{% macro entry(item) -%}
+{% if item.kind == "card" %}{{ card(item.proposal) }}{% else %}{{ bubble(item) }}{% endif %}
+{%- endmacro %}

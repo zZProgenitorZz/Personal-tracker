@@ -628,6 +628,7 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
 
 .pill-reading,   .dot-reading,   .seg-reading,
 .pill-watching,  .dot-watching,  .seg-watching  { --c: var(--purple-hi); }
+.pill-rewatching, .dot-rewatching, .seg-rewatching { --c: var(--purple); }
 .pill-on_hold,   .dot-on_hold,   .seg-on_hold   { --c: var(--amber); }
 .pill-completed, .dot-completed, .seg-completed { --c: var(--green); }
 .pill-dropped,   .dot-dropped,   .seg-dropped   { --c: var(--rose); }
@@ -963,6 +964,98 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
 .tracker-covers .cover-initials { font-size: 18px; }
 .tracker-covers .cover-kind { display: none; }
 .tracker-now { position: relative; margin: -8px 0 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* ---- Sunny, de assistent: een donkere knop en een paneel dat van rechts inschuift ---- */
+.sunny-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #1a1528, #05040a 70%);
+  color: var(--purple-hi);
+  box-shadow: 0 14px 34px -10px rgba(0, 0, 0, .95), 0 0 26px -8px rgba(139, 92, 246, .55);
+  cursor: pointer;
+  transition: transform .25s var(--ease), box-shadow .25s, opacity .2s;
+}
+.sunny-fab:hover { transform: translateY(-2px); box-shadow: 0 18px 40px -10px rgba(0, 0, 0, .95), 0 0 34px -6px rgba(139, 92, 246, .7); }
+.sunny-fab:focus-visible { outline: 2px solid var(--purple-hi); outline-offset: 3px; }
+.sunny-fab[aria-expanded="true"] { opacity: 0; pointer-events: none; }
+.sunny-fab[hidden] { display: none; }
+
+.sunny-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  width: min(400px, 100vw);
+  border-left: 1px solid var(--border-strong);
+  background: linear-gradient(180deg, #15111f, #0a0810);
+  box-shadow: -30px 0 80px -30px rgba(0, 0, 0, .9), -10px 0 60px -40px rgba(139, 92, 246, .45);
+  transform: translateX(105%);
+  transition: transform .32s var(--ease);
+}
+.sunny-panel.is-open { transform: translateX(0); }
+.sunny-head { display: flex; align-items: center; gap: 10px; padding: 22px 18px 16px 22px; border-bottom: 1px solid var(--border); }
+.sunny-head > div { margin-right: auto; }
+.sunny-head .eyebrow { margin-bottom: 4px; }
+.sunny-head h2 { font-size: 20px; letter-spacing: -.02em; }
+.sunny-head .btn-close { width: 36px; height: 36px; border-radius: 12px; }
+.sunny-body { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.sunny-log { display: flex; flex: 1; flex-direction: column; gap: 10px; min-height: 0; padding: 18px; overflow-y: auto; }
+.sunny-intro { margin: 0; font-size: 13.5px; }
+.sunny-msg {
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.sunny-msg.from-user { align-self: flex-end; border-bottom-right-radius: 6px; background: rgba(139, 92, 246, .22); }
+.sunny-msg.from-sunny { align-self: flex-start; border-bottom-left-radius: 6px; background: rgba(255, 255, 255, .05); color: var(--text); }
+.sunny-msg.is-error { color: var(--rose); }
+.sunny-unavailable { display: flex; align-items: center; gap: 10px; margin: 0; color: var(--muted); font-size: 14px; }
+.sunny-unavailable .icon { flex: none; color: var(--purple-hi); }
+.sunny-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, .04);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.sunny-card-title { margin: 0; color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.sunny-actions { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.sunny-actions li { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; font-weight: 500; }
+.sunny-actions .icon { flex: none; margin-top: 2px; color: var(--teal-hi); }
+.sunny-actions li.is-delete .icon { color: var(--rose); }
+.sunny-card-buttons { display: flex; gap: 8px; }
+.sunny-card-state { margin: 0; color: var(--faint); font-size: 12.5px; font-weight: 600; }
+.sunny-card.is-confirmed .sunny-card-state { color: var(--green); }
+.sunny-card.is-failed .sunny-card-state { color: var(--rose); }
+.sunny-card:not(.is-pending) .sunny-actions { opacity: .7; }
+.sunny-typing { display: none; margin: 0; padding: 0 18px 8px; color: var(--faint); font-size: 12.5px; font-style: italic; }
+.sunny-typing.htmx-request { display: block; }
+.sunny-form { display: flex; gap: 8px; padding: 14px 18px 20px; border-top: 1px solid var(--border); }
+.sunny-form .input { padding: 11px 14px; font-size: 14px; }
+.sunny-send { flex: none; width: 44px; padding: 0; }
+/* Toasts niet achter het paneel */
+body:has(.sunny-panel.is-open) .toasts { right: calc(min(400px, 100vw) + 24px); }
+@media (max-width: 760px) {
+  .sunny-fab { right: 16px; bottom: 96px; width: 52px; height: 52px; }
+  .sunny-panel { width: 100vw; border-left: 0; }
+  body:has(.sunny-panel.is-open) .toasts { right: 16px; bottom: 90px; }
+}
 
 /* Startscherm: klein label op een trackerkaart ("3 gathering dust") */
 .tracker-badge {
@@ -1743,6 +1836,9 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
 .segmented-5 label { grid-column: span 2; }
 .segmented-5 label:nth-child(n + 4) { grid-column: span 3; }
 .segmented-5 span { gap: 7px; align-items: center; padding: 10px 6px; font-size: 13px; }
+/* Zes statussen (Watching met Rewatching): drie per rij */
+.segmented-6 { grid-template-columns: repeat(3, 1fr); }
+.segmented-6 span { gap: 7px; align-items: center; padding: 10px 6px; font-size: 13px; }
 .segmented input:focus-visible + span { outline: 2px solid var(--purple-hi); outline-offset: 2px; }
 
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }

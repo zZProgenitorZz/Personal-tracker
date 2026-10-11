@@ -26,6 +26,7 @@ DUST_SHOWN = 5  # daarna "+N more"
 
 WATCH_STATUS_LABELS = {
     WatchStatus.WATCHING: "Watching",
+    WatchStatus.REWATCHING: "Rewatching",
     WatchStatus.COMPLETED: "Completed",
     WatchStatus.ON_HOLD: "On hold",
     WatchStatus.DROPPED: "Dropped",

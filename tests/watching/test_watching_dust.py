@@ -35,7 +35,7 @@ def test_watching_titles_untouched_for_longer_than_the_limit_are_stale():
     assert [e.title for e in watchlist.stale(NOW, 30)] == ["Older", "Old"]
 
 
-@pytest.mark.parametrize("status", [s for s in WatchStatus if s is not WatchStatus.WATCHING])
+@pytest.mark.parametrize("status", [s for s in WatchStatus if s not in (WatchStatus.WATCHING, WatchStatus.REWATCHING)])  # rewatching telt als kijken
 def test_other_statuses_are_never_stale(status):
     watchlist = given(ShowAdded("1", "A", WatchKind.MOVIE, status, at=days_ago(400)))
     assert watchlist.stale(NOW, 30) == []

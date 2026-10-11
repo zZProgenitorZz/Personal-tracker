@@ -11,6 +11,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .assistant.tools import TrackerData
+from .assistant.web import Sunny, create_assistant_router
 from .autostart import Autostart, launcher_command
 from .backup import Backups, default_backup_dir
 from .covers import CoverStore
@@ -29,6 +31,7 @@ from .planner.api import create_planner_router
 from .planner.commands import PlannerCommandHandler
 from .planner.events import EVENT_TYPES as PLANNER_EVENT_TYPES
 from .planner.projections import AgendaProjection, PlannerActivityProjection
+from .planner import schedule as planner_schedule
 from .planner.web import create_planner_web_router, planner_summary
 from .reading.api import create_reading_router
 from .reading.commands import ReadingCommandHandler
@@ -167,6 +170,14 @@ def create_app(
     # Je hele Spotify-geschiedenis importeren (Settings); de projecties lopen live mee.
     app.include_router(create_import_router(ImportJob(store, backups)))
     app.include_router(create_planner_router(planner, agenda))
+    # Sunny, de assistent: leest de projecties, schrijft alleen na Confirm via dezelfde handlers.
+    # In de tests (":memory:") nooit een echte client; die geven ze zelf een nep-client.
+    sunny = Sunny(TrackerData(library=library, reading_activity=activity, watchlist=watchlist, listening=listen_activity,
+                              top_artists=top_artists, top_tracks=top_tracks, agenda=agenda, reading=handler,
+                              watching=watching, planner=planner, now=lambda: planner_schedule.local_now()),
+                  use_real_client=scratch is None)
+    app.state.sunny = sunny
+    app.include_router(create_assistant_router(sunny))
     app.include_router(create_planner_web_router(planner, agenda))
     app.include_router(create_wrapped_web_router(wrapped))
     # Wrapped is geen tracker (niet in Settings of back-ups), alleen een kaart op het startscherm.

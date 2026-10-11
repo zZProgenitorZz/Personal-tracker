@@ -150,6 +150,12 @@ app/
     ics.py             een plan als .ics voor je iPhone (RFC 5545)
     api.py             /planner endpoints (JSON), waaronder /planner/due voor de meldingen
     web.py             /ui/planner endpoints (HTML-fragmenten voor htmx)
+  assistant/
+    identity/          het ontwerp van Sunny: IDENTITY, SOUL, USER (de systeemprompt), TOOLS en OUTCOME
+    prompt.py          de systeemprompt (cachebaar vast deel + de datum van vandaag)
+    tools.py           Sunny's tools: lezen uit de projecties, schrijven alleen als voorstel (PendingAction)
+    agent.py           de loop met Claude (model en effort als constanten bovenaan)
+    web.py             /ui/assistant: het chatpaneel, Confirm en Cancel
   wrapped/
     projections.py     WrappedProjection: het jaaroverzicht uit de events van alle trackers (alleen lezen)
     web.py             /ui/wrapped (#wrapped) en de Wrapped-kaart op het startscherm
@@ -160,7 +166,7 @@ scripts/
 tests/
   test_eventstore.py, test_api.py, test_web.py
   test_covers.py, test_cover_flow.py
-  reading/, watching/, listening/, planner/, wrapped/  given/when/then-tests per regel
+  reading/, watching/, listening/, planner/, wrapped/, assistant/  given/when/then-tests per regel
 data/                  tracker.db, covers/ en de spotify_*-bestanden (niet in git)
 ```
 
@@ -197,7 +203,7 @@ Hoofdstukken zijn `float`, zodat hoofdstukken als 45.5 mogelijk zijn.
 | Onderdeel   | Inhoud |
 | ----------- | ------ |
 | Soorten     | Series, Anime, Movie |
-| Statussen   | Watching, Completed, On hold, Dropped, Plan to Watch (geen afleveringen, geen cijfers) |
+| Statussen   | Watching, Rewatching, Completed, On hold, Dropped, Plan to Watch (geen afleveringen, geen cijfers) |
 | Events      | `ShowAdded` (met beginstatus en optioneel `cover`), `ShowStatusChanged`, `ShowGenresChanged`, `ShowRemoved` |
 | Commands    | `AddShow`, `ChangeShowStatus`, `SetShowGenres`, `RemoveShow` |
 | Read models | Watchlist, WatchActivity (afgerond per dag) |
@@ -210,6 +216,7 @@ Regels:
 4. Genres uit een eigen vaste lijst (`WATCH_GENRES` in `app/watching/genres.py`); verder zoals bij Reading.
 5. Na verwijderen is de titel weer vrij.
 6. **Plan to Watch** is de backlog: toevoegen is gewoon `ShowAdded(status=PLAN_TO_WATCH)`. Telt niet mee als "watching"; van Plan to Watch naar Completed zetten telt wél in "Finished this month" (regel 3).
+7. **Rewatching**: iets wat je al zag, nog een keer. Telt mee als "watching now" (en kan stof verzamelen); weer op Completed zetten telt als afgerond.
 
 **Pick something** (Library van Reading en Watching, alleen met een backlog): toont een willekeurige titel uit Plan to Read/Watch, eventueel binnen één genre. *Another one* kiest een andere; *Start* stuurt de gewone statuswijziging (`ChangeStatus`/`ChangeShowStatus`). Het kiezen zelf (`GET /ui/<tracker>/pick`) is alleen lezen: geen command, geen event.
 
@@ -368,6 +375,23 @@ Regels:
 - Genres: AniList (genres en tags met rank ≥ 60), MangaUpdates (genres), Google Books (categorieën) en Open Library (onderwerpen) leveren genres mee. Die worden vertaald naar de vaste lijst en in het formulier alvast aangevinkt; wat je zelf aan- of uitvinkt, blijft staan als je naar een volgende cover bladert. Later aanpassen kan via ⋯ > *Edit genres* op een kaart.
 - Een cover van een bestaande serie wijzigen kan nog niet; daar is een apart event voor nodig (bijvoorbeeld `SeriesCoverChanged`).
 
+## Sunny (de assistent)
+
+Sunny is een AI-assistent in de app: een ronde, donkere knop rechtsonder op elke pagina behalve Settings. Klik erop en een chatpaneel schuift van rechts in. Het gesprek blijft staan als je van pagina wisselt; **New chat** wist het, Esc sluit het paneel. Het ontwerp staat in `app/assistant/identity/` (IDENTITY, SOUL, USER vormen samen de systeemprompt; TOOLS en OUTCOME beschrijven wat Sunny mag en wanneer het klaar is).
+
+Wat Sunny kan:
+
+- **Vragen beantwoorden uit je eigen data**, zonder bevestiging want er verandert niets: "welk nummer luisterde ik het meest van 1 sep tot 15 okt?", "hoe lang heb ik X niet gelezen?", "heb ik plannen volgende maand?".
+- **Bijhouden en wijzigen in één zin**: "ik ben bij hoofdstuk 120 van Solo Leveling", "zet Severance op dropped", "ik rewatch Frieren", "elke ma 12:00 gym". Sunny zet dat om in acties en toont ze eerst als **kaart** met per actie één regel (`Solo Leveling · chapter 119 → 120`, `New plan · gym · from Mon 12 Oct · 12:00 · every Mon`).
+- **Niets wordt opgeslagen voordat je op Confirm klikt.** Confirm voert de acties uit via dezelfde command handlers als de rest van de app (gewone events, met toast en verversen van de open pagina); Cancel doet niets. **Verwijderen** vraagt na Confirm nog één keer bevestiging, met de naam erbij.
+- Nooit: Settings, back-ups, imports, Spotify koppelen of afsluiten. Sunny verzint geen titels of getallen; wat niet in je tracker staat, zegt het.
+
+Instellen: zet `ANTHROPIC_API_KEY` in `.env` (zie `.env.example`) en herstart Progen. Zonder sleutel toont het paneel alleen "Add ANTHROPIC_API_KEY to .env to summon Sunny from the shadows".
+
+**Kosten:** elk bericht aan Sunny gaat naar de API van Anthropic en kost een klein beetje van je API-tegoed. Sunny gebruikt standaard **Claude Haiku 5.5** met lage effort en hooguit 1024 tokens per antwoord; de vaste systeemprompt en de toollijst worden gecachet, alleen de laatste 10 berichten gaan mee, en Sunny zoekt één titel op in plaats van je hele bibliotheek. Zet in de console van Anthropic een maandlimiet. Het model (en de effort) staan als constanten bovenaan `app/assistant/agent.py`, bijvoorbeeld om naar `claude-sonnet-5-5` te wisselen. Wat er naar Anthropic gaat: je bericht, de laatste berichten van het gesprek en de gegevens die Sunny voor dat antwoord opzoekt; verder niets.
+
+Hoe het werkt (`app/assistant/`): `prompt.py` bouwt de systeemprompt (het vaste deel met `cache_control`, de datum van vandaag als apart blok erna); `tools.py` heeft de tools als JSON-schema's met `strict: true` (leestools lezen de projecties direct, schrijftools geven alleen een voorstel terug); `agent.py` draait de loop (hooguit 5 rondes per bericht; de geschiedenis gaat als platte tekst mee); `web.py` heeft de routes voor het paneel en Confirm/Cancel. Gesprek en voorstellen staan alleen in het geheugen van de app, niet in de event store. Tests gebruiken een nep-client en praten nooit met de echte API.
+
 ## Beveiliging
 
 Progen draait alleen op je eigen computer (`127.0.0.1`), maar je browser kan ook verzoeken sturen namens een website die je open hebt. Daarom (`app/security.py`, geldt automatisch voor elke route):
@@ -427,6 +451,14 @@ Eerst handmatig invoeren; automatisch importeren komt later (zie punt 5).
 - [ ] Een API-key of wachtwoord toevoegen voordat de app buiten het thuisnetwerk bereikbaar wordt.
 - [ ] Een plek kiezen om hem te laten draaien (Raspberry Pi thuis, of een kleine VPS).
 - [x] Back-ups van `data/tracker.db` en covers, met terugzetten (Settings).
+
+### 7. Sunny, de assistent
+
+- [x] Vragen beantwoorden en acties voorstellen in gewone taal; alles wat schrijft pas na Confirm (vertrouwensfase 1 uit IDENTITY.md).
+- [x] Ontbrekende stukken: top nummers en artiesten over een vrije periode, de status Rewatching, plannen in een periode.
+- [ ] Fase 2: eenvoudige logs (bijv. hoofdstuk +1) zonder Confirm, met een Undo-knop.
+- [ ] Fase 3: een "heartbeat", bijvoorbeeld een ochtendsamenvatting van je dag.
+- [ ] In Settings kunnen wisselen naar Sonnet 5.5 voor moeilijkere vragen.
 
 ### Ideeën voor later
 

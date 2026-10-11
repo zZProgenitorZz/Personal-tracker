@@ -7,6 +7,7 @@ from enum import Enum
 
 class WatchStatus(str, Enum):
     WATCHING = "watching"
+    REWATCHING = "rewatching"  # iets wat je al zag, nog een keer
     COMPLETED = "completed"
     ON_HOLD = "on_hold"
     DROPPED = "dropped"

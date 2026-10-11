@@ -133,6 +133,18 @@ class AgendaProjection:
     def someday(self) -> list[PlanEntry]:
         return [p for p in self.all() if p.day is None and not p.done]
 
+    def between(self, start: dt.date, end: dt.date) -> list[Occurrence]:
+        """Alle keren van `start` tot en met `end`, per dag zoals day() (herhalingen uitgeklapt,
+        overgeslagen weg, hele dag eerst). Hooguit ruim een jaar."""
+        if end < start:
+            raise ValueError("end lies before start")
+        end = min(end, start + dt.timedelta(days=400))
+        found, day = [], start
+        while day <= end:
+            found += self.day(day)
+            day += dt.timedelta(days=1)
+        return found
+
     def upcoming(self, today: dt.date) -> tuple[list[Occurrence], list[tuple[PlanEntry, dt.date]]]:
         """Wat er komt: eenmalige plannen vanaf vandaag die nog niet af zijn (op datum en tijd, hele dag
         eerst), en elke herhaling één keer met haar eerstvolgende keer. Someday staat er niet in."""

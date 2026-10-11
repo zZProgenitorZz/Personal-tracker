@@ -5,6 +5,9 @@ from datetime import date, datetime, timedelta
 from .events import ShowAdded, ShowGenresChanged, ShowRemoved, ShowStatusChanged, WatchKind, WatchStatus
 
 
+WATCHING_NOW = (WatchStatus.WATCHING, WatchStatus.REWATCHING)  # telt als "aan het kijken"
+
+
 @dataclass
 class WatchEntry:
     show_id: str
@@ -43,13 +46,14 @@ class WatchlistProjection:
         return [e for e in self.all() if e.status is status]
 
     def currently_watching(self) -> list[WatchEntry]:
-        return sorted(self.by_status(WatchStatus.WATCHING), key=lambda e: e.updated_at, reverse=True)
+        watching = [e for e in self.all() if e.status in WATCHING_NOW]
+        return sorted(watching, key=lambda e: e.updated_at, reverse=True)
 
     def stale(self, now: datetime, days: int) -> list[WatchEntry]:
         """Gathering dust: op Watching, maar langer dan `days` dagen niet toegevoegd of van status gewisseld.
         Langst stil eerst. (Genres aanpassen telt niet.)"""
         limit = now - timedelta(days=days)
-        return sorted((e for e in self.by_status(WatchStatus.WATCHING) if e.updated_at < limit),
+        return sorted((e for e in self.all() if e.status in WATCHING_NOW and e.updated_at < limit),
                       key=lambda e: e.updated_at)
 
     def find(self, title: str, kind: WatchKind) -> WatchEntry | None:

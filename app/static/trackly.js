@@ -50,6 +50,10 @@ function showPage() {
   document.querySelector(".nav-add").hidden = !(tracker && tracker.add);
   if (tracker && tracker.add) el("nav-add-label").textContent = tracker.add;
 
+  const onSettings = route.section === "settings";  // Sunny is er overal behalve op Settings
+  el("sunny-fab").hidden = onSettings;
+  if (onSettings) closeSunny();
+
   const name = route.section[0].toUpperCase() + route.section.slice(1);
   document.title = `${name}${route.tab && route.tab !== tracker.tabs[0] ? " · " + route.tab : ""} · Progen`;
 
@@ -277,6 +281,11 @@ const CONFIRM_TEXTS = {
     body: "The series leaves your library, <strong>including its progress</strong>. You can add it again later, but it starts over as a new series. Chapters you've read still count in your stats.",
     action: "Remove",
   },
+  "sunny-delete": {
+    title: (name) => `Delete ${name}?`,
+    body: "Sunny proposed to delete this from your tracker. <strong>This can't be undone from the app.</strong>",
+    action: "Delete",
+  },
   "remove-plan": {
     title: (name) => `Remove ${name}?`,
     body: "It leaves your planner, including every time it repeats. Plans you sent to your iPhone stay there.",
@@ -391,6 +400,71 @@ document.addEventListener("input", (event) => {
   filterUpcoming();
 });
 document.addEventListener("htmx:afterSwap", filterUpcoming);
+
+
+// ---- Sunny: het paneel ----
+// Het gesprek staat op de server (in het geheugen), dus het blijft staan als je van pagina wisselt.
+
+function openSunny() {
+  const panel = el("sunny-panel");
+  panel.classList.add("is-open");
+  panel.removeAttribute("inert");
+  panel.setAttribute("aria-hidden", "false");
+  el("sunny-fab").setAttribute("aria-expanded", "true");
+  scrollSunny();
+  setTimeout(() => el("sunny-input") && el("sunny-input").focus(), 250);
+}
+
+function closeSunny() {
+  const panel = el("sunny-panel");
+  if (!panel.classList.contains("is-open")) return;
+  panel.classList.remove("is-open");
+  panel.setAttribute("inert", "");
+  panel.setAttribute("aria-hidden", "true");
+  el("sunny-fab").setAttribute("aria-expanded", "false");
+}
+
+function scrollSunny() {
+  const log = el("sunny-log");
+  if (log) log.scrollTop = log.scrollHeight;
+}
+
+document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-sunny-open]")) {
+    el("sunny-panel").classList.contains("is-open") ? closeSunny() : openSunny();
+  } else if (event.target.closest("[data-sunny-close]")) {
+    closeSunny();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  // Esc sluit het paneel, tenzij er een venster (dialog) open is: dat gaat eerst dicht.
+  if (event.key === "Escape" && !document.querySelector("dialog[open]")) closeSunny();
+});
+
+// Je eigen bericht meteen tonen; Sunny's antwoord komt er onder als de server klaar is.
+document.addEventListener("htmx:beforeRequest", (event) => {
+  if (event.detail.elt.id !== "sunny-form") return;
+  const text = event.detail.elt.message.value.trim();
+  if (!text) return;
+  const bubble = document.createElement("div");
+  bubble.className = "sunny-msg from-user";
+  bubble.textContent = text;
+  el("sunny-log").append(bubble);
+  scrollSunny();
+});
+
+document.addEventListener("htmx:afterRequest", (event) => {
+  if (event.detail.elt.id !== "sunny-form") return;
+  event.detail.elt.reset();
+  setTimeout(() => el("sunny-input") && el("sunny-input").focus(), 0);
+});
+
+document.addEventListener("htmx:afterSwap", (event) => {
+  if (["sunny-log", "sunny-body"].includes(event.detail.target.id) || event.detail.target.closest?.("#sunny-log")) {
+    scrollSunny();
+  }
+});
 
 
 // ---- Toasts ----

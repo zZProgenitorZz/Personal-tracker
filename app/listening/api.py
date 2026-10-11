@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -59,13 +59,28 @@ def create_listening_router(
             "minutes_per_week": {week: round(m, 2) for week, m in activity.minutes_per_week().items()},
         }
 
+    def period(start: date | None, end: date | None) -> tuple[date, date] | None:
+        """from en to samen (tot en met), anders None: dan geldt month."""
+        if start is None and end is None:
+            return None
+        if start is None or end is None or end < start:
+            raise HTTPException(status_code=422, detail="Give both 'from' and 'to', with 'from' not after 'to'")
+        return start, end
+
     @router.get("/top-artists")
-    def get_top_artists(month: str | None = MONTH, limit: int = 10):
-        return [{"artist": a, "plays": n} for a, n in top_artists.top(*_year_month(month), limit=limit)]
+    def get_top_artists(month: str | None = MONTH, limit: int = 10,
+                        start: date | None = Query(None, alias="from"), end: date | None = Query(None, alias="to")):
+        """Per maand (month=YYYY-MM, standaard deze), of een vrije periode met from en to (YYYY-MM-DD)."""
+        found = period(start, end)
+        ranked = top_artists.between(*found, limit=limit) if found else top_artists.top(*_year_month(month), limit=limit)
+        return [{"artist": a, "plays": n} for a, n in ranked]
 
     @router.get("/top-tracks")
-    def get_top_tracks(month: str | None = MONTH, limit: int = 10):
-        return top_tracks.top(*_year_month(month), limit=limit)
+    def get_top_tracks(month: str | None = MONTH, limit: int = 10,
+                       start: date | None = Query(None, alias="from"), end: date | None = Query(None, alias="to")):
+        """Per maand (month=YYYY-MM, standaard deze), of een vrije periode met from en to (YYYY-MM-DD)."""
+        found = period(start, end)
+        return top_tracks.between(*found, limit=limit) if found else top_tracks.top(*_year_month(month), limit=limit)
 
     # Schrijven: commands naar de handler
 

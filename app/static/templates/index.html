@@ -63,6 +63,24 @@
   <div id="genre-editor"></div>
 </dialog>
 
+{# Sunny, de assistent: een knop rechtsonder en een paneel dat van rechts inschuift (niet op Settings). #}
+<button id="sunny-fab" class="sunny-fab" type="button" data-sunny-open aria-label="Ask Sunny" title="Ask Sunny"
+        aria-controls="sunny-panel" aria-expanded="false">{{ ui.icon('moon', 22) }}</button>
+<aside id="sunny-panel" class="sunny-panel" aria-label="Sunny" aria-hidden="true" inert>
+  <header class="sunny-head">
+    <div>
+      <p class="eyebrow">From the shadows</p>
+      <h2>Sunny</h2>
+    </div>
+    <button class="btn btn-ghost btn-sm" type="button" hx-post="/ui/assistant/reset" hx-target="#sunny-body"
+            hx-swap="innerHTML">New chat</button>
+    <button class="btn-close" type="button" data-sunny-close aria-label="Close Sunny">{{ ui.icon('x', 18) }}</button>
+  </header>
+  <div id="sunny-body" class="sunny-body" hx-get="/ui/assistant" hx-trigger="load" hx-swap="innerHTML">
+    <div class="loading"></div>
+  </div>
+</aside>
+
 {# "Pick something" in de Library: /ui/<tracker>/pick wordt hierin geladen. #}
 <dialog id="pick-dialog" class="dialog dialog-pick" aria-label="Pick something from your backlog">
   <div id="pick-slot"></div>

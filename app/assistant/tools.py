@@ -1,0 +1,371 @@
+"""Sunny's tools (zie identity/TOOLS.md): JSON-schema's met strict: true, en wat ze doen.
+
+Leestools roepen de bestaande projecties direct aan (geen HTTP) en geven compacte JSON terug:
+alleen de velden die nodig zijn. Schrijftools voeren niets uit: ze geven een PendingAction
+terug (het command plus een leesbare regel voor de kaart). Pas na Confirm gaat het command naar
+de gewone command handler, en wordt het een gewoon event.
+
+Een ongeldige aanroep (onbekend id, verkeerde datum) wordt een ToolError: die gaat als
+is_error terug naar het model, zodat Sunny het zelf kan rechtzetten of het kan vragen.
+"""
+import datetime as dt
+from dataclasses import dataclass, field
+from typing import Any, Callable
+
+from rapidfuzz import fuzz, process
+
+from ..planner.commands import AddPlan, EditPlan, MarkPlanDone, PlannerCommandHandler, RemovePlan, ReschedulePlan, SkipPlan
+from ..planner.parse import describe, describe_repeat, nice_day, parse
+from ..planner.projections import AgendaProjection
+from ..planner.schedule import next_occurrence
+from ..reading.commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, StartSeries
+from ..reading.events import Kind, Status
+from ..reading.projections import LibraryProjection, ReadingActivityProjection
+from ..reading.web import KIND_LABELS, STATUS_LABELS
+from ..listening.projections import ListeningActivityProjection, TopArtistsProjection, TopTracksProjection
+from ..watching.commands import AddShow, ChangeShowStatus, RemoveShow, WatchingCommandHandler
+from ..watching.events import WatchKind, WatchStatus
+from ..watching.projections import WatchlistProjection
+from ..watching.web import WATCH_KIND_LABELS, WATCH_STATUS_LABELS
+
+PROPOSED = "proposed, waiting for Progen's confirmation"
+MAX_ROWS = 40  # nooit de hele bibliotheek in één antwoord
+
+
+class ToolError(ValueError):
+    """Een aanroep die niet kan; de melding is voor het model."""
+
+
+@dataclass
+class PendingAction:
+    domain: str                 # reading / watching / planner
+    command: Any                # het command voor de handler, na Confirm
+    label: str                  # "Solo Leveling · chapter 119 → 120"
+    changed: str                # htmx-event na Confirm, bv. "reading-changed"
+    delete_name: str | None = None  # bij verwijderen: de naam, voor de extra bevestiging
+
+
+@dataclass
+class TrackerData:
+    """Alles waar Sunny bij mag: de projecties om te lezen, de handlers om (na Confirm) te schrijven."""
+    library: LibraryProjection
+    reading_activity: ReadingActivityProjection
+    watchlist: WatchlistProjection
+    listening: ListeningActivityProjection
+    top_artists: TopArtistsProjection
+    top_tracks: TopTracksProjection
+    agenda: AgendaProjection
+    reading: ReadingCommandHandler
+    watching: WatchingCommandHandler
+    planner: PlannerCommandHandler
+    now: Callable[[], dt.datetime]   # lokale tijd, net als de planner
+    extra: dict = field(default_factory=dict)
+
+    def handler(self, domain: str):
+        return {"reading": self.reading, "watching": self.watching, "planner": self.planner}[domain]
+
+
+# ---- De schema's ----
+
+def _nullable(schema: dict) -> dict:
+    return {"anyOf": [schema, {"type": "null"}]}
+
+
+def _tool(name: str, description: str, properties: dict) -> dict:
+    return {"name": name, "description": description, "strict": True,
+            "input_schema": {"type": "object", "properties": properties, "required": list(properties),
+                             "additionalProperties": False}}
+
+
+DATE = {"type": "string", "description": "YYYY-MM-DD"}
+READING_STATUS = {"type": "string", "enum": [s.value for s in Status]}
+WATCH_STATUS = {"type": "string", "enum": [s.value for s in WatchStatus]}
+LIMIT = {"type": "integer", "description": "How many, e.g. 5"}
+WRITE_NOTE = " Only proposes the change; nothing is saved until Progen clicks Confirm."
+
+TOOL_DEFINITIONS = [
+    _tool("find_item", "Find a series, show or plan by (part of) its title, tolerant of typos. Use this first to get "
+                       "an id instead of listing everything.",
+          {"query": {"type": "string"},
+           "domain": _nullable({"type": "string", "enum": ["reading", "watching", "plan"]})}),
+    _tool("reading_overview", "Series in the reading library: id, title, status, chapter, last update. "
+                              "Optionally only one status.", {"status": _nullable(READING_STATUS)}),
+    _tool("watching_overview", "Movies, series and anime in the watch list: id, title, kind, status. "
+                               "Optionally only one status.", {"status": _nullable(WATCH_STATUS)}),
+    _tool("top_tracks", "Most played songs between two dates (inclusive).", {"from": DATE, "to": DATE, "limit": LIMIT}),
+    _tool("top_artists", "Most played artists between two dates (inclusive).", {"from": DATE, "to": DATE, "limit": LIMIT}),
+    _tool("listening_minutes", "Total listening minutes and days listened between two dates (inclusive).",
+          {"from": DATE, "to": DATE}),
+    _tool("plans_between", "Every planned time between two dates (inclusive), repeats worked out.",
+          {"from": DATE, "to": DATE}),
+    _tool("set_reading_progress", "Set the chapter Progen is at for a series." + WRITE_NOTE,
+          {"series_id": {"type": "string"}, "chapter": {"type": "number"}}),
+    _tool("set_reading_status", "Change the status of a series." + WRITE_NOTE,
+          {"series_id": {"type": "string"}, "status": READING_STATUS}),
+    _tool("add_series", "Add a new novel or manhwa to the reading library." + WRITE_NOTE,
+          {"title": {"type": "string"}, "kind": {"type": "string", "enum": [k.value for k in Kind]}}),
+    _tool("set_watch_status", "Change the status of a movie, series or anime (rewatching for a second watch)."
+          + WRITE_NOTE, {"show_id": {"type": "string"}, "status": WATCH_STATUS}),
+    _tool("add_show", "Add a movie, series or anime to the watch list (status defaults to watching)." + WRITE_NOTE,
+          {"title": {"type": "string"}, "kind": {"type": "string", "enum": [k.value for k in WatchKind]},
+           "status": _nullable(WATCH_STATUS)}),
+    _tool("add_plan", "Add a plan from plain language, Dutch or English, e.g. \"elke ma 12:00 gym\" or "
+                      "\"tandarts vr 14u\". The planner's own parser reads date, time and repeat." + WRITE_NOTE,
+          {"text": {"type": "string"}}),
+    _tool("plan_done", "Tick off a plan (for a repeat: one time; default the next one)." + WRITE_NOTE,
+          {"plan_id": {"type": "string"}, "on": _nullable(DATE)}),
+    _tool("plan_skip", "Skip one time of a repeating plan." + WRITE_NOTE,
+          {"plan_id": {"type": "string"}, "on": DATE}),
+    _tool("plan_reschedule", "Move a plan to another date and/or time (day null = Someday, time null = all day)."
+          + WRITE_NOTE, {"plan_id": {"type": "string"}, "day": _nullable(DATE),
+                         "time": _nullable({"type": "string", "description": "HH:MM"})}),
+    _tool("plan_edit", "Change a plan's title and/or note (null keeps it)." + WRITE_NOTE,
+          {"plan_id": {"type": "string"}, "title": _nullable({"type": "string"}),
+           "note": _nullable({"type": "string"})}),
+    _tool("delete_item", "Delete a series, show or plan. Progen gets an extra confirmation with the name." + WRITE_NOTE,
+          {"domain": {"type": "string", "enum": ["reading", "watching", "plan"]}, "id": {"type": "string"}}),
+]
+TOOL_DEFINITIONS[-1]["cache_control"] = {"type": "ephemeral"}  # cachet de hele toollijst
+
+
+# ---- Uitvoeren ----
+
+def _date(value: str | None, name: str) -> dt.date:
+    try:
+        return dt.date.fromisoformat(value)
+    except (TypeError, ValueError):
+        raise ToolError(f"'{name}' must be a date like 2026-10-14") from None
+
+
+def _period(args: dict) -> tuple[dt.date, dt.date]:
+    start, end = _date(args["from"], "from"), _date(args["to"], "to")
+    if end < start:
+        raise ToolError("'from' must not be after 'to'")
+    return start, end
+
+
+def _limit(args: dict) -> int:
+    return max(1, min(int(args.get("limit") or 5), 25))
+
+
+def _series(data: TrackerData, series_id: str):
+    entry = data.library.get(series_id)
+    if entry is None:
+        raise ToolError(f"No series with id {series_id!r}. Use find_item to get the id.")
+    return entry
+
+
+def _show(data: TrackerData, show_id: str):
+    entry = data.watchlist.get(show_id)
+    if entry is None:
+        raise ToolError(f"No show with id {show_id!r}. Use find_item to get the id.")
+    return entry
+
+
+def _plan(data: TrackerData, plan_id: str):
+    plan = data.agenda.get(plan_id)
+    if plan is None:
+        raise ToolError(f"No plan with id {plan_id!r}. Use find_item to get the id.")
+    return plan
+
+
+def _when(day: dt.date | None, time: dt.time | None, today: dt.date) -> str:
+    if day is None:
+        return "Someday"
+    return nice_day(day, today) + (f" {time:%H:%M}" if time else "")
+
+
+def _plan_row(plan, today: dt.date) -> dict:
+    upcoming = next_occurrence(plan, today)
+    return {"domain": "plan", "id": plan.plan_id, "title": plan.title,
+            "next": upcoming.isoformat() if upcoming else None,
+            "time": plan.time.strftime("%H:%M") if plan.time else None,
+            "repeat": describe_repeat(plan.repeat, plan.day) if plan.repeat else None}
+
+
+def find_item(args: dict, data: TrackerData) -> list[dict]:
+    today = data.now().date()
+    domain = args.get("domain")
+    rows: list[tuple[str, dict]] = []
+    if domain in (None, "reading"):
+        rows += [(e.title, {"domain": "reading", "id": e.series_id, "title": e.title, "status": e.status.value,
+                            "chapter": e.current_chapter}) for e in data.library.all()]
+    if domain in (None, "watching"):
+        rows += [(e.title, {"domain": "watching", "id": e.show_id, "title": e.title, "kind": e.kind.value,
+                            "status": e.status.value}) for e in data.watchlist.all()]
+    if domain in (None, "plan"):
+        rows += [(p.title, _plan_row(p, today)) for p in data.agenda.all()]
+    matches = process.extract(args["query"], [title for title, _ in rows], scorer=fuzz.WRatio,
+                              processor=str.lower, limit=5, score_cutoff=60)
+    return [rows[index][1] for _, _, index in matches]
+
+
+def reading_overview(args: dict, data: TrackerData) -> list[dict]:
+    today = data.now().date()
+    entries = data.library.by_status(Status(args["status"])) if args.get("status") else data.library.all()
+    entries = sorted(entries, key=lambda e: e.updated_at, reverse=True)[:MAX_ROWS]
+    return [{"id": e.series_id, "title": e.title, "status": e.status.value, "chapter": e.current_chapter,
+             "last_update": e.updated_at.astimezone().date().isoformat(),
+             "days_ago": (today - e.updated_at.astimezone().date()).days} for e in entries]
+
+
+def watching_overview(args: dict, data: TrackerData) -> list[dict]:
+    entries = data.watchlist.by_status(WatchStatus(args["status"])) if args.get("status") else data.watchlist.all()
+    return [{"id": e.show_id, "title": e.title, "kind": e.kind.value, "status": e.status.value}
+            for e in entries[:MAX_ROWS]]
+
+
+def top_tracks(args: dict, data: TrackerData) -> list[dict]:
+    return [{"track": t.track, "artists": t.artists, "plays": t.plays, "minutes": round(t.minutes, 1)}
+            for t in data.top_tracks.between(*_period(args), limit=_limit(args))]
+
+
+def top_artists(args: dict, data: TrackerData) -> list[dict]:
+    return [{"artist": a, "plays": n} for a, n in data.top_artists.between(*_period(args), limit=_limit(args))]
+
+
+def listening_minutes(args: dict, data: TrackerData) -> dict:
+    start, end = _period(args)
+    days = {d: m for d, m in data.listening.minutes_per_day().items() if start <= d <= end}
+    return {"minutes": round(sum(days.values())), "days_listened": sum(1 for m in days.values() if m > 0)}
+
+
+def plans_between(args: dict, data: TrackerData) -> list[dict]:
+    return [{"plan_id": o.plan.plan_id, "title": o.title, "on": o.on.isoformat(),
+             "time": o.time.strftime("%H:%M") if o.time else None, "done": o.done, "repeats": o.is_repeat}
+            for o in data.agenda.between(*_period(args))][:100]
+
+
+# ---- Schrijftools: alleen voorstellen ----
+
+def set_reading_progress(args: dict, data: TrackerData) -> PendingAction:
+    entry = _series(data, args["series_id"])
+    chapter = float(args["chapter"])
+    if chapter < 0:
+        raise ToolError("A chapter can't be negative")
+    if chapter == entry.current_chapter:
+        raise ToolError(f"{entry.title} is already at chapter {chapter:g}; nothing to change")
+    return PendingAction("reading", LogProgress(entry.series_id, chapter),
+                         f"{entry.title} · chapter {entry.current_chapter:g} → {chapter:g}", "reading-changed")
+
+
+def set_reading_status(args: dict, data: TrackerData) -> PendingAction:
+    entry, status = _series(data, args["series_id"]), Status(args["status"])
+    if status is entry.status:
+        raise ToolError(f"{entry.title} is already {status.value}")
+    return PendingAction("reading", ChangeStatus(entry.series_id, status),
+                         f"{entry.title} · {STATUS_LABELS[entry.status]} → {STATUS_LABELS[status]}", "reading-changed")
+
+
+def add_series(args: dict, data: TrackerData) -> PendingAction:
+    title, kind = args["title"].strip(), Kind(args["kind"])
+    if not title:
+        raise ToolError("A series needs a title")
+    if existing := data.library.find_by_title(title):
+        raise ToolError(f"'{existing.title}' is already in the library (id {existing.series_id})")
+    return PendingAction("reading", StartSeries(title, kind, ""), f"New {KIND_LABELS[kind].lower()} · {title}",
+                         "reading-changed")
+
+
+def set_watch_status(args: dict, data: TrackerData) -> PendingAction:
+    entry, status = _show(data, args["show_id"]), WatchStatus(args["status"])
+    if status is entry.status:
+        raise ToolError(f"{entry.title} is already {status.value}")
+    return PendingAction("watching", ChangeShowStatus(entry.show_id, status),
+                         f"{entry.title} · {WATCH_STATUS_LABELS[entry.status]} → {WATCH_STATUS_LABELS[status]}",
+                         "watching-changed")
+
+
+def add_show(args: dict, data: TrackerData) -> PendingAction:
+    title, kind = args["title"].strip(), WatchKind(args["kind"])
+    status = WatchStatus(args["status"]) if args.get("status") else WatchStatus.WATCHING
+    if not title:
+        raise ToolError("A show needs a title")
+    if existing := data.watchlist.find(title, kind):
+        raise ToolError(f"'{existing.title}' is already in the list (id {existing.show_id})")
+    return PendingAction("watching", AddShow(title, kind, status),
+                         f"New {WATCH_KIND_LABELS[kind].lower()} · {title} ({WATCH_STATUS_LABELS[status]})",
+                         "watching-changed")
+
+
+def add_plan(args: dict, data: TrackerData) -> PendingAction:
+    now = data.now()
+    parsed = parse(args["text"], now)
+    if not parsed.title:
+        raise ToolError("The plan needs a title besides the date and time")
+    command = AddPlan(parsed.title, parsed.day, parsed.time, parsed.duration_min, "", parsed.repeat)
+    return PendingAction("planner", command, f"New plan · {describe(parsed, now.date())}", "planner-changed")
+
+
+def plan_done(args: dict, data: TrackerData) -> PendingAction:
+    plan, today = _plan(data, args["plan_id"]), data.now().date()
+    on = _date(args["on"], "on") if args.get("on") else (next_occurrence(plan, today) or today)
+    return PendingAction("planner", MarkPlanDone(plan.plan_id, on), f"{plan.title} · done ({nice_day(on, today)})",
+                         "planner-changed")
+
+
+def plan_skip(args: dict, data: TrackerData) -> PendingAction:
+    plan, today = _plan(data, args["plan_id"]), data.now().date()
+    if plan.repeat is None:
+        raise ToolError(f"{plan.title} doesn't repeat; reschedule or delete it instead")
+    on = _date(args["on"], "on")
+    return PendingAction("planner", SkipPlan(plan.plan_id, on), f"{plan.title} · skip {nice_day(on, today)}",
+                         "planner-changed")
+
+
+def plan_reschedule(args: dict, data: TrackerData) -> PendingAction:
+    plan, today = _plan(data, args["plan_id"]), data.now().date()
+    day = _date(args["day"], "day") if args.get("day") else None
+    try:
+        time = dt.time.fromisoformat(args["time"]) if args.get("time") else None
+    except ValueError:
+        raise ToolError("'time' must look like 14:30") from None
+    return PendingAction("planner", ReschedulePlan(plan.plan_id, day, time),
+                         f"{plan.title} · {_when(plan.day, plan.time, today)} → {_when(day, time, today)}",
+                         "planner-changed")
+
+
+def plan_edit(args: dict, data: TrackerData) -> PendingAction:
+    plan = _plan(data, args["plan_id"])
+    title = args["title"] if args.get("title") is not None else plan.title
+    note = args["note"] if args.get("note") is not None else plan.note
+    changes = ([f"{plan.title} → {title}"] if title != plan.title else []) + (["new note"] if note != plan.note else [])
+    if not changes:
+        raise ToolError("Nothing to change")
+    return PendingAction("planner", EditPlan(plan.plan_id, title, note, plan.duration_min, plan.repeat),
+                         f"{plan.title} · " + ", ".join(changes), "planner-changed")
+
+
+def delete_item(args: dict, data: TrackerData) -> PendingAction:
+    domain, item_id = args["domain"], args["id"]
+    if domain == "reading":
+        entry = _series(data, item_id)
+        name, command, target, changed = entry.title, RemoveSeries(item_id), "reading", "reading-changed"
+    elif domain == "watching":
+        entry = _show(data, item_id)
+        name, command, target, changed = entry.title, RemoveShow(item_id), "watching", "watching-changed"
+    else:
+        plan = _plan(data, item_id)
+        name, command, target, changed = plan.title, RemovePlan(item_id), "planner", "planner-changed"
+    return PendingAction(target, command, f"Delete · {name}", changed, delete_name=name)
+
+
+READ_TOOLS = {f.__name__: f for f in (find_item, reading_overview, watching_overview, top_tracks, top_artists,
+                                      listening_minutes, plans_between)}
+WRITE_TOOLS = {f.__name__: f for f in (set_reading_progress, set_reading_status, add_series, set_watch_status,
+                                       add_show, add_plan, plan_done, plan_skip, plan_reschedule, plan_edit,
+                                       delete_item)}
+
+
+def run_tool(name: str, args: dict, data: TrackerData) -> tuple[Any, PendingAction | None]:
+    """(resultaat, None) voor een leestool; (PROPOSED, PendingAction) voor een schrijftool."""
+    try:
+        if name in READ_TOOLS:
+            return READ_TOOLS[name](args, data), None
+        if name in WRITE_TOOLS:
+            return PROPOSED, WRITE_TOOLS[name](args, data)
+    except (KeyError, TypeError, ValueError) as exc:
+        if isinstance(exc, ToolError):
+            raise
+        raise ToolError(f"Invalid input for {name}: {exc}") from None
+    raise ToolError(f"Unknown tool {name}")

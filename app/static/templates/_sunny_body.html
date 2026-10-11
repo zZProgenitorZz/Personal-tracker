@@ -1,0 +1,20 @@
+{% import "_macros.html" as ui %}
+{% import "_sunny_macros.html" as sunny %}
+{# De inhoud van Sunny's paneel (#sunny-body in index.html): het gesprek en het invoerveld. #}
+{% if not available %}
+<div class="sunny-log">{{ sunny.bubble({"kind": "unavailable"}) }}</div>
+{% else %}
+<div id="sunny-log" class="sunny-log" aria-live="polite">
+  {% if not entries %}
+  <p class="sunny-intro muted">Ask about your tracker, or tell me what to log. Nothing changes until you confirm.</p>
+  {% endif %}
+  {% for item in entries %}{{ sunny.entry(item) }}{% endfor %}
+</div>
+<p id="sunny-typing" class="sunny-typing" aria-live="polite">Sunny is lurking in the shadows…</p>
+<form id="sunny-form" class="sunny-form" hx-post="/ui/assistant/message" hx-target="#sunny-log" hx-swap="beforeend"
+      hx-indicator="#sunny-typing" hx-disabled-elt="find input, find button" autocomplete="off">
+  <input id="sunny-input" class="input" name="message" maxlength="2000" required
+         placeholder="Ask or log something…" aria-label="Message to Sunny" enterkeyhint="send">
+  <button class="btn btn-primary btn-sm sunny-send" aria-label="Send">{{ ui.icon('send', 16) }}</button>
+</form>
+{% endif %}
