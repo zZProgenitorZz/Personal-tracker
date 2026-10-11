@@ -283,7 +283,7 @@ def describe(parsed: Parsed, today: dt.date) -> str:
     else:
         parts.append(("from " if parsed.repeat else "") + nice_day(parsed.day, today))
     if parsed.time and parsed.duration_min:
-        end = dt.datetime.combine(dt.date.today(), parsed.time) + dt.timedelta(minutes=parsed.duration_min)
+        end = dt.datetime.combine(today, parsed.time) + dt.timedelta(minutes=parsed.duration_min)
         parts.append(f"{parsed.time:%H:%M}–{end:%H:%M}")
     elif parsed.time:
         parts.append(f"{parsed.time:%H:%M}")

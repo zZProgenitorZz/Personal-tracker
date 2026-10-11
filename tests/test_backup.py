@@ -7,7 +7,7 @@ import pytest
 
 from app.backup import KEEP_BACKUPS, BackupError, Backups, default_backup_dir, main
 from app.eventstore import EventStore
-from app.main import EVENT_TYPES
+from app.event_types import ALL_EVENT_TYPES
 from app.reading.events import Kind, ProgressLogged, SeriesStarted
 
 
@@ -27,7 +27,7 @@ def started(series_id, title):
 
 @pytest.fixture
 def setup(tmp_path):
-    store = EventStore(":memory:", EVENT_TYPES)
+    store = EventStore(":memory:", ALL_EVENT_TYPES)
     covers = tmp_path / "covers"
     covers.mkdir()
     rebuilt = []
@@ -55,7 +55,7 @@ def test_backup_contains_exactly_the_events(setup, tmp_path):
     store, _, backups, _ = setup
     store.append("1", [started("1", "Shadow Slave"), ProgressLogged("1", 9, 1)])
     info = backups.create()
-    copy = EventStore(str(info.path / "tracker.db"), EVENT_TYPES)
+    copy = EventStore(str(info.path / "tracker.db"), ALL_EVENT_TYPES)
     assert copy.load_all() == store.load_all()
 
 
@@ -72,7 +72,7 @@ def test_list_shows_newest_first(setup):
 
 
 def test_two_backups_in_the_same_second_both_survive(tmp_path):
-    store = EventStore(":memory:", EVENT_TYPES)
+    store = EventStore(":memory:", ALL_EVENT_TYPES)
     same_time = lambda: datetime(2026, 10, 6, 21, 0, 0)  # noqa: E731
     backups = Backups(store, tmp_path / "covers", tmp_path / "backups", clock=same_time)
     a, b = backups.create(), backups.create()
@@ -183,7 +183,7 @@ def test_backup_dir_without_onedrive(monkeypatch):
 # ---- Los script: python -m app.backup ----
 
 def test_command_line_makes_and_lists_backups(tmp_path, capsys):
-    store = EventStore(str(tmp_path / "tracker.db"), EVENT_TYPES)
+    store = EventStore(str(tmp_path / "tracker.db"), ALL_EVENT_TYPES)
     store.append("1", [started("1", "Shadow Slave")])
     args = ["--db", str(tmp_path / "tracker.db"), "--covers", str(tmp_path / "covers"),
             "--to", str(tmp_path / "backups")]

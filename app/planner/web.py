@@ -10,9 +10,9 @@ import re
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import Response
 
+from .. import clock
 from ..domain import DomainError
 from ..web import render, toast
-from . import schedule
 from .aggregate import ReminderSettings
 from .commands import (
     AddPlan, ChangeReminderSettings, EditPlan, MarkPlanDone, PlannerCommandHandler, RemovePlan, ReopenPlan,
@@ -29,10 +29,6 @@ REMINDER_CHOICES = [(15, "15 minutes before"), (30, "30 minutes before"), (60, "
                     (180, "3 hours before"), (24 * 60, "1 day before"), (2 * 24 * 60, "2 days before"),
                     (7 * 24 * 60, "1 week before")]
 HOME_PLANS = 3  # het startscherm toont hooguit zoveel plannen
-
-
-def today() -> dt.date:
-    return schedule.local_now().date()
 
 
 def monday_of(day: dt.date) -> dt.date:
@@ -87,7 +83,7 @@ def week_label(monday: dt.date) -> str:
 
 def planner_summary(agenda: AgendaProjection) -> dict:
     """Voor het startscherm en Settings: vandaag, het eerstvolgende plan, en hooguit twee andere."""
-    now = schedule.local_now()
+    now = clock.local_now()
     plans = agenda.day(now.date())
     open_ = [o for o in plans if not o.done]
     upcoming = [o for o in open_ if o.time and o.time > now.time()]
@@ -148,16 +144,16 @@ def create_planner_web_router(handler: PlannerCommandHandler, agenda: AgendaProj
 
     @router.get("/week")
     def week(request: Request, start: str = ""):
-        monday = monday_of(parse_day(start, today()))
+        monday = monday_of(parse_day(start, clock.today()))
         days = agenda.week(monday)
-        return render(request, "planner_week.html", tabs=TABS, days=days, monday=monday, today=today(),
+        return render(request, "planner_week.html", tabs=TABS, days=days, monday=monday, today=clock.today(),
                       label=week_label(monday), total=sum(len(items) for _, items in days),
                       previous=monday - dt.timedelta(days=7), following=monday + dt.timedelta(days=7),
-                      this_week=monday_of(today()), when_text=when_text, short_days=SHORT_DAYS)
+                      this_week=monday_of(clock.today()), when_text=when_text, short_days=SHORT_DAYS)
 
     @router.get("/upcoming")
     def upcoming(request: Request):
-        now_day = today()
+        now_day = clock.today()
         one_offs, repeating = agenda.upcoming(now_day)
         groups: list[tuple[str, list[Occurrence]]] = []
         for o in one_offs:
@@ -175,32 +171,32 @@ def create_planner_web_router(handler: PlannerCommandHandler, agenda: AgendaProj
 
     @router.get("/day")
     def day(request: Request, d: str = ""):
-        shown = parse_day(d, today())
+        shown = parse_day(d, clock.today())
         items = agenda.day(shown)
-        return render(request, "planner_day.html", tabs=TABS, day=shown, items=items, today=today(),
-                      label=nice_day(shown, today()), previous=shown - dt.timedelta(days=1),
+        return render(request, "planner_day.html", tabs=TABS, day=shown, items=items, today=clock.today(),
+                      label=nice_day(shown, clock.today()), previous=shown - dt.timedelta(days=1),
                       following=shown + dt.timedelta(days=1), when_text=when_text)
 
     @router.get("/someday")
     def someday(request: Request):
         return render(request, "planner_someday.html", tabs=TABS, plans=agenda.someday(), done=agenda.someday_done(),
-                      nice_day=lambda d: nice_day(d, today()))
+                      nice_day=lambda d: nice_day(d, clock.today()))
 
     @router.get("/preview")
     def preview(request: Request, text: str = ""):
         """Wat de app van de invoer maakt, onder het invoerveld. Slaat niets op."""
         if not text.strip():
             return Response("")
-        return render(request, "_planner_preview.html", text=describe(parse(text, schedule.local_now()), today()))
+        return render(request, "_planner_preview.html", text=describe(parse(text, clock.local_now()), clock.today()))
 
     @router.get("/plans/{plan_id}")
     def plan_dialog(request: Request, plan_id: str, on: str = ""):
         plan = agenda.get(plan_id)
         if plan is None:
             return toast(request, "Unknown plan", error=True)
-        shown = parse_day(on, plan.day or today())
+        shown = parse_day(on, plan.day or clock.today())
         occurrence = Occurrence(plan, shown)
-        when = "Someday" if plan.day is None else nice_day(shown, today())
+        when = "Someday" if plan.day is None else nice_day(shown, clock.today())
         if plan.day is not None and plan.time:
             when += f" · {when_text(occurrence)}"
         return render(request, "_plan_dialog.html", plan=plan, o=occurrence, on=shown, when=when,
@@ -212,7 +208,7 @@ def create_planner_web_router(handler: PlannerCommandHandler, agenda: AgendaProj
         plan = agenda.get(plan_id)
         if plan is None:
             return Response("Plan not found", status_code=404)
-        body = plan_to_ics(plan, agenda.reminder_settings, dt.datetime.now(dt.timezone.utc))
+        body = plan_to_ics(plan, agenda.reminder_settings, clock.utc_now())
         name = re.sub(r"[^\w\- ]", "", plan.title).strip()[:60] or "plan"
         return Response(body, media_type="text/calendar; charset=utf-8",
                         headers={"Content-Disposition": f'attachment; filename="{name}.ics"'})
@@ -222,35 +218,35 @@ def create_planner_web_router(handler: PlannerCommandHandler, agenda: AgendaProj
     @router.post("/plans")
     def add(request: Request, text: str = Form(""), note: str = Form(""), duration_min: str = Form(""),
             repeat: str = Form("auto"), weekdays: list[str] = Form([]), until: str = Form("")):
-        parsed = parse(text, schedule.local_now())
+        parsed = parse(text, clock.local_now())
         chosen = _repeat_from_form(repeat, weekdays, until, parsed.repeat)
-        day = parsed.day if parsed.day or chosen is None else today()  # een herhaling begint op zijn vroegst vandaag
+        day = parsed.day if parsed.day or chosen is None else clock.today()  # een herhaling begint op zijn vroegst vandaag
         try:
             handler.handle(AddPlan(parsed.title, day, parsed.time, _minutes(duration_min) or parsed.duration_min,
                                    note, chosen))
         except DomainError as exc:
             return toast(request, str(exc), error=True)
         shown = Parsed(parsed.title, day, parsed.time, chosen, _minutes(duration_min) or parsed.duration_min)
-        return toast(request, f"Added {describe(shown, today())}",
+        return toast(request, f"Added {describe(shown, clock.today())}",
                      changed=CHANGED)
 
     @router.post("/plans/{plan_id}/done")
     def done(request: Request, plan_id: str, on: str = Form("")):
-        return act(request, MarkPlanDone(plan_id, parse_day(on, today())), f"{title_of(plan_id)} · done")
+        return act(request, MarkPlanDone(plan_id, parse_day(on, clock.today())), f"{title_of(plan_id)} · done")
 
     @router.post("/plans/{plan_id}/reopen")
     def reopen(request: Request, plan_id: str, on: str = Form("")):
-        return act(request, ReopenPlan(plan_id, parse_day(on, today())), f"{title_of(plan_id)} · not done")
+        return act(request, ReopenPlan(plan_id, parse_day(on, clock.today())), f"{title_of(plan_id)} · not done")
 
     @router.post("/plans/{plan_id}/skip")
     def skip(request: Request, plan_id: str, on: str = Form("")):
-        on_day = parse_day(on, today())
-        return act(request, SkipPlan(plan_id, on_day), f"{title_of(plan_id)} · skipped on {nice_day(on_day, today())}")
+        on_day = parse_day(on, clock.today())
+        return act(request, SkipPlan(plan_id, on_day), f"{title_of(plan_id)} · skipped on {nice_day(on_day, clock.today())}")
 
     @router.post("/plans/{plan_id}/reschedule")
     def reschedule(request: Request, plan_id: str, day: str = Form(""), time: str = Form("")):
         new_day, new_time = parse_day(day, None), parse_time(time)
-        where = "Someday" if new_day is None else nice_day(new_day, today()) + (f" {new_time:%H:%M}" if new_time else "")
+        where = "Someday" if new_day is None else nice_day(new_day, clock.today()) + (f" {new_time:%H:%M}" if new_time else "")
         return act(request, ReschedulePlan(plan_id, new_day, new_time), f"{title_of(plan_id)} → {where}",
                    unchanged_message=f"{title_of(plan_id)}: nothing changed")
 

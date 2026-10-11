@@ -7,18 +7,17 @@ teruggeven; deze module bevat wat ze delen.
 import random
 import zlib
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from fastapi import APIRouter, Form, Request, UploadFile
+from fastapi import APIRouter, Request, UploadFile
 from fastapi.templating import Jinja2Templates
 
-from .backup import KEEP_BACKUPS, BackupError, Backups, is_cloud_synced
-from .covers import MAX_BYTES, CoverStore, too_large
+from . import clock
+from .covers import MAX_BYTES, CoverError, CoverStore, too_large
 
 STATIC = Path(__file__).parent / "static"
-BACKUPS_CHANGED = "backups-changed"
 templates = Jinja2Templates(directory=STATIC / "templates")
 
 
@@ -30,16 +29,11 @@ def chapter(value: float) -> str:
 
 
 def ago(moment: datetime) -> str:
-    seconds = (datetime.now(timezone.utc) - moment).total_seconds()
+    seconds = (clock.utc_now() - moment).total_seconds()
     for unit, size in [("d", 86400), ("h", 3600), ("m", 60)]:
         if seconds >= size:
             return f"{int(seconds // size)}{unit} ago"
     return "just now"
-
-
-def utc_now() -> datetime:
-    """De klok voor de webpagina (tests zetten hem per tracker vooruit)."""
-    return datetime.now(timezone.utc)
 
 
 def quiet_for(moment: datetime, now: datetime) -> str:
@@ -157,6 +151,22 @@ def pick_from_backlog(request: Request, backlog: Backlog, exclude: str = "", gen
                   more=len(matching) > 1, genres=genres, genre=genre)
 
 
+def cover_search_response(request: Request, cover_search, title: str, index: int):
+    """Helps with the add form: shows one search result at a time. Saves nothing."""
+    if not title.strip():
+        return render(request, "_cover_pick.html", error="Type a title first, then search for its cover.")
+    try:
+        results = cover_search.search(title)
+    except CoverError as exc:
+        return render(request, "_cover_pick.html", error=str(exc))
+    if not results:
+        return render(request, "_cover_pick.html",
+                      error=f"No covers found for “{title.strip()}”. Try the official title, or add one yourself.")
+    i = index % len(results)
+    return render(request, "_cover_pick.html", pick=results[i], position=i + 1, total=len(results),
+                  next_index=(i + 1) % len(results))
+
+
 def save_cover(covers: CoverStore, upload: UploadFile | None, link: str, found: str) -> str | None:
     """Bewaar de gekozen cover lokaal. Volgorde: upload, geplakte link, zoekresultaat.
     Gooit CoverError als het niet lukt."""
@@ -190,70 +200,9 @@ def create_home_router(trackers: list[Tracker], wrapped: Callable[[], dict] | No
 
     @router.get("/home")
     def home(request: Request):
-        hour = datetime.now().hour
+        hour = clock.local_now().hour
         greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
         return render(request, "home.html", greeting=greeting,
                       trackers=[(t, t.summary()) for t in trackers], wrapped=wrapped() if wrapped else None)
-
-    return router
-
-
-def create_settings_router(db_path: str, trackers: list[Tracker], backups: Backups) -> APIRouter:
-    router = APIRouter(prefix="/ui", include_in_schema=False)
-
-    def backup_context() -> dict:
-        return {
-            "backups": backups.list(), "backup_dir": str(backups.directory),
-            "synced": is_cloud_synced(backups.directory), "keep": KEEP_BACKUPS,
-        }
-
-    @router.get("/settings")
-    def settings(request: Request):
-        location = db_path if db_path == ":memory:" else str(Path(db_path).resolve())
-        counts = [(t, t.summary()) for t in trackers]
-        return render(request, "settings.html", db_path=location, counts=counts, **backup_context())
-
-    # ---- Automatisch starten bij aanmelden in Windows ----
-
-    @router.get("/autostart")
-    def autostart_panel(request: Request):
-        autostart = request.app.state.autostart
-        return render(request, "_autostart.html", available=autostart.available, enabled=autostart.enabled)
-
-    @router.post("/autostart")
-    def set_autostart(request: Request, enabled: str = Form("")):
-        # Dat dit van de app zelf komt, controleert app/security.py voor alle wijzigingen.
-        autostart = request.app.state.autostart
-        try:
-            autostart.enable() if enabled else autostart.disable()
-        except (RuntimeError, OSError) as exc:
-            return toast(request, f"Couldn't change this: {exc}", error=True, changed="autostart-changed")
-        message = ("Progen now starts when you sign in to Windows (in the background, with an icon by the clock)."
-                   if enabled else "Progen no longer starts when you sign in.")
-        return toast(request, message, changed="autostart-changed")
-
-    @router.get("/backups")
-    def backup_overview(request: Request):
-        return render(request, "_backups.html", **backup_context())
-
-    @router.post("/backups")
-    def make_backup(request: Request):
-        try:
-            info = backups.create()
-        except BackupError as exc:
-            return toast(request, f"Backup failed: {exc}", error=True)
-        return toast(request, f"Backup made · {info.events} events, {info.covers} covers", changed=BACKUPS_CHANGED)
-
-    @router.post("/backups/{name}/restore")
-    def restore_backup(request: Request, name: str):
-        try:
-            info = backups.restore(name)
-        except BackupError as exc:
-            return toast(request, f"Restore failed: {exc}", error=True)
-        return toast(
-            request, f"Restored the backup from {nice_date(info.created)}",
-            # Eén back-up bevat alle trackers, dus alles ververst.
-            changed=", ".join([*(t.changed_event for t in trackers), BACKUPS_CHANGED]),
-        )
 
     return router

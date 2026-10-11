@@ -14,6 +14,8 @@ from urllib.parse import urlparse
 import httpx
 from PIL import Image, ImageOps, UnidentifiedImageError
 
+from .domain import DomainError
+
 COVER_SIZE = (300, 450)          # 2:3, staand zoals een boekcover
 MAX_BYTES = 5 * 1024 * 1024      # 5 MB
 DOWNLOAD_TIMEOUT = 10.0          # seconden
@@ -112,3 +114,14 @@ class CoverStore:
         except httpx.HTTPError as exc:
             raise CoverError("Couldn't reach that address. Check the link or your connection.") from exc
         return bytes(data)
+
+
+def with_cover(covers: CoverStore, cover_name: str | None, action):
+    """Runs action, the command that uses a freshly saved cover. If the command is refused
+    (DomainError), the cover is deleted again so no loose files stay behind, and the error is raised."""
+    try:
+        return action()
+    except DomainError:
+        if cover_name:
+            covers.delete(cover_name)
+        raise

@@ -3,8 +3,7 @@ from dataclasses import asdict
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from ..covers import CoverError, CoverStore
-from .aggregate import DomainError
+from ..covers import CoverError, CoverStore, with_cover
 from .commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, SetGenres, StartSeries
 from .events import Kind, Status
 from .projections import LibraryProjection, ReadingActivityProjection
@@ -80,15 +79,9 @@ def create_reading_router(
                 cover = covers.save_from_url(body.cover_url)
             except CoverError as exc:
                 cover_error = str(exc)
-        try:
-            events = handler.handle(
-                StartSeries(body.title, body.kind, body.source, body.start_chapter, cover, body.status,
-                            tuple(body.genres))
-            )
-        except DomainError:
-            if cover:
-                covers.delete(cover)
-            raise
+        events = with_cover(covers, cover, lambda: handler.handle(
+            StartSeries(body.title, body.kind, body.source, body.start_chapter, cover, body.status, tuple(body.genres))
+        ))
         entry = entry_or_404(events[0].series_id)
         return {**asdict(entry), "cover_error": cover_error} if cover_error else entry
 

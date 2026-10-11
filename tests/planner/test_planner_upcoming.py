@@ -4,7 +4,7 @@ import datetime as dt
 import pytest
 from fastapi.testclient import TestClient
 
-import app.planner.schedule as schedule
+import app.clock as clock
 from app.main import create_app
 from app.planner.events import Frequency, PlanAdded, PlanDone, PlanRemoved, PlanSkipped, Repeat
 from app.planner.parse import describe_repeat
@@ -92,7 +92,7 @@ def test_describe_repeat_with_the_day_of_the_month():
 
 @pytest.fixture
 def client(monkeypatch):
-    monkeypatch.setattr(schedule, "local_now", lambda: dt.datetime(2026, 10, 8, 10, 0))
+    monkeypatch.setattr(clock, "local_now", lambda: dt.datetime(2026, 10, 8, 10, 0))
     return TestClient(create_app(":memory:"), headers={"HX-Request": "true"})
 
 

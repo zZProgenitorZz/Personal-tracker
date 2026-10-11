@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
+import app.clock as clock
 import app.watching.web as watching_web
 from app.main import create_app
 from app.watching.events import ShowAdded, ShowGenresChanged, ShowStatusChanged, WatchKind, WatchStatus
@@ -52,8 +53,8 @@ def add(client, title, status="watching"):
 
 
 def later(monkeypatch, days):
-    real = watching_web.utc_now
-    monkeypatch.setattr(watching_web, "utc_now", lambda: real() + timedelta(days=days))
+    real = clock.utc_now
+    monkeypatch.setattr(clock, "utc_now", lambda: real() + timedelta(days=days))
 
 
 def test_panel_only_after_the_limit(client, monkeypatch):

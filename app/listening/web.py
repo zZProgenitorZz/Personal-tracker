@@ -3,11 +3,13 @@
 Alleen lezen: plays komen binnen via de Spotify-sync (of POST /listening/plays),
 niet via een formulier. Na een sync stuurt de server `listening-changed`.
 """
-from datetime import date, timedelta
+from datetime import date
 
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
 
+from .. import clock
+from ..charts import day_of_month, last_days, last_weeks, percent, with_height
 from ..web import render, toast
 from .projections import (
     ListeningActivityProjection, RecentlyPlayedProjection, TopArtistsProjection, TopTracksProjection,
@@ -18,32 +20,10 @@ CHANGED = "listening-changed"
 TABS = [("dashboard", "Dashboard"), ("history", "History"), ("progress", "Progress")]
 
 
-def last_days(per_day: dict, today: date, n: int) -> list[dict]:
-    days = [today - timedelta(days=i) for i in reversed(range(n))]
-    return [{"day": d, "label": d.strftime("%a")[0] if n <= 7 else str(d.day), "value": per_day.get(d, 0)} for d in days]
-
-
-def last_weeks(per_day: dict, today: date, n: int) -> list[dict]:
-    monday = today - timedelta(days=today.weekday())
-    weeks = []
-    for i in reversed(range(n)):
-        start = monday - timedelta(weeks=i)
-        weeks.append({"start": start, "label": f"W{start.isocalendar()[1]}",
-                      "value": sum(per_day.get(start + timedelta(days=d), 0) for d in range(7))})
-    return weeks
-
-
-def with_height(bars: list[dict]) -> list[dict]:
-    top = max((b["value"] for b in bars), default=0)
-    for bar in bars:
-        bar["height"] = round(100 * bar["value"] / top) if top else 0
-    return bars
-
-
 def listening_summary(recent: RecentlyPlayedProjection, activity: ListeningActivityProjection,
                       top_artists: TopArtistsProjection) -> dict:
     """Voor het startscherm en Settings. "Deze week" = de laatste 7 dagen, zoals bij Reading."""
-    today = date.today()
+    today = clock.today()
     minutes = round(sum(b["value"] for b in last_days(activity.minutes_per_day(), today, 7)))
     plays = sum(b["value"] for b in last_days(activity.plays_per_day(), today, 7))
     last = recent.recent()[:1]
@@ -70,11 +50,11 @@ def create_listening_web_router(
     def top5_artists(today: date) -> list[dict]:
         top = top_artists.top(today.year, today.month, limit=5)
         most = top[0][1] if top else 0
-        return [{"artist": a, "plays": n, "width": round(100 * n / most) if most else 0} for a, n in top]
+        return [{"artist": a, "plays": n, "width": percent(n, most)} for a, n in top]
 
     @router.get("/dashboard")
     def dashboard(request: Request):
-        today = date.today()
+        today = clock.today()
         return render(request, "listening_dashboard.html", tabs=TABS,
                       summary=listening_summary(recent, activity, top_artists),
                       artists=top5_artists(today), recent=recent.recent()[:8],
@@ -88,11 +68,11 @@ def create_listening_web_router(
 
     @router.get("/progress")
     def progress(request: Request):
-        today = date.today()
+        today = clock.today()
         per_day = activity.minutes_per_day()
         return render(
             request, "listening_progress.html", tabs=TABS,
-            days=with_height(last_days(per_day, today, 30)),
+            days=with_height(last_days(per_day, today, 30, label=day_of_month)),
             weeks=with_height(last_weeks(per_day, today, 12)),
             tracks=top_tracks.top(today.year, today.month, limit=10),
             artists=top_artists.top(today.year, today.month, limit=10),

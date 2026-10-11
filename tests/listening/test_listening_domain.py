@@ -90,6 +90,6 @@ def test_event_survives_storage():
 
 
 def test_event_class_names_are_unique_across_domains():
-    from app.main import EVENT_TYPES
-    names = [t.__name__ for t in EVENT_TYPES]
+    from app.event_types import ALL_EVENT_TYPES
+    names = [t.__name__ for t in ALL_EVENT_TYPES]
     assert len(names) == len(set(names)) and "TrackPlayed" in names

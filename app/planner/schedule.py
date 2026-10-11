@@ -6,11 +6,6 @@ import datetime as dt
 from .events import Frequency, Repeat
 
 
-def local_now() -> dt.datetime:
-    """De klok van deze pc, zonder tijdzone: plannen staan in lokale tijd. Tests zetten hem vast."""
-    return dt.datetime.now()
-
-
 def occurs_on(start: dt.date | None, repeat: Repeat | None, day: dt.date) -> bool:
     """Valt een plan dat begint op `start` (met eventueel een herhaling) op `day`?"""
     if start is None or day < start:

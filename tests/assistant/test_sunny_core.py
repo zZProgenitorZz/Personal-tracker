@@ -12,7 +12,7 @@ from app.assistant.tools import TOOL_DEFINITIONS, ToolError, TrackerData, run_to
 from app.eventstore import EventStore
 from app.listening.commands import ListeningCommandHandler, RecordPlay
 from app.listening.projections import ListeningActivityProjection, TopArtistsProjection, TopTracksProjection
-from app.main import EVENT_TYPES
+from app.event_types import ALL_EVENT_TYPES
 from app.planner.commands import AddPlan, PlannerCommandHandler
 from app.planner.events import Frequency, Repeat
 from app.planner.projections import AgendaProjection
@@ -29,7 +29,7 @@ TODAY = dt.date(2026, 10, 11)
 @pytest.fixture
 def data():
     """Een kleine tracker met echte projecties en handlers op een :memory:-store."""
-    store = EventStore(":memory:", EVENT_TYPES)
+    store = EventStore(":memory:", ALL_EVENT_TYPES)
     library, watchlist = LibraryProjection(), WatchlistProjection()
     listen, artists, tracks, agenda = (ListeningActivityProjection(), TopArtistsProjection(), TopTracksProjection(),
                                        AgendaProjection())

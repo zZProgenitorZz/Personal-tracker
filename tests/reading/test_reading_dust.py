@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
+import app.clock as clock
 import app.reading.web as reading_web
 from app.main import create_app
 from app.reading.events import Kind, ProgressLogged, SeriesStarted, Status, StatusChanged
@@ -67,8 +68,8 @@ def add(client, title, status="reading"):
 
 def later(monkeypatch, days):
     """De klok van de webpagina vooruitzetten; de events blijven op hun echte tijd."""
-    real = reading_web.utc_now
-    monkeypatch.setattr(reading_web, "utc_now", lambda: real() + timedelta(days=days))
+    real = clock.utc_now
+    monkeypatch.setattr(clock, "utc_now", lambda: real() + timedelta(days=days))
 
 
 def test_no_panel_when_nothing_is_stale(client):

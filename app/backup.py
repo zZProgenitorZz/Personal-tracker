@@ -30,6 +30,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from .event_types import ALL_EVENT_TYPES
 from .eventstore import EventStore
 
 KEEP_BACKUPS = 10
@@ -189,8 +190,6 @@ class Backups:
 # ---- Los script ----
 
 def main(argv: list[str] | None = None) -> int:
-    from .main import EVENT_TYPES  # hier, om een kringverwijzing te voorkomen
-
     load_dotenv(PROJECT / ".env", override=False)
     parser = argparse.ArgumentParser(prog="python -m app.backup", description="Back up Progen's data.")
     parser.add_argument("--list", action="store_true", help="show the backups instead of making one")
@@ -202,7 +201,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.list and not Path(args.db).exists():
         print(f"No database found at {args.db}", file=sys.stderr)
         return 1
-    store = EventStore(args.db, EVENT_TYPES)
+    store = EventStore(args.db, ALL_EVENT_TYPES)
     backups = Backups(store, Path(args.covers), Path(args.to) if args.to else default_backup_dir())
 
     if args.list:

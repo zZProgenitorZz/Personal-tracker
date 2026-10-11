@@ -11,8 +11,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from . import clock
 from .assistant.commands import AssistantCommandHandler
-from .assistant.events import EVENT_TYPES as ASSISTANT_EVENT_TYPES
 from .assistant.tools import TrackerData
 from .assistant.session import Sunny
 from .assistant.web import create_assistant_router
@@ -20,10 +20,10 @@ from .autostart import Autostart, launcher_command
 from .backup import Backups, default_backup_dir
 from .covers import CoverStore
 from .domain import DomainError
+from .event_types import ALL_EVENT_TYPES
 from .eventstore import EventStore
 from .listening.api import create_listening_router
 from .listening.commands import ListeningCommandHandler
-from .listening.events import TrackPlayed
 from .listening.import_web import ImportJob, create_import_router
 from .listening.projections import (
     ListeningActivityProjection, RecentlyPlayedProjection, TopArtistsProjection, TopTracksProjection,
@@ -32,41 +32,28 @@ from .listening.spotify import ListeningSync, ProfileStore, Spotify, TokenFile, 
 from .listening.web import create_listening_web_router, create_spotify_router, listening_summary
 from .planner.api import create_planner_router
 from .planner.commands import PlannerCommandHandler
-from .planner.events import EVENT_TYPES as PLANNER_EVENT_TYPES
 from .planner.projections import AgendaProjection, PlannerActivityProjection
-from .planner import schedule as planner_schedule
 from .planner.web import create_planner_web_router, planner_summary
 from .reading.api import create_reading_router
 from .reading.commands import ReadingCommandHandler
 from .cover_search import CoverSearch
 from .reading.cover_sources import SOURCES as READING_SOURCES
-from .reading.events import GenresChanged, ProgressLogged, SeriesRemoved, SeriesStarted, StatusChanged
 from .reading.projections import LibraryProjection, ReadingActivityProjection
 from .reading.web import create_reading_web_router, reading_summary
 from .security import ALLOWED_HOSTS, protect
+from .settings_web import create_settings_router
 from .shutdown import create_shutdown_router, stop_this_server
 from .watching.api import create_watching_router
 from .watching.commands import WatchingCommandHandler
 from .watching.cover_sources import SOURCES as WATCHING_SOURCES
-from .watching.events import ShowAdded, ShowGenresChanged, ShowRemoved, ShowStatusChanged
 from .watching.projections import WatchActivityProjection, WatchlistProjection
 from .watching.web import create_watching_web_router, watching_summary
-from .web import STATIC, Tracker, create_home_router, create_settings_router, render
+from .web import STATIC, Tracker, create_home_router, render
 from .wrapped.projections import WrappedProjection
 from .wrapped.web import create_wrapped_web_router, wrapped_teaser
 
 # Instellingen zoals GOOGLE_BOOKS_API_KEY. Staat niet in git (.gitignore).
 ENV_FILE = Path(__file__).parent.parent / ".env"
-
-# Alle trackers delen één event store (één database, één back-up).
-EVENT_TYPES = [
-    SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved, GenresChanged,   # reading
-    ShowAdded, ShowStatusChanged, ShowGenresChanged, ShowRemoved,                 # watching
-    TrackPlayed,                                                                  # listening
-    *PLANNER_EVENT_TYPES,                                                         # planner
-    *ASSISTANT_EVENT_TYPES,                                                       # Sunny: alleen de instelling
-]
-
 
 def create_app(
     db_path: str = "data/tracker.db",
@@ -80,7 +67,7 @@ def create_app(
     een eigen map en een nep-http_client mee, zodat er niets naar buiten gaat.
     Instellingen uit env_file gelden alleen als ze niet al in de omgeving staan."""
     load_dotenv(env_file, override=False)
-    store = EventStore(db_path, EVENT_TYPES)
+    store = EventStore(db_path, ALL_EVENT_TYPES)
     if db_path == ":memory:":
         # Tests: covers en back-ups in een tijdelijke map, nooit in data/ of je OneDrive.
         scratch = Path(tempfile.mkdtemp(prefix="progen-"))  # wordt opgeruimd zodra de app weg is
@@ -178,7 +165,7 @@ def create_app(
     # In de tests (":memory:") nooit een echte client; die geven ze zelf een nep-client.
     sunny = Sunny(TrackerData(library=library, watchlist=watchlist, listening=listen_activity,
                               top_artists=top_artists, top_tracks=top_tracks, agenda=agenda, reading=handler,
-                              watching=watching, planner=planner, now=lambda: planner_schedule.local_now()),
+                              watching=watching, planner=planner, now=lambda: clock.local_now()),
                   AssistantCommandHandler(store), use_real_client=scratch is None)
     app.state.sunny = sunny
     app.include_router(create_assistant_router(sunny))

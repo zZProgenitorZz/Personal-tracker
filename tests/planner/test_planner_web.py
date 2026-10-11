@@ -4,7 +4,7 @@ import datetime as dt
 import pytest
 from fastapi.testclient import TestClient
 
-import app.planner.schedule as schedule
+import app.clock as clock
 from app.main import create_app
 
 NOW = dt.datetime(2026, 10, 8, 10, 0)  # donderdag
@@ -12,7 +12,7 @@ NOW = dt.datetime(2026, 10, 8, 10, 0)  # donderdag
 
 @pytest.fixture
 def client(monkeypatch):
-    monkeypatch.setattr(schedule, "local_now", lambda: NOW)
+    monkeypatch.setattr(clock, "local_now", lambda: NOW)
     return TestClient(create_app(":memory:"), headers={"HX-Request": "true"})
 
 
@@ -153,10 +153,10 @@ def test_ics_download(client):
 
 def test_due_returns_reminders_of_the_last_minute(client, monkeypatch):
     add(client, "Tandarts vr 14u")
-    monkeypatch.setattr(schedule, "local_now", lambda: dt.datetime(2026, 10, 8, 14, 0, 30))
+    monkeypatch.setattr(clock, "local_now", lambda: dt.datetime(2026, 10, 8, 14, 0, 30))
     [reminder] = client.get("/planner/due").json()
     assert reminder["text"] == "Tomorrow: Tandarts at 14:00" and reminder["key"].endswith("/2026-10-09/1")
-    monkeypatch.setattr(schedule, "local_now", lambda: dt.datetime(2026, 10, 8, 14, 5))
+    monkeypatch.setattr(clock, "local_now", lambda: dt.datetime(2026, 10, 8, 14, 5))
     assert client.get("/planner/due").json() == []
     assert len(client.get("/planner/due", params={"minutes": 10}).json()) == 1
 
@@ -195,7 +195,7 @@ def test_planner_is_in_the_navigation_and_settings(client):
 
 def test_due_since_the_previous_check_never_reaches_before_it(client, monkeypatch):
     add(client, "Tandarts vr 14u")
-    monkeypatch.setattr(schedule, "local_now", lambda: dt.datetime(2026, 10, 8, 14, 1))
+    monkeypatch.setattr(clock, "local_now", lambda: dt.datetime(2026, 10, 8, 14, 1))
     assert len(client.get("/planner/due", params={"since": "2026-10-08T13:59:30"}).json()) == 1
     assert client.get("/planner/due", params={"since": "2026-10-08T14:00:00"}).json() == []  # viel er net vóór
 

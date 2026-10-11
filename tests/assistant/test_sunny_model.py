@@ -18,7 +18,8 @@ from app.assistant.events import AssistantSettingsChanged
 from app.assistant.models import DEFAULT_MODEL, MODELS
 from app.domain import DomainError
 from app.eventstore import EventStore
-from app.main import EVENT_TYPES, create_app
+from app.event_types import ALL_EVENT_TYPES
+from app.main import create_app
 
 APP = Path(__file__).resolve().parents[2] / "app"
 NOW = SimpleNamespace(now=lambda: dt.datetime(2026, 10, 11, 10, 0))
@@ -49,7 +50,7 @@ def test_no_model_ids_are_hardcoded_outside_models_py():
 # ---- Opslag ----
 
 def store_with(*events):
-    store = EventStore(":memory:", EVENT_TYPES)
+    store = EventStore(":memory:", ALL_EVENT_TYPES)
     if events:
         store.append(AssistantSettings.STREAM, list(events))
     return store
@@ -61,10 +62,10 @@ def test_without_an_event_it_is_haiku():
 
 def test_change_the_model_and_it_stays_after_reloading(tmp_path):
     path = str(tmp_path / "tracker.db")
-    store = EventStore(path, EVENT_TYPES)
+    store = EventStore(path, ALL_EVENT_TYPES)
     [event] = AssistantCommandHandler(store).handle(ChangeAssistantModel("claude-sonnet-5-5"))
     assert isinstance(event, AssistantSettingsChanged)
-    reloaded = EventStore(path, EVENT_TYPES)
+    reloaded = EventStore(path, ALL_EVENT_TYPES)
     assert AssistantSettings(reloaded.load_stream(AssistantSettings.STREAM)).model == "claude-sonnet-5-5"
     store.close()
     reloaded.close()
@@ -151,6 +152,6 @@ def test_the_choice_is_in_a_backup(tmp_path):
     from app.backup import Backups
     store = store_with(AssistantSettingsChanged("claude-opus-5-5"))
     info = Backups(store, tmp_path / "covers", tmp_path / "backups").create()
-    copy = EventStore(str(info.path / "tracker.db"), EVENT_TYPES)
+    copy = EventStore(str(info.path / "tracker.db"), ALL_EVENT_TYPES)
     assert AssistantSettings(copy.load_stream(AssistantSettings.STREAM)).model == "claude-opus-5-5"
     copy.close()

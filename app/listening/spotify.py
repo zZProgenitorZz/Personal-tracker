@@ -18,12 +18,13 @@ import secrets
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
 import httpx
 
+from .. import clock as app_clock
 from ..covers import CoverError, process_image
 from ..domain import DomainError
 from .commands import ListeningCommandHandler, RecordPlay
@@ -287,7 +288,7 @@ class ListeningSync:
     """Eén sync: vraag Spotify om plays na de laatste die we kennen en leg ze vast."""
 
     def __init__(self, spotify: Spotify, handler: ListeningCommandHandler, recent: RecentlyPlayedProjection,
-                 status_file: Path, interval_seconds: int, clock=lambda: datetime.now(timezone.utc),
+                 status_file: Path, interval_seconds: int, clock=lambda: app_clock.utc_now(),
                  profiles: ProfileStore | None = None, download=None):
         self.spotify = spotify
         self.profiles = profiles
@@ -335,7 +336,7 @@ class ListeningSync:
         if self.profiles is None or not self.spotify.connected:
             return
         current = self.profiles.load()
-        if not force and current and time.time() - current.get("fetched_at", 0) < PROFILE_REFRESH_SECONDS:
+        if not force and current and self._clock().timestamp() - current.get("fetched_at", 0) < PROFILE_REFRESH_SECONDS:
             return
         try:
             me = self.spotify.profile()
@@ -351,7 +352,7 @@ class ListeningSync:
             except CoverError as exc:
                 log.warning("Couldn't use the Spotify profile photo: %s", exc)
         self.profiles.save({"display_name": me.get("display_name") or me.get("id") or "",
-                            "fetched_at": time.time()}, avatar)
+                            "fetched_at": self._clock().timestamp()}, avatar)
 
     def disconnect(self) -> None:
         self.spotify.disconnect()

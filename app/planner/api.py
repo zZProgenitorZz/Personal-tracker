@@ -4,7 +4,7 @@ import datetime as dt
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
-from . import schedule
+from .. import clock
 from .commands import AddPlan, PlannerCommandHandler
 from .parse import parse
 from .projections import AgendaProjection, PlanEntry
@@ -36,7 +36,7 @@ def create_planner_router(handler: PlannerCommandHandler, agenda: AgendaProjecti
 
     @router.get("/day")
     def day(d: dt.date | None = None):
-        day = d or schedule.local_now().date()
+        day = d or clock.local_now().date()
         return [{"on": o.on, "done": o.done, **plan_json(o.plan)} for o in agenda.day(day)]
 
     @router.get("/due")
@@ -44,7 +44,7 @@ def create_planner_router(handler: PlannerCommandHandler, agenda: AgendaProjecti
         """Herinneringen die in de afgelopen `minutes` minuten vielen, of sinds `since` (lokale tijd,
         hooguit een uur terug). Alleen lezen: geen command, geen event. Het icoon bij de klok vraagt
         dit elke minuut op, steeds sinds zijn vorige vraag, en meldt elke `key` maar één keer."""
-        now = schedule.local_now()
+        now = clock.local_now()
         window = dt.timedelta(minutes=minutes)
         if since is not None:
             window = min(now - since.replace(tzinfo=None), dt.timedelta(hours=1))
@@ -55,7 +55,7 @@ def create_planner_router(handler: PlannerCommandHandler, agenda: AgendaProjecti
 
     @router.post("/plans", status_code=201)
     def add(body: AddPlanBody):
-        parsed = parse(body.text, schedule.local_now())
+        parsed = parse(body.text, clock.local_now())
         [added] = handler.handle(AddPlan(parsed.title, parsed.day, parsed.time,
                                          body.duration_min or parsed.duration_min, body.note, parsed.repeat))
         return plan_json(agenda.get(added.plan_id))

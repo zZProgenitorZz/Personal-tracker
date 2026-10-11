@@ -13,7 +13,7 @@ import pytest
 from fakes import FakeClient, response, text, tool
 from fastapi.testclient import TestClient
 
-import app.planner.schedule as schedule
+import app.clock as clock
 from app.assistant.agent import Agent, classify
 from app.main import create_app
 
@@ -122,7 +122,7 @@ def test_an_unknown_error_names_the_status_and_is_logged(caplog):
 
 @pytest.fixture
 def app_and_client(monkeypatch):
-    monkeypatch.setattr(schedule, "local_now", lambda: dt.datetime(2026, 10, 11, 10, 0))
+    monkeypatch.setattr(clock, "local_now", lambda: dt.datetime(2026, 10, 11, 10, 0))
     app = create_app(":memory:")
     client = TestClient(app, headers={"HX-Request": "true"})
     client.post("/ui/reading/series", data={"title": "Solo Leveling", "kind": "manhwa", "source": "x",

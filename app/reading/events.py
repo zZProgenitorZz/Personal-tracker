@@ -70,3 +70,6 @@ class SeriesRemoved:
     series_id: str
     title: str
     at: datetime = field(default_factory=now)
+
+
+EVENT_TYPES = [SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved, GenresChanged]

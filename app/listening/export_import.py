@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from ..event_types import ALL_EVENT_TYPES
 from ..eventstore import EventStore
 from .commands import ListeningCommandHandler, RecordPlay, as_utc
 from .events import TrackPlayed
@@ -199,7 +200,6 @@ def main(argv: list[str] | None = None) -> int:
 
     from ..backup import BackupError, Backups, default_backup_dir
     from ..desktop import is_running
-    from ..main import EVENT_TYPES  # hier, om een kringverwijzing te voorkomen
 
     load_dotenv(PROJECT / ".env", override=False)
     parser = argparse.ArgumentParser(prog="python -m app.listening.export_import",
@@ -220,7 +220,7 @@ def main(argv: list[str] | None = None) -> int:
     except ExportFileError as exc:
         print(str(exc), file=sys.stderr)
         return 1
-    store = EventStore(args.db, EVENT_TYPES)
+    store = EventStore(args.db, ALL_EVENT_TYPES)
     preview = prepare(files, KnownPlays.from_store(store))
     print("\n".join(preview.lines()))
     if args.dry_run:

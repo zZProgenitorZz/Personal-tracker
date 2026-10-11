@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from .. import clock
 from .commands import ListeningCommandHandler, RecordPlay, stream_id
 from .projections import (
     ListeningActivityProjection, RecentlyPlayedProjection, TopArtistsProjection, TopTracksProjection,
@@ -29,7 +30,7 @@ MONTH = Query(None, pattern=r"^\d{4}-\d{2}$", description="YYYY-MM; standaard de
 
 def _year_month(month: str | None) -> tuple[int, int]:
     if month is None:
-        today = date.today()
+        today = clock.today()
         return today.year, today.month
     year, number = month.split("-")
     return int(year), int(number)

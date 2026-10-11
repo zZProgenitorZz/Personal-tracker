@@ -6,7 +6,7 @@ import pytest
 from fakes import FakeClient, response, text
 from fastapi.testclient import TestClient
 
-import app.planner.schedule as schedule
+import app.clock as clock
 from app.assistant.session import Proposal
 from app.assistant.tools import PendingAction
 from app.main import create_app
@@ -17,7 +17,7 @@ from app.watching.events import WatchStatus
 
 @pytest.fixture
 def app(monkeypatch):
-    monkeypatch.setattr(schedule, "local_now", lambda: dt.datetime(2026, 10, 11, 10, 0))
+    monkeypatch.setattr(clock, "local_now", lambda: dt.datetime(2026, 10, 11, 10, 0))
     app = create_app(":memory:")
     client = TestClient(app, headers={"HX-Request": "true"})
     client.post("/ui/reading/series", data={"title": "Solo Leveling", "kind": "manhwa", "source": "x",

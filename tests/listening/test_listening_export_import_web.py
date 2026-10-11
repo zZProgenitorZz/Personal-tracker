@@ -10,7 +10,8 @@ import app.desktop as desktop
 from app.eventstore import EventStore
 from app.listening.events import TrackPlayed
 from app.listening.export_import import main
-from app.main import EVENT_TYPES, create_app
+from app.event_types import ALL_EVENT_TYPES
+from app.main import create_app
 
 
 def record(ts, ms=200_000, track="Blinding Lights", artist="The Weeknd", uri="spotify:track:abc"):
@@ -145,7 +146,7 @@ def test_command_line_import_with_files_or_a_folder(paths, capsys, monkeypatch):
     assert run(paths, str(paths["folder"] / "Streaming_History_Audio_2021.json")) == 0
     out = capsys.readouterr().out
     assert "Imported 2 plays" in out and "Start Progen" in out
-    assert len(EventStore(str(paths["db"]), EVENT_TYPES).load_type(TrackPlayed)) == 2
+    assert len(EventStore(str(paths["db"]), ALL_EVENT_TYPES).load_type(TrackPlayed)) == 2
     assert list(paths["backups"].iterdir())  # eerst een back-up
     monkeypatch.setattr(desktop, "is_running", lambda: True)
     (paths["folder"] / "Streaming_History_Audio_2022.json").write_text(json.dumps([record("2022-01-01T08:00:00Z")]))

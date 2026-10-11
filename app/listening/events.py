@@ -20,3 +20,6 @@ class TrackPlayed:
     ms_played: int | None = None  # hoe lang je echt luisterde; de API geeft dit niet, een export wel
     source: str = "api"        # "api" (live sync) of "export" (export_import.py)
     at: datetime = field(default_factory=now)  # wanneer Progen het vastlegde
+
+
+EVENT_TYPES = [TrackPlayed]

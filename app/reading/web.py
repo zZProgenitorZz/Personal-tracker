@@ -8,9 +8,10 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 
-from ..covers import CoverError, CoverStore
-from .. import web as shared
-from ..web import Backlog, pick_from_backlog, render, save_cover, toast, templates
+from .. import clock
+from ..covers import CoverError, CoverStore, with_cover
+from ..charts import genre_bars, last_days, last_weeks, with_height
+from ..web import Backlog, cover_search_response, pick_from_backlog, render, save_cover, toast, templates
 from .aggregate import DomainError
 from ..cover_search import CoverSearch
 from .commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, SetGenres, StartSeries
@@ -26,26 +27,7 @@ DUST_SHOWN = 5  # daarna "+N more"
 templates.env.globals.update(STATUS_LABELS=STATUS_LABELS, KIND_LABELS=KIND_LABELS, GENRES=GENRES)
 
 
-def utc_now():
-    return shared.utc_now()
-
-
 # ---- Gegevens voor de grafieken, afgeleid uit ReadingActivity ----
-
-def last_days(per_day: dict[date, float], today: date, n: int) -> list[dict]:
-    days = [today - timedelta(days=i) for i in reversed(range(n))]
-    return [{"day": d, "label": d.strftime("%a")[0], "value": per_day.get(d, 0)} for d in days]
-
-
-def last_weeks(per_day: dict[date, float], today: date, n: int) -> list[dict]:
-    monday = today - timedelta(days=today.weekday())
-    weeks = []
-    for i in reversed(range(n)):
-        start = monday - timedelta(weeks=i)
-        total = sum(per_day.get(start + timedelta(days=d), 0) for d in range(7))
-        weeks.append({"start": start, "label": f"W{start.isocalendar()[1]}", "value": total})
-    return weeks
-
 
 def heatmap(per_day: dict[date, float], today: date, weeks: int) -> list[list[dict]]:
     """Kolommen van maandag t/m zondag, de laatste kolom is de huidige week."""
@@ -63,19 +45,12 @@ def heatmap(per_day: dict[date, float], today: date, weeks: int) -> list[list[di
     return columns
 
 
-def with_height(bars: list[dict]) -> list[dict]:
-    top = max((b["value"] for b in bars), default=0)
-    for bar in bars:
-        bar["height"] = round(100 * bar["value"] / top) if top else 0
-    return bars
-
-
 def reading_summary(library: LibraryProjection, activity: ReadingActivityProjection) -> dict:
     """Voor het startscherm en Settings."""
-    today = date.today()
+    today = clock.today()
     current = library.currently_reading()
     this_week = sum(b["value"] for b in last_days(activity.per_day(), today, 7))
-    dusty = len(library.stale(utc_now(), STALE_READING_DAYS))
+    dusty = len(library.stale(clock.utc_now(), STALE_READING_DAYS))
     return {
         "badge": f"{dusty} gathering dust" if dusty else None,
         "stats": [(len(current), "reading now"), (this_week, "chapters this week"),
@@ -114,15 +89,6 @@ def create_reading_web_router(
             for s, label in STATUS_LABELS.items()
         ]
 
-    def genre_counts() -> list[dict]:
-        """Hoeveel series per genre, meeste eerst (alleen genres die voorkomen)."""
-        counts = {g: sum(g in e.genres for e in library.all()) for g in GENRES}
-        top = max(counts.values(), default=0)
-        return [
-            {"genre": g, "count": n, "width": round(100 * n / top) if top else 0}
-            for g, n in sorted(counts.items(), key=lambda item: -item[1]) if n
-        ]
-
     def filtered(status: str, kind: str, q: str, genre: str = "") -> list[LibraryEntry]:
         entries = library.all()
         if status in Status._value2member_map_:
@@ -143,8 +109,8 @@ def create_reading_web_router(
 
     @router.get("/dashboard")
     def dashboard(request: Request):
-        today = date.today()
-        now = utc_now()
+        today = clock.today()
+        now = clock.utc_now()
         return render(
             request, "dashboard.html",
             stats=overview(today),
@@ -178,7 +144,7 @@ def create_reading_web_router(
 
     @router.get("/progress")
     def progress(request: Request):
-        today = date.today()
+        today = clock.today()
         per_day = activity.per_day()
         weeks = with_height(last_weeks(per_day, today, 12))
         last_30 = [per_day.get(today - timedelta(days=i), 0) for i in range(30)]
@@ -196,7 +162,7 @@ def create_reading_web_router(
                 {"label": label, "count": sum(e.kind is k for e in library.all())}
                 for k, label in KIND_LABELS.items()
             ],
-            genres=genre_counts(),
+            genres=genre_bars(library.all(), GENRES),
             library_size=len(library.all()),
         )
 
@@ -204,23 +170,7 @@ def create_reading_web_router(
 
     @router.get("/covers/search")
     def find_cover(request: Request, title: str = "", index: int = 0):
-        """Hulp bij het formulier: toont één zoekresultaat tegelijk. Slaat niets op."""
-        if not title.strip():
-            return render(request, "_cover_pick.html", error="Type a title first, then search for its cover.")
-        try:
-            results = cover_search.search(title)
-        except CoverError as exc:
-            return render(request, "_cover_pick.html", error=str(exc))
-        if not results:
-            return render(
-                request, "_cover_pick.html",
-                error=f"No covers found for “{title.strip()}”. Try the official title, or add one yourself.",
-            )
-        i = index % len(results)
-        return render(
-            request, "_cover_pick.html",
-            pick=results[i], position=i + 1, total=len(results), next_index=(i + 1) % len(results),
-        )
+        return cover_search_response(request, cover_search, title, index)
 
     @router.post("/series")
     def start_series(
@@ -243,10 +193,9 @@ def create_reading_web_router(
             cover_problem = str(exc)
 
         try:
-            handler.handle(StartSeries(title, kind, source.strip(), start_chapter, cover, status, tuple(genres)))
+            with_cover(covers, cover, lambda: handler.handle(
+                StartSeries(title, kind, source.strip(), start_chapter, cover, status, tuple(genres))))
         except DomainError as exc:
-            if cover:
-                covers.delete(cover)  # geen losse bestanden achterlaten
             return toast(request, str(exc), error=True)
 
         if cover_problem:

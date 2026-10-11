@@ -12,7 +12,7 @@ from app.watching.events import ShowAdded, ShowGenresChanged, ShowRemoved, ShowS
 from app.watching.projections import WatchActivityProjection, WatchlistProjection
 from app.watching.web import watching_summary
 
-EVENT_TYPES = [ShowAdded, ShowStatusChanged, ShowGenresChanged, ShowRemoved]
+ALL_EVENT_TYPES = [ShowAdded, ShowStatusChanged, ShowGenresChanged, ShowRemoved]
 PLANNED = ShowAdded("1", "Dune", WatchKind.MOVIE, WatchStatus.PLAN_TO_WATCH)
 
 
@@ -35,7 +35,7 @@ def test_plan_to_watch_changes_to_and_from_every_status(other):
 # ---- Projecties ----
 
 def make_app():
-    store = EventStore(":memory:", EVENT_TYPES)
+    store = EventStore(":memory:", ALL_EVENT_TYPES)
     watchlist, activity = WatchlistProjection(), WatchActivityProjection()
     store.subscribe(watchlist.apply)
     store.subscribe(activity.apply)

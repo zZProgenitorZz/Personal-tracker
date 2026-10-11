@@ -1,5 +1,6 @@
 """Je Spotify-profiel (naam en foto) op het dashboard van Listening. Nep-Spotify, geen netwerk."""
 import logging
+from datetime import timedelta
 from io import BytesIO
 from urllib.parse import parse_qs, urlsplit
 
@@ -8,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
+import app.clock as clock
 from app.listening.spotify import AVATAR_SIZE, PROFILE_REFRESH_SECONDS
 from app.main import create_app
 
@@ -112,9 +114,8 @@ def test_profile_is_refreshed_at_most_once_a_day(setup, fake, monkeypatch):
     client.post("/ui/listening/spotify/sync")
     assert fake.paths.count("/v1/me") == 1
 
-    import app.listening.spotify as spotify_module
-    real_time = spotify_module.time.time
-    monkeypatch.setattr(spotify_module.time, "time", lambda: real_time() + PROFILE_REFRESH_SECONDS + 1)
+    real_now = clock.utc_now
+    monkeypatch.setattr(clock, "utc_now", lambda: real_now() + timedelta(seconds=PROFILE_REFRESH_SECONDS + 1))
     client.post("/ui/listening/spotify/sync")
     assert fake.paths.count("/v1/me") == 2
 
@@ -123,9 +124,8 @@ def test_new_name_shows_after_refresh(setup, fake, monkeypatch):
     client, _ = setup
     connect(client)
     fake.profile["display_name"] = "New Name"
-    import app.listening.spotify as spotify_module
-    real_time = spotify_module.time.time
-    monkeypatch.setattr(spotify_module.time, "time", lambda: real_time() + PROFILE_REFRESH_SECONDS + 1)
+    real_now = clock.utc_now
+    monkeypatch.setattr(clock, "utc_now", lambda: real_now() + timedelta(seconds=PROFILE_REFRESH_SECONDS + 1))
     client.post("/ui/listening/spotify/sync")
     assert "New Name" in client.get("/ui/listening/dashboard").text
 

@@ -11,7 +11,7 @@ from app.listening.export_import import (
     MATCH_WINDOW, MIN_MS_PLAYED, ExportFileError, KnownPlays, prepare, read_export, run_import, to_command,
 )
 from app.listening.projections import ListeningActivityProjection, RecentlyPlayedProjection, TopTracksProjection
-from app.main import EVENT_TYPES
+from app.event_types import ALL_EVENT_TYPES
 
 UTC = timezone.utc
 
@@ -37,7 +37,7 @@ def export_file(name, records):
 
 @pytest.fixture
 def store():
-    return EventStore(":memory:", EVENT_TYPES)
+    return EventStore(":memory:", ALL_EVENT_TYPES)
 
 
 def live_play(store, when, track_id="spotify:track:abc"):

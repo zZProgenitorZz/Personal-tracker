@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 
 from app.eventstore import EventStore
 from app.listening.events import TrackPlayed
-from app.main import EVENT_TYPES
+from app.event_types import ALL_EVENT_TYPES
 from app.reading.events import GenresChanged, Kind, ProgressLogged, SeriesRemoved, SeriesStarted, Status, StatusChanged
 from app.watching.events import ShowAdded, ShowGenresChanged, ShowStatusChanged, WatchKind, WatchStatus
 from app.wrapped.projections import WrappedProjection
@@ -200,7 +200,7 @@ def test_plan_to_read_and_watch_are_not_read_or_finished():
 
 
 def test_rebuilt_projection_equals_the_live_one():
-    store = EventStore(":memory:", EVENT_TYPES)
+    store = EventStore(":memory:", ALL_EVENT_TYPES)
     live = WrappedProjection()
     store.subscribe(live.apply)
     store.append("s1", added_as("s1", "Done", Status.COMPLETED, at(2025, 1, 1)))
@@ -273,7 +273,7 @@ def test_re_added_as_completed_does_not_undo_the_first_start():
 
 
 def test_rebuilt_equals_live_with_re_added_series():
-    store = EventStore(":memory:", EVENT_TYPES)
+    store = EventStore(":memory:", ALL_EVENT_TYPES)
     live = WrappedProjection()
     store.subscribe(live.apply)
     store.append("old", [started("old", "Shadow Slave", at(2025, 1, 1)), read("old", 0, 50, at(2025, 2, 1))])

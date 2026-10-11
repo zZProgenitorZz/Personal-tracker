@@ -11,7 +11,7 @@ from app.reading.events import (
 )
 from app.reading.projections import LibraryProjection, ReadingActivityProjection
 
-EVENT_TYPES = [SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved, GenresChanged]
+ALL_EVENT_TYPES = [SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved, GenresChanged]
 STARTED = SeriesStarted("1", "Omniscient Reader", Kind.NOVEL, "x", 0)
 PLANNED = StatusChanged("1", Status.READING, Status.PLAN_TO_READ)
 
@@ -56,7 +56,7 @@ def test_plan_to_read_changes_to_and_from_every_status(other):
 # ---- Projecties ----
 
 def make_app():
-    store = EventStore(":memory:", EVENT_TYPES)
+    store = EventStore(":memory:", ALL_EVENT_TYPES)
     library, activity = LibraryProjection(), ReadingActivityProjection()
     store.subscribe(library.apply)
     store.subscribe(activity.apply)

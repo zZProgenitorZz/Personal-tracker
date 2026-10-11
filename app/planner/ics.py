@@ -8,6 +8,7 @@
 """
 import datetime as dt
 
+from .. import clock
 from .events import Frequency
 from .projections import PlanEntry
 
@@ -36,7 +37,7 @@ def plan_to_ics(plan: PlanEntry, reminders: tuple, stamp: dt.datetime) -> str:
 
 def _when(plan: PlanEntry) -> list[str]:
     if plan.day is None:  # Someday: als hele dag op de dag van downloaden zou verwarren; gewoon vandaag
-        day = dt.date.today()
+        day = clock.today()
         return [f"DTSTART;VALUE=DATE:{day:%Y%m%d}", f"DTEND;VALUE=DATE:{day + dt.timedelta(days=1):%Y%m%d}"]
     if plan.time is None:
         lines = [f"DTSTART;VALUE=DATE:{plan.day:%Y%m%d}",

@@ -8,11 +8,12 @@ from datetime import date
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 
+from .. import clock
 from ..cover_search import CoverSearch
-from ..covers import CoverError, CoverStore
+from ..charts import genre_bars, percent
+from ..covers import CoverError, CoverStore, with_cover
 from ..domain import DomainError
-from .. import web as shared
-from ..web import Backlog, pick_from_backlog, render, save_cover, templates, toast
+from ..web import Backlog, cover_search_response, pick_from_backlog, render, save_cover, templates, toast
 from .commands import AddShow, ChangeShowStatus, RemoveShow, SetShowGenres, WatchingCommandHandler
 from .events import WATCH_KIND_LABELS, WATCH_STATUS_LABELS, WatchKind, WatchStatus
 from .genres import WATCH_GENRES
@@ -29,10 +30,6 @@ templates.env.globals.update(
 )
 
 
-def utc_now():
-    return shared.utc_now()
-
-
 def finished_per_month(per_day: dict[date, int], today: date, months: int) -> list[dict]:
     """Afgerond per kalendermaand, de laatste `months` maanden (de huidige als laatste)."""
     result = []
@@ -44,15 +41,15 @@ def finished_per_month(per_day: dict[date, int], today: date, months: int) -> li
     result.reverse()
     top = max((m["value"] for m in result), default=0)
     for m in result:
-        m["height"] = round(100 * m["value"] / top) if top else 0
+        m["height"] = percent(m["value"], top)
     return result
 
 
 def watching_summary(watchlist: WatchlistProjection, activity: WatchActivityProjection) -> dict:
     """Voor het startscherm en Settings."""
-    today = date.today()
+    today = clock.today()
     current = watchlist.currently_watching()
-    dusty = len(watchlist.stale(utc_now(), STALE_WATCHING_DAYS))
+    dusty = len(watchlist.stale(clock.utc_now(), STALE_WATCHING_DAYS))
     this_month = sum(n for d, n in activity.per_day().items() if (d.year, d.month) == (today.year, today.month))
     return {
         "stats": [(len(current), "watching now"), (this_month, "finished this month"),
@@ -104,7 +101,7 @@ def create_watching_web_router(
     @router.get("/dashboard")
     def dashboard(request: Request):
         summary = watching_summary(watchlist, activity)
-        now = utc_now()
+        now = clock.utc_now()
         return render(request, "watching_dashboard.html", summary=summary,
                       current=watchlist.currently_watching()[:6], counts=counts(),
                       dust=watchlist.stale(now, STALE_WATCHING_DAYS), dust_days=STALE_WATCHING_DAYS,
@@ -133,17 +130,13 @@ def create_watching_web_router(
     @router.get("/progress")
     def progress(request: Request):
         per_day = activity.per_day()
-        entries = watchlist.all()
-        genre_counts = {g: sum(g in e.genres for e in entries) for g in WATCH_GENRES.names}
-        top = max(genre_counts.values(), default=0)
         return render(
             request, "watching_progress.html",
-            months=finished_per_month(per_day, date.today(), 12),
+            months=finished_per_month(per_day, clock.today(), 12),
             finished_total=sum(per_day.values()),
             summary=watching_summary(watchlist, activity),
             counts=counts(),
-            genres=[{"genre": g, "count": n, "width": round(100 * n / top) if top else 0}
-                    for g, n in sorted(genre_counts.items(), key=lambda i: -i[1]) if n],
+            genres=genre_bars(watchlist.all(), WATCH_GENRES.names),
         )
 
     @router.get("/add-form")
@@ -152,19 +145,7 @@ def create_watching_web_router(
 
     @router.get("/covers/search")
     def find_cover(request: Request, title: str = "", index: int = 0):
-        """Hulp bij het formulier: één zoekresultaat tegelijk. Slaat niets op."""
-        if not title.strip():
-            return render(request, "_cover_pick.html", error="Type a title first, then search for its cover.")
-        try:
-            results = cover_search.search(title)
-        except CoverError as exc:
-            return render(request, "_cover_pick.html", error=str(exc))
-        if not results:
-            return render(request, "_cover_pick.html",
-                          error=f"No covers found for “{title.strip()}”. Try the official title, or add one yourself.")
-        i = index % len(results)
-        return render(request, "_cover_pick.html", pick=results[i], position=i + 1, total=len(results),
-                      next_index=(i + 1) % len(results))
+        return cover_search_response(request, cover_search, title, index)
 
     @router.get("/shows/{show_id}/genres")
     def edit_genres(request: Request, show_id: str):
@@ -193,10 +174,8 @@ def create_watching_web_router(
         except CoverError as exc:
             cover_problem = str(exc)
         try:
-            handler.handle(AddShow(title, kind, status, cover, tuple(genres)))
+            with_cover(covers, cover, lambda: handler.handle(AddShow(title, kind, status, cover, tuple(genres))))
         except DomainError as exc:
-            if cover:
-                covers.delete(cover)
             return toast(request, str(exc), error=True)
         label = f"{title.strip()} ({WATCH_KIND_LABELS[kind]}, {WATCH_STATUS_LABELS[status]})"
         if cover_problem:
