@@ -14,7 +14,7 @@ De applicatie is opgezet met **event modeling** en **event sourcing**: alles wat
 python -m venv .venv
 .venv\Scripts\activate            # Windows
 # source .venv/bin/activate       # Mac/Linux
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # de app plus pytest; alleen de app: requirements.txt
 
 uvicorn app.main:create_app --factory --reload
 ```
@@ -52,7 +52,7 @@ Paden zonder aanhalingstekens schrijven. Een waarde die al in de omgeving staat,
 
 - Webpagina: http://127.0.0.1:8000
 - API-documentatie (Swagger): http://127.0.0.1:8000/docs
-- Tests draaien: `python -m pytest`
+- Tests draaien: `python -m pytest` (na `pip install -r requirements-dev.txt`)
 
 Data van **alle trackers** staat in één bestand, `data/tracker.db`. **Dit bestand is de enige bron van waarheid**: alle read models worden er bij het opstarten uit opgebouwd. Covers staan ernaast in `data/covers/`. Geen van beide staat in git; maak dus back-ups (zie hieronder).
 

@@ -29,7 +29,7 @@ def listening_summary(recent: RecentlyPlayedProjection, activity: ListeningActiv
     last = recent.recent()[:1]
     return {
         "stats": [(minutes, "min this week"), (plays, "plays this week"),
-                  (len(top_artists.top(today.year, today.month, limit=10_000)), "artists this month")],
+                  (top_artists.count(today.year, today.month), "artists this month")],
         "current": [],  # geen covers in deze versie
         "note": "Last played: " + " · ".join(filter(None, [last[0].track, ", ".join(last[0].artists)])) if last else None,
         "count": sum(activity.plays_per_day().values()),

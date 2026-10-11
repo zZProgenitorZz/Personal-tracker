@@ -4,6 +4,7 @@ snel laadt zonder de hele app te importeren.
 """
 import ctypes
 import datetime
+import html
 import json
 import re
 import sys
@@ -64,11 +65,11 @@ def sync_spotify() -> str:
                                      headers={"HX-Request": "true"})
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
-            html = response.read().decode("utf-8", "replace")
+            page = response.read().decode("utf-8", "replace")
     except (urllib.error.URLError, OSError):
         return NOT_RUNNING
-    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()
-    return text.replace("&#39;", "'").replace("&amp;", "&") or "Synced."
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", page)).strip()
+    return html.unescape(text) or "Synced."
 
 
 PER_MONITOR_AWARE_V2 = -4  # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2

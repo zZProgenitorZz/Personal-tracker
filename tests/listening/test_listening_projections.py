@@ -85,6 +85,7 @@ def test_top_artists_per_month_count_every_artist_of_a_play():
     assert artists.top(2026, 10) == [("A", 2), ("B", 1)]
     assert artists.top(2026, 9) == [("C", 1)]
     assert artists.top(2026, 8) == []
+    assert (artists.count(2026, 10), artists.count(2026, 9), artists.count(2026, 8)) == (2, 1, 0)
 
 
 def test_top_tracks_per_month_by_track_id():

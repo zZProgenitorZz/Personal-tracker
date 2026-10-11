@@ -107,14 +107,21 @@ class TopArtistsProjection:
 
     def between(self, start: date, end: date, limit: int = 10) -> list[tuple[str, int]]:
         """Van `start` tot en met `end` (lokale dagen)."""
+        return _ranked(self._total(start, end), name=str)[:limit]
+
+    def top(self, year: int, month: int, limit: int = 10) -> list[tuple[str, int]]:
+        return self.between(*_month_range(year, month), limit=limit)
+
+    def count(self, year: int, month: int) -> int:
+        """How many different artists you listened to that month."""
+        return len(self._total(*_month_range(year, month)))
+
+    def _total(self, start: date, end: date) -> Counter:
         total: Counter = Counter()
         for day, counts in self._days.items():
             if start <= day <= end:
                 total.update(counts)
-        return _ranked(total, name=str)[:limit]
-
-    def top(self, year: int, month: int, limit: int = 10) -> list[tuple[str, int]]:
-        return self.between(*_month_range(year, month), limit=limit)
+        return total
 
 
 @dataclass

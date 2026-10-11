@@ -90,30 +90,35 @@ class CoverStore:
             (self.directory / name).unlink(missing_ok=True)
 
     def download(self, url: str) -> bytes:
-        url = url.strip()
-        parsed = urlparse(url)
-        if parsed.scheme not in ("http", "https") or not parsed.netloc:
-            raise CoverError("Only http and https links can be used")
-        try:
-            with self._client.stream("GET", url, timeout=DOWNLOAD_TIMEOUT, follow_redirects=True) as response:
-                if response.status_code != 200:
-                    raise CoverError(f"The image couldn't be downloaded (HTTP {response.status_code})")
-                kind = response.headers.get("content-type", "").split(";")[0].strip().lower()
-                if kind and not kind.startswith("image/") and kind != "application/octet-stream":
-                    raise CoverError("That link doesn't point to an image")
-                declared = response.headers.get("content-length", "")
-                if declared.isdigit() and int(declared) > MAX_BYTES:
+        return download(self._client, url)
+
+
+def download(client: httpx.Client, url: str, timeout: float = DOWNLOAD_TIMEOUT) -> bytes:
+    """Downloads an image of at most MAX_BYTES. Raises CoverError with a message for the user."""
+    url = url.strip()
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise CoverError("Only http and https links can be used")
+    try:
+        with client.stream("GET", url, timeout=timeout, follow_redirects=True) as response:
+            if response.status_code != 200:
+                raise CoverError(f"The image couldn't be downloaded (HTTP {response.status_code})")
+            kind = response.headers.get("content-type", "").split(";")[0].strip().lower()
+            if kind and not kind.startswith("image/") and kind != "application/octet-stream":
+                raise CoverError("That link doesn't point to an image")
+            declared = response.headers.get("content-length", "")
+            if declared.isdigit() and int(declared) > MAX_BYTES:
+                raise too_large()
+            data = bytearray()
+            for chunk in response.iter_bytes():
+                data += chunk
+                if len(data) > MAX_BYTES:
                     raise too_large()
-                data = bytearray()
-                for chunk in response.iter_bytes():
-                    data += chunk
-                    if len(data) > MAX_BYTES:
-                        raise too_large()
-        except httpx.TimeoutException as exc:
-            raise CoverError("The image took too long to download") from exc
-        except httpx.HTTPError as exc:
-            raise CoverError("Couldn't reach that address. Check the link or your connection.") from exc
-        return bytes(data)
+    except httpx.TimeoutException as exc:
+        raise CoverError("The image took too long to download") from exc
+    except httpx.HTTPError as exc:
+        raise CoverError("Couldn't reach that address. Check the link or your connection.") from exc
+    return bytes(data)
 
 
 def with_cover(covers: CoverStore, cover_name: str | None, action):

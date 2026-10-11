@@ -94,3 +94,9 @@ def test_home_note_without_artists_has_no_loose_dot(client):
     client.post("/listening/plays", json=body(artists=[]))
     home = client.get("/ui/home").text
     assert "Last played: Blinding Lights</p>" in home and "Blinding Lights ·" not in home
+
+
+@pytest.mark.parametrize("month", ["2026-13", "2026-00", "2026-1"])
+def test_top_lists_refuse_a_month_that_does_not_exist(client, month):
+    assert client.get("/listening/top-artists", params={"month": month}).status_code == 422
+    assert client.get("/listening/top-tracks", params={"month": month}).status_code == 422

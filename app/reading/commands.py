@@ -3,7 +3,8 @@ from dataclasses import dataclass
 
 from ..eventstore import EventStore
 from .events import Kind, Status
-from .aggregate import DomainError, ReadingSeries
+from ..domain import DomainError
+from .aggregate import ReadingSeries
 from .projections import LibraryProjection
 
 

@@ -25,7 +25,7 @@ class PlayBody(BaseModel):
     source: str = "api"
 
 
-MONTH = Query(None, pattern=r"^\d{4}-\d{2}$", description="YYYY-MM; standaard deze maand")
+MONTH = Query(None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="YYYY-MM; standaard deze maand")
 
 
 def _year_month(month: str | None) -> tuple[int, int]:

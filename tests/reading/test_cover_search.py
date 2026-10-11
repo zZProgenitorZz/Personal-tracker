@@ -8,7 +8,7 @@ import httpx
 import pytest
 from PIL import Image
 
-from app.covers import CoverError
+from app.covers import MAX_BYTES, CoverError
 from app.cover_search import (
     COVER_MATCH_THRESHOLD, MIN_SOURCE_SIZE, CoverSearch, normalize, rank, required_score, similarity,
 )
@@ -337,3 +337,15 @@ def test_results_with_a_failed_source_are_cached_only_briefly():
     clock[0] = 90
     search.search("Shadow Slave")   # daarna de mislukte bron opnieuw proberen
     assert len(calls) > first_round
+
+
+def test_a_cover_over_the_size_limit_counts_as_not_big_enough():
+    def images(request):
+        return httpx.Response(200, content=png(MIN_SOURCE_SIZE) + b"\0" * MAX_BYTES,
+                              headers={"Content-Type": "image/png"})
+
+    def google(client, term):
+        return [SourceResult(("Shadow Slave",), "https://g/huge.png", "Google Books", check_size=True)]
+
+    search = CoverSearch(httpx.Client(transport=httpx.MockTransport(images)), sources=[google])
+    assert search.search("Shadow Slave") == []

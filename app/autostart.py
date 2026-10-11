@@ -13,9 +13,13 @@ RUN_VALUE = "Progen"
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def pythonw_path(root: Path = ROOT) -> Path:
+    """The venv's pythonw.exe: Python without a console window."""
+    return root / ".venv" / "Scripts" / "pythonw.exe"
+
+
 def launcher_command(root: Path = ROOT) -> str:
-    pythonw = root / ".venv" / "Scripts" / "pythonw.exe"
-    return f'"{pythonw}" "{root / "launch.pyw"}" --background'
+    return f'"{pythonw_path(root)}" "{root / "launch.pyw"}" --background'
 
 
 class WindowsRunKey:
@@ -54,8 +58,7 @@ class Autostart:
 
     @classmethod
     def for_this_computer(cls) -> "Autostart":
-        pythonw = ROOT / ".venv" / "Scripts" / "pythonw.exe"
-        registry = WindowsRunKey() if sys.platform == "win32" and pythonw.exists() else None
+        registry = WindowsRunKey() if sys.platform == "win32" and pythonw_path().exists() else None
         return cls(registry, launcher_command())
 
     @property

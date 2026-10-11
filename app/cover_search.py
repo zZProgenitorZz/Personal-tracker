@@ -18,7 +18,7 @@ import httpx
 from PIL import Image, UnidentifiedImageError
 from rapidfuzz import fuzz
 
-from .covers import CoverError
+from .covers import CoverError, download
 
 SOURCE_TIMEOUT = 6.0  # seconden per verzoek
 
@@ -244,12 +244,10 @@ class CoverSearch:
         if not candidate.check_size:
             return True
         try:
-            response = self._client.get(candidate.image_url, timeout=SOURCE_TIMEOUT, follow_redirects=True)
-            if response.status_code != 200:
-                return False
-            with Image.open(BytesIO(response.content)) as image:
+            data = download(self._client, candidate.image_url, timeout=SOURCE_TIMEOUT)
+            with Image.open(BytesIO(data)) as image:
                 width, height = image.size
-        except (httpx.HTTPError, UnidentifiedImageError, OSError):
+        except (CoverError, UnidentifiedImageError, OSError):  # too large, unreachable or not an image
             return False
         return width >= MIN_SOURCE_SIZE[0] and height >= MIN_SOURCE_SIZE[1]
 

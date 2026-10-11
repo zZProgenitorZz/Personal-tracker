@@ -26,6 +26,7 @@ STATUS_LABELS = {
 }
 KIND_LABELS = {Kind.MANHWA: "Manhwa", Kind.NOVEL: "Novel"}
 
+
 def now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -36,7 +37,7 @@ class SeriesStarted:
     title: str
     kind: Kind
     source: str
-    start_chapter: int
+    start_chapter: float
     at: datetime = field(default_factory=now)
     # Bestandsnaam in de covermap. Oudere events hebben dit veld niet, vandaar de default.
     cover: str | None = None
@@ -45,8 +46,8 @@ class SeriesStarted:
 @dataclass(frozen=True)
 class ProgressLogged:
     series_id: str
-    chapter: int
-    previous_chapter: int
+    chapter: float
+    previous_chapter: float
     at: datetime = field(default_factory=now)
 
 

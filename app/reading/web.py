@@ -10,9 +10,9 @@ from fastapi import APIRouter, File, Form, Request, UploadFile
 
 from .. import clock
 from ..covers import CoverError, CoverStore, with_cover
+from ..domain import DomainError
 from ..charts import genre_bars, last_days, last_weeks, with_height
 from ..web import Backlog, cover_search_response, pick_from_backlog, render, save_cover, toast, templates
-from .aggregate import DomainError
 from ..cover_search import CoverSearch
 from .commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, SetGenres, StartSeries
 from .events import KIND_LABELS, STATUS_LABELS, Kind, Status, StatusChanged
@@ -112,7 +112,7 @@ def create_reading_web_router(
         today = clock.today()
         now = clock.utc_now()
         return render(
-            request, "dashboard.html",
+            request, "reading_dashboard.html",
             stats=overview(today),
             current=library.currently_reading()[:6],
             week=with_height(last_days(activity.per_day(), today, 7)),
@@ -123,7 +123,7 @@ def create_reading_web_router(
 
     @router.get("/library")
     def library_page(request: Request):
-        return render(request, "library.html", entries=library.all(), status="", kind="", q="", genre="",
+        return render(request, "reading_library.html", entries=library.all(), status="", kind="", q="", genre="",
                       backlog_size=len(library.by_status(Status.PLAN_TO_READ)))
 
     @router.get("/pick-button")
@@ -138,7 +138,7 @@ def create_reading_web_router(
     @router.get("/library/grid")
     def library_grid(request: Request, status: str = "", kind: str = "", q: str = "", genre: str = ""):
         return render(
-            request, "_library_grid.html",
+            request, "_reading_grid.html",
             entries=filtered(status, kind, q, genre), status=status, kind=kind, q=q, genre=genre,
         )
 
@@ -150,7 +150,7 @@ def create_reading_web_router(
         last_30 = [per_day.get(today - timedelta(days=i), 0) for i in range(30)]
         best = max(per_day.items(), key=lambda item: item[1], default=None)
         return render(
-            request, "progress.html",
+            request, "reading_progress.html",
             stats=overview(today),
             weeks=weeks,
             avg_week=sum(w["value"] for w in weeks[-4:]) / 4,
