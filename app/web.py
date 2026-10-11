@@ -102,7 +102,9 @@ ICONS = {
     "chevron-left": '<path d="m15 18-6-6 6-6"/>',
     "chevron-right": '<path d="m9 18 6-6-6-6"/>',
     "smartphone": '<rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/>',
-    "moon": '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+    "sunny": '<path d="M12 2c1.4 3.6 7 6.3 7 12.5a7 7 0 0 1-14 0c0-2.9 1.4-5 3-6.5.2 1.9 1 3 2.2 3.3C9.6 8 10.4 4.6 12 2Z"/>'
+             '<circle cx="9.7" cy="15.3" r="1.3" fill="currentColor" stroke="none"/>'
+             '<circle cx="14.3" cy="15.3" r="1.3" fill="currentColor" stroke="none"/>',
     "send": '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
     "alert":'<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
 }

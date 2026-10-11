@@ -7,7 +7,7 @@
 {% elif entry.kind == "sunny" %}
 <div class="sunny-msg from-sunny sunny-bubble{% if entry.error %} is-error{% endif %}">{{ entry.text }}</div>
 {% elif entry.kind == "unavailable" %}
-<p class="sunny-unavailable">{{ ui.icon('moon', 16) }}Add ANTHROPIC_API_KEY to .env to summon Sunny from the shadows</p>
+<p class="sunny-unavailable">{{ ui.icon('sunny', 16) }}Add ANTHROPIC_API_KEY to .env to summon Sunny from the shadows</p>
 {% endif %}
 {%- endmacro %}
 
