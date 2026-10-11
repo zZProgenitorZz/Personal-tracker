@@ -115,9 +115,14 @@ def classify(exc: Exception) -> SunnyProblem:
     return SunnyProblem("unknown", f"Something went wrong talking to Anthropic (status {status}).")
 
 
+def api_key() -> str:
+    """ANTHROPIC_API_KEY uit .env (of de omgeving), of "" als die er niet is."""
+    return os.environ.get("ANTHROPIC_API_KEY", "").strip()
+
+
 def make_client() -> anthropic.Anthropic | None:
-    """Een client als ANTHROPIC_API_KEY in .env (of de omgeving) staat; anders None."""
-    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    """Een client als er een API-key is; anders None."""
+    key = api_key()
     return anthropic.Anthropic(api_key=key) if key else None
 
 

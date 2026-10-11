@@ -14,7 +14,8 @@ from fastapi.staticfiles import StaticFiles
 from .assistant.commands import AssistantCommandHandler
 from .assistant.events import EVENT_TYPES as ASSISTANT_EVENT_TYPES
 from .assistant.tools import TrackerData
-from .assistant.web import Sunny, create_assistant_router
+from .assistant.session import Sunny
+from .assistant.web import create_assistant_router
 from .autostart import Autostart, launcher_command
 from .backup import Backups, default_backup_dir
 from .covers import CoverStore
@@ -175,7 +176,7 @@ def create_app(
     app.include_router(create_planner_router(planner, agenda))
     # Sunny, de assistent: leest de projecties, schrijft alleen na Confirm via dezelfde handlers.
     # In de tests (":memory:") nooit een echte client; die geven ze zelf een nep-client.
-    sunny = Sunny(TrackerData(library=library, reading_activity=activity, watchlist=watchlist, listening=listen_activity,
+    sunny = Sunny(TrackerData(library=library, watchlist=watchlist, listening=listen_activity,
                               top_artists=top_artists, top_tracks=top_tracks, agenda=agenda, reading=handler,
                               watching=watching, planner=planner, now=lambda: planner_schedule.local_now()),
                   AssistantCommandHandler(store), use_real_client=scratch is None)

@@ -15,6 +15,17 @@ class Kind(str, Enum):
     NOVEL = "novel"
     MANHWA = "manhwa"
 
+
+# Hoe statussen en soorten in de app heten (pagina's, toasts en Sunny's kaarten).
+STATUS_LABELS = {
+    Status.READING: "Reading",
+    Status.ON_HOLD: "On hold",
+    Status.COMPLETED: "Completed",
+    Status.DROPPED: "Dropped",
+    Status.PLAN_TO_READ: "Plan to read",
+}
+KIND_LABELS = {Kind.MANHWA: "Manhwa", Kind.NOVEL: "Novel"}
+
 def now() -> datetime:
     return datetime.now(timezone.utc)
 

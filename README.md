@@ -157,7 +157,8 @@ app/
     agent.py           de loop met Claude (het model komt uit de instelling; effort als constante bovenaan)
     models.py          de modellen om uit te kiezen (de enige plek met model-ID's)
     events.py, aggregate.py, commands.py   AssistantSettingsChanged, AssistantSettings, ChangeAssistantModel
-    web.py             /ui/assistant: het chatpaneel, Confirm en Cancel
+    session.py         het gesprek: berichten, voorstellen, Confirm/Cancel (in het geheugen, niet in de event store)
+    web.py             /ui/assistant: dunne routes voor het chatpaneel, Confirm/Cancel en Settings › Sunny
   wrapped/
     projections.py     WrappedProjection: het jaaroverzicht uit de events van alle trackers (alleen lezen)
     web.py             /ui/wrapped (#wrapped) en de Wrapped-kaart op het startscherm
@@ -405,7 +406,7 @@ Instellen: zet `ANTHROPIC_API_KEY` in `.env` (zie `.env.example`) en herstart Pr
 
 Bij een key-, rechten-, tegoed- of limietprobleem staat de melding (met **Open console**) ook bovenaan zodra je het paneel opent, tot de eerstvolgende aanroep weer lukt. Herkenning in `classify()` in `app/assistant/agent.py`; de zoekwoorden voor "tegoed op" en "maandlimiet" staan als constanten bovenaan (`CREDIT_WORDS`, `SPEND_LIMIT_WORDS`), voor als Anthropic de tekst verandert. Een onbekende fout geeft "Something went wrong talking to Anthropic (status X)." en komt volledig in het log.
 
-Hoe het werkt (`app/assistant/`): `prompt.py` bouwt de systeemprompt (het vaste deel met `cache_control`, de datum van vandaag als apart blok erna); `tools.py` heeft de tools als JSON-schema's met `strict: true` (leestools lezen de projecties direct, schrijftools geven alleen een voorstel terug); `agent.py` draait de loop (hooguit 5 rondes per bericht; de geschiedenis gaat als platte tekst mee); `web.py` heeft de routes voor het paneel en Confirm/Cancel. Gesprek en voorstellen staan alleen in het geheugen van de app, niet in de event store. Tests gebruiken een nep-client en praten nooit met de echte API.
+Hoe het werkt (`app/assistant/`): `prompt.py` bouwt de systeemprompt (het vaste deel met `cache_control`, de datum van vandaag als apart blok erna); `tools.py` heeft de tools als JSON-schema's met `strict: true` (leestools lezen de projecties direct, schrijftools geven alleen een voorstel terug); `agent.py` draait de loop (hooguit 5 rondes per bericht; de geschiedenis gaat als platte tekst mee); `session.py` houdt het gesprek bij (berichten, voorstellen, Confirm/Cancel; tijdens de API-aanroep blijven Confirm, Cancel en New chat gewoon werken) en `web.py` heeft de dunne routes. Gesprek en voorstellen staan alleen in het geheugen van de app, niet in de event store. Tests gebruiken een nep-client en praten nooit met de echte API.
 
 ## Beveiliging
 

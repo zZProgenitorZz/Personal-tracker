@@ -18,7 +18,7 @@ from app.planner.events import Frequency, Repeat
 from app.planner.projections import AgendaProjection
 from app.reading.commands import ReadingCommandHandler, StartSeries
 from app.reading.events import Kind
-from app.reading.projections import LibraryProjection, ReadingActivityProjection
+from app.reading.projections import LibraryProjection
 from app.watching.commands import AddShow, WatchingCommandHandler
 from app.watching.events import WatchKind, WatchStatus
 from app.watching.projections import WatchlistProjection
@@ -30,10 +30,10 @@ TODAY = dt.date(2026, 10, 11)
 def data():
     """Een kleine tracker met echte projecties en handlers op een :memory:-store."""
     store = EventStore(":memory:", EVENT_TYPES)
-    library, reading_activity, watchlist = LibraryProjection(), ReadingActivityProjection(), WatchlistProjection()
+    library, watchlist = LibraryProjection(), WatchlistProjection()
     listen, artists, tracks, agenda = (ListeningActivityProjection(), TopArtistsProjection(), TopTracksProjection(),
                                        AgendaProjection())
-    for projection in (library, reading_activity, watchlist, listen, artists, tracks, agenda):
+    for projection in (library, watchlist, listen, artists, tracks, agenda):
         store.subscribe(projection.apply)
     reading, watching, planner = ReadingCommandHandler(store, library), WatchingCommandHandler(store, watchlist), \
         PlannerCommandHandler(store)
@@ -43,7 +43,7 @@ def data():
     planner.handle(AddPlan("Gym", dt.date(2026, 10, 12), dt.time(12), repeat=Repeat(Frequency.WEEKLY, (0,))))
     ListeningCommandHandler(store).handle(RecordPlay(dt.datetime(2026, 10, 1, 12, tzinfo=dt.timezone.utc),
                                                      "spotify:track:x", "Midnight City", ["M83"], "Hurry Up", "a", 240_000))
-    tracker = TrackerData(library=library, reading_activity=reading_activity, watchlist=watchlist, listening=listen,
+    tracker = TrackerData(library=library, watchlist=watchlist, listening=listen,
                           top_artists=artists, top_tracks=tracks, agenda=agenda, reading=reading, watching=watching,
                           planner=planner, now=lambda: dt.datetime(2026, 10, 11, 10, 0))
     tracker.store = store

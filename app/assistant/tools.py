@@ -9,7 +9,7 @@ Een ongeldige aanroep (onbekend id, verkeerde datum) wordt een ToolError: die ga
 is_error terug naar het model, zodat Sunny het zelf kan rechtzetten of het kan vragen.
 """
 import datetime as dt
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 
 from rapidfuzz import fuzz, process
@@ -19,17 +19,16 @@ from ..planner.parse import describe, describe_repeat, nice_day, parse
 from ..planner.projections import AgendaProjection
 from ..planner.schedule import next_occurrence
 from ..reading.commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, StartSeries
-from ..reading.events import Kind, Status
-from ..reading.projections import LibraryProjection, ReadingActivityProjection
-from ..reading.web import KIND_LABELS, STATUS_LABELS
+from ..reading.events import KIND_LABELS, STATUS_LABELS, Kind, Status
+from ..reading.projections import LibraryProjection
 from ..listening.projections import ListeningActivityProjection, TopArtistsProjection, TopTracksProjection
 from ..watching.commands import AddShow, ChangeShowStatus, RemoveShow, WatchingCommandHandler
-from ..watching.events import WatchKind, WatchStatus
+from ..watching.events import WATCH_KIND_LABELS, WATCH_STATUS_LABELS, WatchKind, WatchStatus
 from ..watching.projections import WatchlistProjection
-from ..watching.web import WATCH_KIND_LABELS, WATCH_STATUS_LABELS
 
 PROPOSED = "proposed, waiting for Progen's confirmation"
 MAX_ROWS = 40  # nooit de hele bibliotheek in één antwoord
+MAX_PLANS = 100  # plans_between: hooguit zoveel keren (herhalingen uitgeklapt)
 
 
 class ToolError(ValueError):
@@ -49,7 +48,6 @@ class PendingAction:
 class TrackerData:
     """Alles waar Sunny bij mag: de projecties om te lezen, de handlers om (na Confirm) te schrijven."""
     library: LibraryProjection
-    reading_activity: ReadingActivityProjection
     watchlist: WatchlistProjection
     listening: ListeningActivityProjection
     top_artists: TopArtistsProjection
@@ -59,7 +57,6 @@ class TrackerData:
     watching: WatchingCommandHandler
     planner: PlannerCommandHandler
     now: Callable[[], dt.datetime]   # lokale tijd, net als de planner
-    extra: dict = field(default_factory=dict)
 
     def handler(self, domain: str):
         return {"reading": self.reading, "watching": self.watching, "planner": self.planner}[domain]
@@ -148,25 +145,23 @@ def _limit(args: dict) -> int:
     return max(1, min(int(args.get("limit") or 5), 25))
 
 
+def _lookup(found, noun: str, item_id: str):
+    """Het gevonden item, of een ToolError die het model naar find_item stuurt."""
+    if found is None:
+        raise ToolError(f"No {noun} with id {item_id!r}. Use find_item to get the id.")
+    return found
+
+
 def _series(data: TrackerData, series_id: str):
-    entry = data.library.get(series_id)
-    if entry is None:
-        raise ToolError(f"No series with id {series_id!r}. Use find_item to get the id.")
-    return entry
+    return _lookup(data.library.get(series_id), "series", series_id)
 
 
 def _show(data: TrackerData, show_id: str):
-    entry = data.watchlist.get(show_id)
-    if entry is None:
-        raise ToolError(f"No show with id {show_id!r}. Use find_item to get the id.")
-    return entry
+    return _lookup(data.watchlist.get(show_id), "show", show_id)
 
 
 def _plan(data: TrackerData, plan_id: str):
-    plan = data.agenda.get(plan_id)
-    if plan is None:
-        raise ToolError(f"No plan with id {plan_id!r}. Use find_item to get the id.")
-    return plan
+    return _lookup(data.agenda.get(plan_id), "plan", plan_id)
 
 
 def _when(day: dt.date | None, time: dt.time | None, today: dt.date) -> str:
@@ -233,7 +228,7 @@ def listening_minutes(args: dict, data: TrackerData) -> dict:
 def plans_between(args: dict, data: TrackerData) -> list[dict]:
     return [{"plan_id": o.plan.plan_id, "title": o.title, "on": o.on.isoformat(),
              "time": o.time.strftime("%H:%M") if o.time else None, "done": o.done, "repeats": o.is_repeat}
-            for o in data.agenda.between(*_period(args))][:100]
+            for o in data.agenda.between(*_period(args))][:MAX_PLANS]
 
 
 # ---- Schrijftools: alleen voorstellen ----

@@ -14,7 +14,7 @@ from ..web import Backlog, pick_from_backlog, render, save_cover, toast, templat
 from .aggregate import DomainError
 from ..cover_search import CoverSearch
 from .commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, SetGenres, StartSeries
-from .events import Kind, Status, StatusChanged
+from .events import KIND_LABELS, STATUS_LABELS, Kind, Status, StatusChanged
 from .genres import GENRES
 from .projections import LibraryEntry, LibraryProjection, ReadingActivityProjection
 
@@ -22,15 +22,6 @@ CHANGED = "reading-changed"
 # Gathering dust: een serie op Reading zonder voortgang of statuswijziging in zoveel dagen.
 STALE_READING_DAYS = 21
 DUST_SHOWN = 5  # daarna "+N more"
-
-STATUS_LABELS = {
-    Status.READING: "Reading",
-    Status.ON_HOLD: "On hold",
-    Status.COMPLETED: "Completed",
-    Status.DROPPED: "Dropped",
-    Status.PLAN_TO_READ: "Plan to read",
-}
-KIND_LABELS = {Kind.MANHWA: "Manhwa", Kind.NOVEL: "Novel"}
 
 templates.env.globals.update(STATUS_LABELS=STATUS_LABELS, KIND_LABELS=KIND_LABELS, GENRES=GENRES)
 

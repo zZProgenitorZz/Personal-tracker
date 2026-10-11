@@ -14,7 +14,7 @@ from ..domain import DomainError
 from .. import web as shared
 from ..web import Backlog, pick_from_backlog, render, save_cover, templates, toast
 from .commands import AddShow, ChangeShowStatus, RemoveShow, SetShowGenres, WatchingCommandHandler
-from .events import WatchKind, WatchStatus
+from .events import WATCH_KIND_LABELS, WATCH_STATUS_LABELS, WatchKind, WatchStatus
 from .genres import WATCH_GENRES
 from .projections import WatchActivityProjection, WatchEntry, WatchlistProjection
 
@@ -23,16 +23,6 @@ CHANGED = "watching-changed"
 # Ruimer dan bij Reading, want Watching houdt geen afleveringen bij: een zwakker signaal.
 STALE_WATCHING_DAYS = 30
 DUST_SHOWN = 5  # daarna "+N more"
-
-WATCH_STATUS_LABELS = {
-    WatchStatus.WATCHING: "Watching",
-    WatchStatus.REWATCHING: "Rewatching",
-    WatchStatus.COMPLETED: "Completed",
-    WatchStatus.ON_HOLD: "On hold",
-    WatchStatus.DROPPED: "Dropped",
-    WatchStatus.PLAN_TO_WATCH: "Plan to watch",
-}
-WATCH_KIND_LABELS = {WatchKind.SERIES: "Series", WatchKind.ANIME: "Anime", WatchKind.MOVIE: "Movie"}
 
 templates.env.globals.update(
     WATCH_STATUS_LABELS=WATCH_STATUS_LABELS, WATCH_KIND_LABELS=WATCH_KIND_LABELS, WATCH_GENRES=WATCH_GENRES.names,

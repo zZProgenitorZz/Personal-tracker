@@ -20,6 +20,18 @@ class WatchKind(str, Enum):
     ANIME = "anime"
 
 
+# Hoe statussen en soorten in de app heten (pagina's, toasts en Sunny's kaarten).
+WATCH_STATUS_LABELS = {
+    WatchStatus.WATCHING: "Watching",
+    WatchStatus.REWATCHING: "Rewatching",
+    WatchStatus.COMPLETED: "Completed",
+    WatchStatus.ON_HOLD: "On hold",
+    WatchStatus.DROPPED: "Dropped",
+    WatchStatus.PLAN_TO_WATCH: "Plan to watch",
+}
+WATCH_KIND_LABELS = {WatchKind.SERIES: "Series", WatchKind.ANIME: "Anime", WatchKind.MOVIE: "Movie"}
+
+
 def now() -> datetime:
     return datetime.now(timezone.utc)
 

@@ -18,14 +18,13 @@ class AssistantSettings:
         for event in events:
             if isinstance(event, AssistantSettingsChanged):
                 self.stored = event.model
+        if model_by_id(self.stored) is None:  # één keer melden, niet bij elke lezing
+            log.warning("Sunny: model %r is not in the list (anymore); using %s instead", self.stored, DEFAULT_MODEL)
 
     @property
     def model(self) -> str:
         """Het model om te gebruiken. Staat het opgeslagen model niet (meer) in de lijst: de standaard."""
-        if model_by_id(self.stored) is None:
-            log.warning("Sunny: model %r is not in the list (anymore); using %s instead", self.stored, DEFAULT_MODEL)
-            return DEFAULT_MODEL
-        return self.stored
+        return self.stored if model_by_id(self.stored) else DEFAULT_MODEL
 
     def change(self, model: str) -> list:
         if model_by_id(model) is None:
