@@ -11,6 +11,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .assistant.commands import AssistantCommandHandler
+from .assistant.events import EVENT_TYPES as ASSISTANT_EVENT_TYPES
 from .assistant.tools import TrackerData
 from .assistant.web import Sunny, create_assistant_router
 from .autostart import Autostart, launcher_command
@@ -61,6 +63,7 @@ EVENT_TYPES = [
     ShowAdded, ShowStatusChanged, ShowGenresChanged, ShowRemoved,                 # watching
     TrackPlayed,                                                                  # listening
     *PLANNER_EVENT_TYPES,                                                         # planner
+    *ASSISTANT_EVENT_TYPES,                                                       # Sunny: alleen de instelling
 ]
 
 
@@ -175,7 +178,7 @@ def create_app(
     sunny = Sunny(TrackerData(library=library, reading_activity=activity, watchlist=watchlist, listening=listen_activity,
                               top_artists=top_artists, top_tracks=top_tracks, agenda=agenda, reading=handler,
                               watching=watching, planner=planner, now=lambda: planner_schedule.local_now()),
-                  use_real_client=scratch is None)
+                  AssistantCommandHandler(store), use_real_client=scratch is None)
     app.state.sunny = sunny
     app.include_router(create_assistant_router(sunny))
     app.include_router(create_planner_web_router(planner, agenda))

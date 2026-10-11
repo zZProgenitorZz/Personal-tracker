@@ -1,0 +1,20 @@
+{% import "_macros.html" as ui %}
+{# Settings › Sunny: welk model Sunny gebruikt. Elke keuze slaat meteen op (event in een eigen stream). #}
+<div id="sunny-settings" hx-disinherit="*" hx-get="/ui/assistant/settings" hx-trigger="assistant-changed from:body" hx-swap="outerHTML">
+  <form class="model-choice" hx-post="/ui/assistant/model" hx-trigger="change" hx-swap="none" role="radiogroup" aria-label="Sunny's model">
+    {% for model in models %}
+    <label class="model-option">
+      <input type="radio" name="model" value="{{ model.id }}"{% if model.id == current %} checked{% endif %}>
+      <span class="model-text">
+        <b>{{ model.name }}</b>
+        <span class="muted">{{ model.description }}</span>
+      </span>
+      <span class="model-price" title="Per 1M tokens, input / output">{{ model.price }}</span>
+    </label>
+    {% endfor %}
+  </form>
+  <p class="muted note sunny-key">
+    {{ ui.icon('check-circle' if key_found else 'alert', 14) }}
+    {%- if key_found %}API key found{% else %}No API key in .env{% endif %} · prices per 1M tokens (input / output)
+  </p>
+</div>

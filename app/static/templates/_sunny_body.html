@@ -5,6 +5,7 @@
 <div class="sunny-log">{{ sunny.bubble({"kind": "unavailable"}) }}</div>
 {% else %}
 <div id="sunny-log" class="sunny-log" aria-live="polite">
+  {% if banner %}{{ sunny.problem(banner, banner=true) }}{% endif %}
   {% if not entries %}
   <p class="sunny-intro muted">Ask about your tracker, or tell me what to log. Nothing changes until you confirm.</p>
   {% endif %}

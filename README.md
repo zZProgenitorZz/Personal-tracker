@@ -154,7 +154,9 @@ app/
     identity/          het ontwerp van Sunny: IDENTITY, SOUL, USER (de systeemprompt), TOOLS en OUTCOME
     prompt.py          de systeemprompt (cachebaar vast deel + de datum van vandaag)
     tools.py           Sunny's tools: lezen uit de projecties, schrijven alleen als voorstel (PendingAction)
-    agent.py           de loop met Claude (model en effort als constanten bovenaan)
+    agent.py           de loop met Claude (het model komt uit de instelling; effort als constante bovenaan)
+    models.py          de modellen om uit te kiezen (de enige plek met model-ID's)
+    events.py, aggregate.py, commands.py   AssistantSettingsChanged, AssistantSettings, ChangeAssistantModel
     web.py             /ui/assistant: het chatpaneel, Confirm en Cancel
   wrapped/
     projections.py     WrappedProjection: het jaaroverzicht uit de events van alle trackers (alleen lezen)
@@ -388,7 +390,20 @@ Wat Sunny kan:
 
 Instellen: zet `ANTHROPIC_API_KEY` in `.env` (zie `.env.example`) en herstart Progen. Zonder sleutel toont het paneel alleen "Add ANTHROPIC_API_KEY to .env to summon Sunny from the shadows".
 
-**Kosten:** elk bericht aan Sunny gaat naar de API van Anthropic en kost een klein beetje van je API-tegoed. Sunny gebruikt standaard **Claude Haiku 5.5** met lage effort en hooguit 1024 tokens per antwoord; de vaste systeemprompt en de toollijst worden gecachet, alleen de laatste 10 berichten gaan mee, en Sunny zoekt één titel op in plaats van je hele bibliotheek. Zet in de console van Anthropic een maandlimiet. Het model (en de effort) staan als constanten bovenaan `app/assistant/agent.py`, bijvoorbeeld om naar `claude-sonnet-5-5` te wisselen. Wat er naar Anthropic gaat: je bericht, de laatste berichten van het gesprek en de gegevens die Sunny voor dat antwoord opzoekt; verder niets.
+**Kosten:** elk bericht aan Sunny gaat naar de API van Anthropic en kost een klein beetje van je API-tegoed. Sunny gebruikt standaard **Claude Haiku 5.5** met lage effort en hooguit 1024 tokens per antwoord; de vaste systeemprompt en de toollijst worden gecachet, alleen de laatste 10 berichten gaan mee, en Sunny zoekt één titel op in plaats van je hele bibliotheek. Zet in de console van Anthropic een maandlimiet. **Het model kies je in Settings › Sunny**: Claude Haiku 5.5 (standaard, snelst en goedkoopst), Claude Sonnet 5.5 (slimmer, ±20× de prijs) of Claude Opus 5.5 (het slimst en het duurst), met de prijs per model erbij. Een wijziging geldt meteen, zonder herstart. De keuze wordt bewaard als event (`AssistantSettingsChanged`, eigen stream `assistant-settings`), dus hij zit in je back-ups; de modellen zelf staan in `app/assistant/models.py`. Effort (laag) en 1024 tokens per antwoord zijn voor elk model gelijk. Het paneel in Settings zegt ook of er een `ANTHROPIC_API_KEY` in `.env` staat (de key zelf wordt nooit getoond), en onder de kop van het chatpaneel zie je welk model Sunny gebruikt. Wat er naar Anthropic gaat: je bericht, de laatste berichten van het gesprek en de gegevens die Sunny voor dat antwoord opzoekt; verder niets.
+
+**Als de API niet meewerkt**, zegt Sunny dat in een eigen waarschuwingsballon (geen crash), met **Try again** om hetzelfde bericht opnieuw te sturen. Openstaande Confirm-kaarten blijven werken: die hebben de API niet nodig.
+
+| Sunny zegt | Wat je doet |
+| --- | --- |
+| "My key expired. Or someone revoked it. …" | Maak een nieuwe key op console.anthropic.com, zet hem in `.env` als `ANTHROPIC_API_KEY` en herstart Progen. |
+| "I'm out of credits. …" | Vul je tegoed aan in de console onder Billing en probeer het opnieuw. |
+| "You hit the monthly limit you set. …" | Verhoog de maandlimiet in de console, of wacht tot volgende maand. |
+| "This key isn't allowed to do that. …" | Controleer de workspace en rechten van de key in de console. |
+| "Too many requests at once. …" / "Anthropic's servers are having a bad day. …" | Even wachten en opnieuw proberen (de SDK probeert het zelf al een paar keer). |
+| "I can't reach Anthropic. Is the internet on?" | Controleer je internetverbinding. |
+
+Bij een key-, rechten-, tegoed- of limietprobleem staat de melding (met **Open console**) ook bovenaan zodra je het paneel opent, tot de eerstvolgende aanroep weer lukt. Herkenning in `classify()` in `app/assistant/agent.py`; de zoekwoorden voor "tegoed op" en "maandlimiet" staan als constanten bovenaan (`CREDIT_WORDS`, `SPEND_LIMIT_WORDS`), voor als Anthropic de tekst verandert. Een onbekende fout geeft "Something went wrong talking to Anthropic (status X)." en komt volledig in het log.
 
 Hoe het werkt (`app/assistant/`): `prompt.py` bouwt de systeemprompt (het vaste deel met `cache_control`, de datum van vandaag als apart blok erna); `tools.py` heeft de tools als JSON-schema's met `strict: true` (leestools lezen de projecties direct, schrijftools geven alleen een voorstel terug); `agent.py` draait de loop (hooguit 5 rondes per bericht; de geschiedenis gaat als platte tekst mee); `web.py` heeft de routes voor het paneel en Confirm/Cancel. Gesprek en voorstellen staan alleen in het geheugen van de app, niet in de event store. Tests gebruiken een nep-client en praten nooit met de echte API.
 
@@ -458,7 +473,7 @@ Eerst handmatig invoeren; automatisch importeren komt later (zie punt 5).
 - [x] Ontbrekende stukken: top nummers en artiesten over een vrije periode, de status Rewatching, plannen in een periode.
 - [ ] Fase 2: eenvoudige logs (bijv. hoofdstuk +1) zonder Confirm, met een Undo-knop.
 - [ ] Fase 3: een "heartbeat", bijvoorbeeld een ochtendsamenvatting van je dag.
-- [ ] In Settings kunnen wisselen naar Sonnet 5.5 voor moeilijkere vragen.
+- [x] In Settings kunnen wisselen van model (Haiku, Sonnet of Opus 5.5).
 
 ### Ideeën voor later
 

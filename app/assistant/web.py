@@ -4,6 +4,7 @@ Het gesprek en de voorstellen leven in het geheugen van de app (één gebruiker,
 in de event store: alleen wat je met Confirm uitvoert wordt een gewoon event. New chat wist
 alles. Zonder ANTHROPIC_API_KEY toont het paneel één nette regel in plaats van een fout.
 """
+import os
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -11,8 +12,10 @@ from dataclasses import dataclass, field
 from fastapi import APIRouter, Form, Request
 
 from ..domain import DomainError
-from ..web import render
-from .agent import Agent, make_client
+from ..web import render, toast
+from .agent import Agent, SunnyProblem, make_client
+from .commands import AssistantCommandHandler, ChangeAssistantModel
+from .models import MODELS, model_by_id
 from .tools import PendingAction, TrackerData
 
 
@@ -28,13 +31,19 @@ class Proposal:
         return [a.delete_name for a in self.actions if a.delete_name]
 
 
+CHANGED = "assistant-changed"
+
+
 @dataclass
 class Sunny:
     data: TrackerData
+    settings: AssistantCommandHandler
     use_real_client: bool = True                       # in tests: nooit een echte client
     history: list[dict] = field(default_factory=list)  # platte tekst, voor het model
     entries: list[dict] = field(default_factory=list)  # wat het paneel toont
     proposals: dict[str, Proposal] = field(default_factory=dict)
+    # Een key- of tegoedprobleem van de vorige aanroep: staat bovenaan bij openen, tot een aanroep lukt.
+    standing_problem: SunnyProblem | None = None
     _client: object = None
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -59,23 +68,34 @@ def create_assistant_router(sunny: Sunny) -> APIRouter:
     router = APIRouter(prefix="/ui/assistant", include_in_schema=False)
 
     def body(request: Request):
-        return render(request, "_sunny_body.html", available=sunny.client is not None, entries=sunny.entries)
+        return render(request, "_sunny_body.html", available=sunny.client is not None, entries=sunny.entries,
+                      banner=sunny.standing_problem)
 
     @router.get("")
     def show(request: Request):
         return body(request)
 
     @router.post("/message")
-    def message(request: Request, message: str = Form("")):
+    def message(request: Request, message: str = Form(""), retry: str = Form("")):
+        """Een bericht van Progen. Met retry (de knop Try again) staat het bericht al in het gesprek."""
         text = message.strip()
         if sunny.client is None:
             return render(request, "_sunny_entries.html", entries=[{"kind": "unavailable"}])
         if not text:
             return render(request, "_sunny_entries.html", entries=[])
         with sunny._lock:
-            reply = Agent(sunny.client, sunny.data).ask(text, sunny.history)
-            new = [{"kind": "sunny", "text": reply.text, "error": reply.error}]
-            sunny.entries.append({"kind": "user", "text": text})
+            reply = Agent(sunny.client, sunny.data, sunny.settings.settings).ask(text, sunny.history)
+            if not retry:
+                sunny.entries.append({"kind": "user", "text": text})
+            if reply.problem:
+                # Een probleem met de API: een eigen ballon, en het bericht blijft staan voor Try again.
+                if reply.problem.sticky:
+                    sunny.standing_problem = reply.problem
+                new = [{"kind": "problem", "problem": reply.problem, "retry_text": text}]
+                sunny.entries.extend(new)
+                return render(request, "_sunny_entries.html", entries=new)
+            sunny.standing_problem = None  # de API doet het weer
+            new = [{"kind": "sunny", "text": reply.text, "error": False}]
             remembered = reply.text
             if reply.actions:
                 proposal = Proposal(uuid.uuid4().hex[:12], reply.actions)
@@ -83,8 +103,7 @@ def create_assistant_router(sunny: Sunny) -> APIRouter:
                 new.append({"kind": "card", "proposal": proposal})
                 remembered += "\n[Proposed, waiting for Progen's Confirm: " + "; ".join(a.label for a in reply.actions) + "]"
             sunny.entries.extend(new)
-            if not reply.error:
-                sunny.history += [{"role": "user", "content": text}, {"role": "assistant", "content": remembered}]
+            sunny.history += [{"role": "user", "content": text}, {"role": "assistant", "content": remembered}]
         return render(request, "_sunny_entries.html", entries=new)
 
     @router.post("/confirm/{proposal_id}")
@@ -131,6 +150,27 @@ def create_assistant_router(sunny: Sunny) -> APIRouter:
             sunny.history.append({"role": "user", "content": "[Progen clicked Cancel: "
                                                              + "; ".join(a.label for a in proposal.actions) + "]"})
         return render(request, "_sunny_result.html", proposal=proposal, note=note, toast=None)
+
+    # ---- Settings › Sunny: welk model ----
+
+    @router.get("/settings")
+    def settings_panel(request: Request):
+        return render(request, "_sunny_settings.html", models=MODELS, current=sunny.settings.settings().model,
+                      key_found=bool(os.environ.get("ANTHROPIC_API_KEY", "").strip()))  # de key zelf nooit tonen
+
+    @router.post("/model")
+    def choose_model(request: Request, model: str = Form("")):
+        try:
+            sunny.settings.handle(ChangeAssistantModel(model))
+        except DomainError as exc:
+            return toast(request, str(exc), error=True)
+        return toast(request, f"Sunny now uses {model_by_id(model).name}.", changed=CHANGED)
+
+    @router.get("/model-label")
+    def model_label():
+        """De korte naam onder de kop van het chatpaneel, bv. "Haiku 5.5"."""
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(model_by_id(sunny.settings.settings().model).short)
 
     @router.post("/reset")
     def reset(request: Request):

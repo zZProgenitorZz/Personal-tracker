@@ -71,6 +71,8 @@
     <div>
       <p class="eyebrow">From the shadows</p>
       <h2>Sunny</h2>
+      <span id="sunny-model" class="sunny-model" hx-get="/ui/assistant/model-label"
+            hx-trigger="load, assistant-changed from:body" hx-swap="innerHTML"></span>
     </div>
     <button class="btn btn-ghost btn-sm" type="button" hx-post="/ui/assistant/reset" hx-target="#sunny-body"
             hx-swap="innerHTML">New chat</button>

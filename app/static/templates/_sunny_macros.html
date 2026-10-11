@@ -11,6 +11,26 @@
 {% endif %}
 {%- endmacro %}
 
+{# Een probleem met de API van Anthropic: rustige waarschuwing, eventueel "Open console" en "Try again". #}
+{% macro problem(p, retry_text=none, banner=false) -%}
+<div class="sunny-msg from-sunny sunny-problem{% if banner %} sunny-banner{% endif %}" role="alert">
+  <span class="sunny-problem-icon" aria-hidden="true">{{ ui.icon('alert', 15) }}</span>
+  <div class="sunny-problem-body">
+    <p>{{ p.text }}</p>
+    {% if p.console or retry_text %}
+    <div class="sunny-problem-actions">
+      {% if p.console %}<a class="btn btn-ghost btn-sm" href="https://console.anthropic.com" target="_blank" rel="noopener">{{ ui.icon('arrow-right', 14) }}Open console</a>{% endif %}
+      {% if retry_text %}
+      <button class="btn btn-ghost btn-sm" type="button" hx-post="/ui/assistant/message"
+              hx-vals='{{ {"message": retry_text, "retry": "1"}|tojson }}' hx-target="#sunny-log" hx-swap="beforeend"
+              hx-indicator="#sunny-typing" hx-disabled-elt="this">{{ ui.icon('refresh', 14) }}Try again</button>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{%- endmacro %}
+
 {% macro card(proposal) -%}
 {% set names = proposal.delete_names %}
 <div class="sunny-card is-{{ proposal.state }}" id="sunny-card-{{ proposal.id }}">
@@ -35,5 +55,7 @@
 {%- endmacro %}
 
 {% macro entry(item) -%}
-{% if item.kind == "card" %}{{ card(item.proposal) }}{% else %}{{ bubble(item) }}{% endif %}
+{% if item.kind == "card" %}{{ card(item.proposal) }}
+{% elif item.kind == "problem" %}{{ problem(item.problem, item.retry_text) }}
+{% else %}{{ bubble(item) }}{% endif %}
 {%- endmacro %}

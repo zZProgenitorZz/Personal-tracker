@@ -140,7 +140,7 @@ def test_a_read_tool_round_then_the_answer(data):
     reply = Agent(client, data).ask("Where am I in Solo Leveling?", [])
     assert reply.text.startswith("Solo Leveling, chapter 119") and reply.actions == []
     first, second = client.calls
-    assert first["model"] == agent_module.MODEL == "claude-haiku-5-5"
+    assert first["model"] == "claude-haiku-5-5"  # zonder instelling: het standaardmodel
     assert first["output_config"] == {"effort": agent_module.EFFORT} and agent_module.EFFORT == "low"
     assert first["max_tokens"] == 1024 and first["tools"] == TOOL_DEFINITIONS
     assert first["system"][0]["cache_control"] == {"type": "ephemeral"}

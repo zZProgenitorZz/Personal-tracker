@@ -1024,6 +1024,14 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
 .sunny-msg.from-user { align-self: flex-end; border-bottom-right-radius: 6px; background: rgba(139, 92, 246, .22); }
 .sunny-msg.from-sunny { align-self: flex-start; border-bottom-left-radius: 6px; background: rgba(255, 255, 255, .05); color: var(--text); }
 .sunny-msg.is-error { color: var(--rose); }
+/* Problemen met de API: dezelfde rustige waarschuwing als een fout-toast */
+.sunny-problem { display: flex; gap: 10px; max-width: 92%; background: rgba(251, 113, 133, .07); box-shadow: inset 0 0 0 1px rgba(251, 113, 133, .22); white-space: normal; }
+.sunny-problem-icon { display: grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 50%; background: rgba(251, 113, 133, .15); color: var(--rose); }
+.sunny-problem-body { display: grid; gap: 10px; min-width: 0; }
+.sunny-problem-body p { margin: 2px 0 0; }
+.sunny-problem-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.sunny-problem-actions .btn { padding: 8px 12px; font-size: 13px; }
+.sunny-banner { max-width: none; align-self: stretch; }
 .sunny-unavailable { display: flex; align-items: center; gap: 10px; margin: 0; color: var(--muted); font-size: 14px; }
 .sunny-unavailable .icon { flex: none; color: var(--purple-hi); }
 .sunny-card {
@@ -1049,6 +1057,33 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
 .sunny-form { display: flex; gap: 8px; padding: 14px 18px 20px; border-top: 1px solid var(--border); }
 .sunny-form .input { padding: 11px 14px; font-size: 14px; }
 .sunny-send { flex: none; width: 44px; padding: 0; }
+.sunny-model { display: block; margin-top: 3px; color: var(--faint); font-size: 12px; font-weight: 500; }
+/* Settings › Sunny: de modelkeuze */
+.model-choice { display: grid; gap: 8px; }
+.model-option {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, .025);
+  box-shadow: inset 0 0 0 1px var(--border);
+  cursor: pointer;
+  transition: background .2s, box-shadow .2s;
+}
+.model-option:hover { background: rgba(255, 255, 255, .045); }
+.model-option:has(input:checked) { background: rgba(139, 92, 246, .12); box-shadow: inset 0 0 0 1px rgba(167, 139, 250, .4); }
+.model-option input { width: 16px; height: 16px; margin: 0; accent-color: var(--purple-hi); }
+.model-text { display: grid; gap: 3px; min-width: 0; }
+.model-text b { font-size: 14.5px; font-weight: 600; }
+.model-price { color: var(--muted); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sunny-key { display: flex; align-items: center; gap: 6px; margin: 14px 0 0; }
+@media (max-width: 760px) {
+  .model-option { grid-template-columns: 18px minmax(0, 1fr); }
+  .model-price { grid-column: 2; }
+}
 /* Toasts niet achter het paneel */
 body:has(.sunny-panel.is-open) .toasts { right: calc(min(400px, 100vw) + 24px); }
 @media (max-width: 760px) {
