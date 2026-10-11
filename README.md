@@ -1,514 +1,518 @@
 # Personal-tracker
 
-Een persoonlijke API die gegevens over mijn eigen leven op één plek verzamelt, in eigen beheer. Het begon met het bijhouden van wat ik lees (**Reading**: novels en manhwa); daarna kwamen **Watching** (films, series en anime) en **Listening** (wat ik op Spotify luister). Slaap, fitness en andere trackers kunnen volgen.
+A personal API that collects data about my own life in one place, under my own control. It started with tracking what I read (**Reading**: novels and manhwa); then came **Watching** (films, series and anime) and **Listening** (what I listen to on Spotify). Sleep, fitness and other trackers may follow.
 
-Het startscherm (`#home`) toont een kaart per tracker. Een klik brengt je naar de eigen omgeving van die tracker, met de tabbladen Dashboard, Library en Progress (`#reading`, `#watching/library`, ...).
+The home screen (`#home`) shows a card per tracker. A click takes you to that tracker's own space, with the tabs Dashboard, Library and Progress (`#reading`, `#watching/library`, ...).
 
-De applicatie is opgezet met **event modeling** en **event sourcing**: alles wat er gebeurt wordt opgeslagen als onveranderlijke events, en alle overzichten (read models) worden daaruit opgebouwd. Daardoor gaat er nooit geschiedenis verloren en kan ik later nieuwe overzichten maken over oude data.
+The application is built with **event modeling** and **event sourcing**: everything that happens is stored as immutable events, and all overviews (read models) are built from them. That way no history is ever lost, and I can create new overviews over old data later.
 
 ---
 
-## Snel starten
+## Quick start
 
 ```bash
 python -m venv .venv
 .venv\Scripts\activate            # Windows
 # source .venv/bin/activate       # Mac/Linux
-pip install -r requirements-dev.txt   # de app plus pytest; alleen de app: requirements.txt
+pip install -r requirements-dev.txt   # the app plus pytest; only the app: requirements.txt
 
 uvicorn app.main:create_app --factory --reload
 ```
 
-### Starten met een icoon (Windows)
+### Starting with an icon (Windows)
 
-Eén keer de snelkoppeling installeren (vanuit de projectmap, nadat de venv bestaat):
+Install the shortcut once (from the project folder, after the venv exists):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install_shortcut.ps1 -StartMenu
 ```
 
-Daarna staat **Progen** op je bureaublad (met `-StartMenu` ook in het Startmenu, samen met **Stop Progen**; met `-StopOnDesktop` staat Stop Progen ook op het bureaublad).
+After that, **Progen** is on your desktop (with `-StartMenu` also in the Start menu, together with **Stop Progen**; with `-StopOnDesktop` Stop Progen is on the desktop too).
 
-- **Progen** start `launch.pyw` met `pythonw.exe` uit `.venv`, dus zonder consolevenster. Draait de server nog niet, dan start hij op de achtergrond (alleen op `127.0.0.1:8000`, zonder `--reload`) met de uitvoer in `data/launcher.log`. Zodra hij antwoordt, opent Progen als eigen venster in Edge (`msedge --app=...`), of in je standaardbrowser als Edge er niet is. Start hij niet binnen 15 seconden, dan zegt een melding waar het log staat.
-- **Icoon bij de klok:** zolang Progen draait, staat er een Progen-icoon in het systeemvak (onder "verborgen pictogrammen", net als WhatsApp of Spotify). Dubbelklik opent Progen; rechtsklik geeft **Open Progen**, **Sync Spotify now** en **Stop Progen**. Er is altijd maar één zo'n icoon: nog eens op de snelkoppeling klikken opent alleen een nieuw venster. Draait de server niet, dan start de snelkoppeling hem altijd, ook als er (nog) een ander icoon is.
-- **Het venster sluiten stopt de server niet**; hij blijft op de achtergrond draaien, zodat de Spotify-sync doorgaat.
-- **Automatisch starten bij aanmelden:** zet in Settings > App de schakelaar **Start with Windows** aan. Progen zet dan een waarde `Progen` in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (alleen voor jouw gebruiker, geen beheerdersrechten nodig) die `launch.pyw --background` start: server en icoon, zonder venster. Uitzetten haalt die waarde weer weg. Verplaats je de projectmap, zet de schakelaar dan opnieuw aan.
-- **Stop Progen** (in het menu van het icoon, of `stop.pyw`) vraagt de server netjes te stoppen via `POST /admin/shutdown`: lopende verzoeken worden afgerond en de database wordt gesloten; daarna verdwijnt het icoon. Uvicorn krijgt daar hooguit 5 seconden voor (`--timeout-graceful-shutdown`); leeft het proces na 20 seconden nog, dan stopt het zichzelf hard (`app/shutdown.py`). Het icoon toont nooit een popup maar een ballonmelding, want een popup zou het icoon blokkeren. Draaide Progen al niet meer, dan verdwijnt het icoon gewoon. Die route werkt alleen vanaf deze computer (127.0.0.1) en met de header `X-Progen-Shutdown`, zodat een website in je browser hem niet kan aanroepen.
-- Het icoon (`app/static/icon.ico`, 16 t/m 256 px, en de PNG's in `app/static/icons/` voor het favicon en `manifest.json`) is gemaakt uit `icon.svg` met `scripts/make_icon.py`: Edge of Chrome rendert het SVG headless als transparante PNG, Pillow maakt er de rest van. Het icoon bij de klok laadt het .ico op precies de maat die Windows wil (20 px bij 125%), en de launcher is DPI-bewust; zo blijven icoon en menu scherp. Het Progen-venster kiest voor de taakbalk een van de favicon-PNG's (32-96 px); die komen uit `icon-small.svg`, een vereenvoudigde versie (dikke ring, groot boek), omdat de details van `icon.svg` op taakbalkformaat samenvallen. Opnieuw uitvoeren als het icoon verandert, en daarna `install_shortcut.ps1` opnieuw.
-- Wil je tijdens het programmeren automatisch herladen, stop dan eerst Progen (Stop Progen) en start zoals hierboven met `uvicorn ... --reload`; ze gebruiken dezelfde poort.
+- **Progen** starts `launch.pyw` with `pythonw.exe` from `.venv`, so without a console window. If the server isn't running yet, it starts in the background (only on `127.0.0.1:8000`, without `--reload`) with its output in `data/launcher.log`. As soon as it answers, Progen opens as its own window in Edge (`msedge --app=...`), or in your default browser if Edge isn't there. If it doesn't start within 15 seconds, a message says where the log is.
+- **Icon by the clock:** while Progen is running, there is a Progen icon in the system tray (under "hidden icons", just like WhatsApp or Spotify). Double-click opens Progen; right-click gives **Open Progen**, **Sync Spotify now** and **Stop Progen**. There is only ever one such icon: clicking the shortcut again only opens a new window. If the server isn't running, the shortcut always starts it, even if another icon is (still) there.
+- **Closing the window doesn't stop the server**; it keeps running in the background, so the Spotify sync carries on.
+- **Starting automatically when signing in:** turn on the **Start with Windows** switch in Settings > App. Progen then puts a value `Progen` in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (only for your user, no admin rights needed) that starts `launch.pyw --background`: server and icon, without a window. Turning it off removes that value again. If you move the project folder, turn the switch on again.
+- **Stop Progen** (in the icon's menu, or `stop.pyw`) asks the server to stop cleanly through `POST /admin/shutdown`: running requests are finished and the database is closed; then the icon disappears. Uvicorn gets at most 5 seconds for that (`--timeout-graceful-shutdown`); if the process is still alive after 20 seconds, it stops itself hard (`app/shutdown.py`). The icon never shows a popup but a balloon notification, because a popup would block the icon. If Progen wasn't running anymore, the icon simply disappears. That route only works from this computer (127.0.0.1) and with the header `X-Progen-Shutdown`, so a website in your browser can't call it.
+- The icon (`app/static/icon.ico`, 16 to 256 px, and the PNGs in `app/static/icons/` for the favicon and `manifest.json`) is made from `icon.svg` with `scripts/make_icon.py`: Edge or Chrome renders the SVG headless as a transparent PNG, and Pillow makes the rest from that. The tray icon loads the .ico at exactly the size Windows wants (20 px at 125%), and the launcher is DPI-aware; that way the icon and menu stay sharp. For the taskbar, the Progen window picks one of the favicon PNGs (32-96 px); those come from `icon-small.svg`, a simplified version (thick ring, big book), because the details of `icon.svg` merge together at taskbar size. Run it again when the icon changes, and then `install_shortcut.ps1` again.
+- If you want automatic reloading while programming, stop Progen first (Stop Progen) and start as above with `uvicorn ... --reload`; they use the same port.
 
-Instellingen staan in `.env` in de projectmap (niet in git). Begin met een kopie van `.env.example`: `copy .env.example .env`. Alle instellingen zijn optioneel:
+Settings live in `.env` in the project folder (not in git). Start with a copy of `.env.example`: `copy .env.example .env`. All settings are optional:
 
 ```
-GOOGLE_BOOKS_API_KEY=...          # betere covers uit Google Books (zonder sleutel valt Google vaak af)
-TMDB_API_KEY=...                  # covers en genres van films en series (Watching)
-SPOTIFY_CLIENT_ID=...             # Listening: koppeling met Spotify (zie Listening)
+GOOGLE_BOOKS_API_KEY=...          # better covers from Google Books (without a key Google often drops out)
+TMDB_API_KEY=...                  # covers and genres of films and series (Watching)
+SPOTIFY_CLIENT_ID=...             # Listening: connection with Spotify (see Listening)
 SPOTIFY_CLIENT_SECRET=...
-SYNC_INTERVAL_MINUTES=30          # hoe vaak Progen automatisch met Spotify synct
-PROGEN_BACKUP_DIR=D:\Backups\Progen  # andere back-upmap dan OneDrive\Progen-backups
+SYNC_INTERVAL_MINUTES=30          # how often Progen syncs with Spotify automatically
+PROGEN_BACKUP_DIR=D:\Backups\Progen  # another backup folder than OneDrive\Progen-backups
 ```
 
-Paden zonder aanhalingstekens schrijven. Een waarde die al in de omgeving staat, gaat voor op `.env`.
+Write paths without quotes. A value that is already in the environment wins over `.env`.
 
-- Webpagina: http://127.0.0.1:8000
-- API-documentatie (Swagger): http://127.0.0.1:8000/docs
-- Tests draaien: `python -m pytest` (na `pip install -r requirements-dev.txt`)
+- Web page: http://127.0.0.1:8000
+- API documentation (Swagger): http://127.0.0.1:8000/docs
+- Running the tests: `python -m pytest` (after `pip install -r requirements-dev.txt`)
 
-Data van **alle trackers** staat in één bestand, `data/tracker.db`. **Dit bestand is de enige bron van waarheid**: alle read models worden er bij het opstarten uit opgebouwd. Covers staan ernaast in `data/covers/`. Geen van beide staat in git; maak dus back-ups (zie hieronder).
+The data of **all trackers** lives in one file, `data/tracker.db`. **This file is the only source of truth**: all read models are built from it at startup. Covers sit next to it in `data/covers/`. Neither is in git, so make backups (see below).
 
-### Back-ups
+### Backups
 
-- **Maken:** Settings > *Back up now*, of `python -m app.backup` (werkt ook als de app niet draait; `--list` toont de back-ups).
-- **Waar:** standaard `OneDrive\Progen-backups\`, zodat er ook een kopie in de cloud staat. Een andere map kies je met `PROGEN_BACKUP_DIR` in `.env`.
-- **Wat:** één back-up bevat alle trackers tegelijk, zodat ze altijd bij elkaar passen. Per back-up een map met datum en tijd als naam (`2026-10-06_21-05-33`) met `tracker.db`, `covers/` en `info.json`. De kopie wordt gemaakt met de back-up-API van SQLite (veilig terwijl de server draait) en daarna gecontroleerd; een mislukte back-up laat niets achter.
-- **Hoeveel:** de 10 nieuwste blijven (`KEEP_BACKUPS` in `app/backup.py`); oudere worden verwijderd.
-- **Terugzetten:** Settings > *Restore* bij de gewenste back-up. Progen maakt eerst automatisch een back-up van de huidige stand ("saved automatically before a restore"), zodat ook terugzetten terug te draaien is. Daarna worden de events vervangen, ontbrekende covers teruggezet en de read models opnieuw opgebouwd.
-- **Niet in een back-up:** `data/spotify_token.json` (je Spotify-toegang), `data/spotify_sync.json` (wanneer de laatste sync was) en `data/spotify_profile.json` + `spotify_avatar.webp` (je Spotify-naam en -foto). Na het terugzetten op een andere computer koppel je Spotify gewoon opnieuw.
-- **Met de hand terugzetten** (als de app niet start): stop de server, kopieer `tracker.db` en `covers/` uit de back-upmap naar `data/` en start de server opnieuw.
+- **Making one:** Settings > *Back up now*, or `python -m app.backup` (also works when the app isn't running; `--list` shows the backups).
+- **Where:** `OneDrive\Progen-backups\` by default, so there is a copy in the cloud too. Pick another folder with `PROGEN_BACKUP_DIR` in `.env`.
+- **What:** one backup holds all trackers at once, so they always fit together. Each backup is a folder named after the date and time (`2026-10-06_21-05-33`) with `tracker.db`, `covers/` and `info.json`. The copy is made with SQLite's backup API (safe while the server runs) and checked afterwards; a failed backup leaves nothing behind.
+- **How many:** the 10 newest are kept (`KEEP_BACKUPS` in `app/backup.py`); older ones are removed.
+- **Restoring:** Settings > *Restore* next to the backup you want. Progen first makes a backup of the current state automatically ("saved automatically before a restore"), so a restore can be undone too. Then the events are replaced, missing covers are put back and the read models are rebuilt.
+- **Not in a backup:** `data/spotify_token.json` (your Spotify access), `data/spotify_sync.json` (when the last sync was) and `data/spotify_profile.json` + `spotify_avatar.webp` (your Spotify name and photo). After restoring on another computer, simply connect Spotify again.
+- **Restoring by hand** (if the app doesn't start): stop the server, copy `tracker.db` and `covers/` from the backup folder to `data/` and start the server again.
 
 ---
 
-## Architectuur
+## Architecture
 
 ```
-Trigger (webpagina / importer)
+Trigger (web page / importer)
    ↓
-Command            verzoek, kan geweigerd worden        (StartSeries, LogProgress, ...)
+Command            request, can be refused              (StartSeries, LogProgress, ...)
    ↓
-Command handler    laden → aggregate laten beslissen → opslaan
+Command handler    load → let the aggregate decide → save
    ↓
-Event store        append-only SQLite-tabel             (SeriesStarted, ProgressLogged, ...)
+Event store        append-only SQLite table             (SeriesStarted, ProgressLogged, ...)
    ↓
-Projecties         read models in het geheugen          (Library, ReadingActivity)
+Projections        read models in memory                (Library, ReadingActivity)
    ↓
-API (GET)          leest alleen uit read models
+API (GET)          only reads from read models
 ```
 
-Principes:
+Principles:
 
-- **Events zijn feiten.** Ze zijn `frozen` dataclasses, in de verleden tijd, en worden nooit aangepast of verwijderd.
-- **Commands zijn verzoeken.** Gebiedende wijs, en ze kunnen geweigerd worden met een `DomainError`.
-- **De aggregate beslist**, slaat zelf niets op, en is daardoor puur te testen.
-- **CQRS:** `POST`-endpoints sturen commands, `GET`-endpoints lezen alleen uit read models.
-- **Projecties zijn weggooibaar.** Ze worden bij elke start opnieuw opgebouwd uit de event store en synchroon bijgewerkt via `store.subscribe`.
-- **Vertical slices:** elk domein heeft een eigen map met alles erin. Een nieuw domein is een nieuwe map.
+- **Events are facts.** They are `frozen` dataclasses, in the past tense, and are never changed or removed.
+- **Commands are requests.** Imperative mood, and they can be refused with a `DomainError`.
+- **The aggregate decides**, saves nothing itself, and can therefore be tested purely.
+- **CQRS:** `POST` endpoints send commands, `GET` endpoints only read from read models.
+- **Projections are disposable.** They are rebuilt from the event store at every start and updated synchronously through `store.subscribe`.
+- **Vertical slices:** each domain has its own folder with everything in it. A new domain is a new folder.
 
-### Projectstructuur
+### Project structure
 
 ```
 app/
-  main.py              koppelt alles: event store, projecties, handlers, routers
+  main.py              wires everything together: event store, projections, handlers, routers
+  event_types.py       ALL_EVENT_TYPES: every domain's EVENT_TYPES in one list (main, backup, import)
   eventstore.py        SQLite event store (append, transaction, load_stream, load_type, load_all, subscribe)
-  security.py          bescherming tegen andere websites (CSRF) en DNS rebinding
-  shutdown.py          POST /admin/shutdown: netjes stoppen, alleen vanaf deze computer (voor stop.pyw)
-  desktop.py           de server aanspreken vanaf het bureaublad (launcher, icoon, stop.pyw)
-  autostart.py         Start with Windows (Run-sleutel in het register), aan/uit in Settings
-  backup.py            back-ups maken, bewaren (10 nieuwste) en terugzetten; ook los te draaien
-  domain.py            DomainError (gedeeld door alle trackers)
-  covers.py            covers downloaden, controleren en als 300×450 WebP bewaren (gedeeld)
-  cover_search.py      covers en genres zoeken bij meerdere bronnen tegelijk, fuzzy matching, cache (gedeeld)
-  genres.py            GenreSet: een vaste genrelijst en genres uit bronnen daarnaar vertalen (gedeeld)
-  web.py               gedeeld voor de webpagina: templates, toasts, Tracker, startscherm, Settings
+  clock.py             the one clock: utc_now, local_now and today (tests patch app.clock)
+  security.py          protection against other websites (CSRF) and DNS rebinding
+  shutdown.py          POST /admin/shutdown: stopping cleanly, only from this computer (for stop.pyw)
+  desktop.py           talking to the server from the desktop (launcher, icon, stop.pyw)
+  autostart.py         Start with Windows (Run key in the registry), on/off in Settings
+  backup.py            making, keeping (10 newest) and restoring backups; also runs on its own
+  domain.py            DomainError (shared by all trackers)
+  covers.py            downloading, checking and storing covers as 300×450 WebP (shared)
+  cover_search.py      searching several sources at once for covers and genres, fuzzy matching, cache (shared)
+  genres.py            GenreSet: a fixed genre list and mapping genres from sources onto it (shared)
+  charts.py            data for the bar charts: last days/weeks, heights, percentages, genre bars (shared)
+  web.py               shared for the web page: templates, filters, icons, toasts, Backlog, covers, Tracker, home screen
+  settings_web.py      Settings: where the data lives, backups and restore, Start with Windows
   static/
-    trackly.css/.js    stijl, navigatie, dialogen, coverkiezer, genre-suggesties
-    templates/         index.html (de schil) en de HTML-fragmenten voor htmx
+    trackly.css/.js    style, navigation, dialogs, cover picker, genre suggestions
+    templates/         index.html (the shell) and the HTML fragments for htmx
   reading/
-    events.py          SeriesStarted, ProgressLogged, StatusChanged, SeriesRemoved
+    events.py          SeriesStarted, ProgressLogged, StatusChanged, GenresChanged, SeriesRemoved (+ EVENT_TYPES)
     aggregate.py       ReadingSeries
     commands.py        StartSeries, LogProgress, ChangeStatus, SetGenres, RemoveSeries + ReadingCommandHandler
     projections.py     LibraryProjection, ReadingActivityProjection
-    cover_sources.py   bronnen: AniList (manga), MangaUpdates, Open Library, Google Books
-    genres.py          de genrelijst van Reading
+    cover_sources.py   sources: AniList (manga), MangaUpdates, MyAnimeList, Open Library, Google Books
+    genres.py          Reading's genre list
     api.py             /reading endpoints (JSON)
-    web.py             /ui/reading endpoints (HTML-fragmenten voor htmx)
+    web.py             /ui/reading endpoints (HTML fragments for htmx)
   listening/
-    events.py          TrackPlayed
-    aggregate.py       Play (één moment = één play)
+    events.py          TrackPlayed (+ EVENT_TYPES)
+    aggregate.py       Play (one moment = one play)
     commands.py        RecordPlay + ListeningCommandHandler, stream_id()
     projections.py     RecentlyPlayed, ListeningActivity, TopArtists, TopTracks
-    spotify.py         de Spotify-koppeling: inloggen, tokens, sync (automation-slice)
-    export_import.py   je hele geschiedenis importeren uit de Extended streaming history (automation-slice)
-    import_web.py      Settings > Import streaming history: voorbeeld en import in de achtergrond
+    spotify.py         the Spotify connection: signing in, tokens, sync (automation slice)
+    export_import.py   importing your whole history from the Extended streaming history (automation slice)
+    import_web.py      Settings > Import streaming history: preview and import in the background
     api.py             /listening endpoints (JSON)
-    web.py             /ui/listening endpoints, en connect/callback/sync voor Spotify
+    web.py             /ui/listening endpoints, and connect/callback/sync for Spotify
   watching/
-    events.py          ShowAdded, ShowStatusChanged, ShowGenresChanged, ShowRemoved
+    events.py          ShowAdded, ShowStatusChanged, ShowGenresChanged, ShowRemoved (+ EVENT_TYPES)
     aggregate.py       WatchItem
     commands.py        AddShow, ChangeShowStatus, SetShowGenres, RemoveShow + WatchingCommandHandler
     projections.py     WatchlistProjection, WatchActivityProjection
-    cover_sources.py   bronnen: AniList (anime), TVmaze (series), TMDB (films en series, met sleutel)
-    genres.py          de genrelijst van Watching
+    cover_sources.py   sources: AniList (anime), TVmaze (series), TMDB (films and series, with a key)
+    genres.py          Watching's genre list
     api.py             /watching endpoints (JSON)
-    web.py             /ui/watching endpoints (HTML-fragmenten voor htmx)
+    web.py             /ui/watching endpoints (HTML fragments for htmx)
   planner/
     events.py          PlanAdded, PlanRescheduled, PlanEdited, PlanDone, PlanReopened, PlanSkipped, PlanRemoved, ReminderSettingsChanged
     aggregate.py       Plan, ReminderSettings
     commands.py        AddPlan, ReschedulePlan, EditPlan, MarkPlanDone, ReopenPlan, SkipPlan, RemovePlan, ChangeReminderSettings + handler
-    schedule.py        wanneer een plan valt (herhalingen uitrekenen), en de lokale klok
-    projections.py     AgendaProjection (dag, week, Someday, herinneringen), PlannerActivityProjection
-    parse.py           snel invoeren in gewone taal (NL en EN)
-    ics.py             een plan als .ics voor je iPhone (RFC 5545)
-    api.py             /planner endpoints (JSON), waaronder /planner/due voor de meldingen
-    web.py             /ui/planner endpoints (HTML-fragmenten voor htmx)
+    schedule.py        when a plan falls (working out repeats)
+    projections.py     AgendaProjection (day, week, Someday, reminders), PlannerActivityProjection
+    parse.py           quick entry in plain words (Dutch and English)
+    ics.py             a plan as .ics for your iPhone (RFC 5545)
+    api.py             /planner endpoints (JSON), including /planner/due for the notifications
+    web.py             /ui/planner endpoints (HTML fragments for htmx)
   assistant/
-    identity/          het ontwerp van Sunny: IDENTITY, SOUL, USER (de systeemprompt), TOOLS en OUTCOME
-    prompt.py          de systeemprompt (cachebaar vast deel + de datum van vandaag)
-    tools.py           Sunny's tools: lezen uit de projecties, schrijven alleen als voorstel (PendingAction)
-    agent.py           de loop met Claude (het model komt uit de instelling; effort als constante bovenaan)
-    models.py          de modellen om uit te kiezen (de enige plek met model-ID's)
+    identity/          Sunny's design: IDENTITY, SOUL, USER (the system prompt), TOOLS and OUTCOME
+    prompt.py          the system prompt (cacheable fixed part + today's date)
+    tools.py           Sunny's tools: reading from the projections, writing only as a proposal (PendingAction)
+    agent.py           the loop with Claude (the model comes from the setting; effort as a constant at the top)
+    models.py          the models to choose from (the only place with model IDs)
     events.py, aggregate.py, commands.py   AssistantSettingsChanged, AssistantSettings, ChangeAssistantModel
-    session.py         het gesprek: berichten, voorstellen, Confirm/Cancel (in het geheugen, niet in de event store)
-    web.py             /ui/assistant: dunne routes voor het chatpaneel, Confirm/Cancel en Settings › Sunny
+    session.py         the conversation: messages, proposals, Confirm/Cancel (in memory, not in the event store)
+    web.py             /ui/assistant: thin routes for the chat panel, Confirm/Cancel and Settings › Sunny
   wrapped/
-    projections.py     WrappedProjection: het jaaroverzicht uit de events van alle trackers (alleen lezen)
-    web.py             /ui/wrapped (#wrapped) en de Wrapped-kaart op het startscherm
-launch.pyw, stop.pyw   Progen starten (venster + icoon bij de klok) en stoppen; voor de snelkoppeling
+    projections.py     WrappedProjection: the year in review from the events of all trackers (read only)
+    web.py             /ui/wrapped (#wrapped) and the Wrapped card on the home screen
+launch.pyw, stop.pyw   starting Progen (window + icon by the clock) and stopping it; for the shortcut
 scripts/
-  install_shortcut.ps1 snelkoppelingen op het bureaublad / in het Startmenu
-  make_icon.py         app/static/icon.ico maken uit icon.svg
+  install_shortcut.ps1 shortcuts on the desktop / in the Start menu
+  make_icon.py         makes app/static/icon.ico from icon.svg
 tests/
   test_eventstore.py, test_api.py, test_web.py
   test_covers.py, test_cover_flow.py
-  reading/, watching/, listening/, planner/, wrapped/, assistant/  given/when/then-tests per regel
-data/                  tracker.db, covers/ en de spotify_*-bestanden (niet in git)
+  reading/, watching/, listening/, planner/, wrapped/, assistant/  given/when/then tests per rule
+data/                  tracker.db, covers/ and the spotify_* files (not in git)
 ```
 
 ---
 
-## Huidige status: leesdomein (klaar)
+## Current status: the reading domain (done)
 
-| Onderdeel   | Inhoud                                                          |
+| Part        | Contents                                                        |
 | ----------- | --------------------------------------------------------------- |
-| Statussen   | Reading, On-Hold, Completed, Dropped, Plan to Read              |
-| Events      | `SeriesStarted` (optioneel `cover`), `ProgressLogged`, `StatusChanged`, `GenresChanged`, `SeriesRemoved` |
+| Statuses    | Reading, On-Hold, Completed, Dropped, Plan to Read              |
+| Events      | `SeriesStarted` (optional `cover`), `ProgressLogged`, `StatusChanged`, `GenresChanged`, `SeriesRemoved` |
 | Commands    | `StartSeries`, `LogProgress`, `ChangeStatus`, `SetGenres`, `RemoveSeries` |
-| Read models | CurrentlyReading, Library, ReadingActivity (per dag / per week) |
+| Read models | CurrentlyReading, Library, ReadingActivity (per day / per week) |
 
-Regels:
+Rules:
 
-1. Een titel mag maar één keer in de bibliotheek staan (hoofdletters en spaties worden genegeerd). Herlezen = status terug naar Reading.
-2. Voortgang loggen bij On-Hold, Completed of Dropped zet de serie automatisch terug op Reading.
-3. Een lager hoofdstuk loggen mag (correctie of herlezen), maar telt niet mee in ReadingActivity.
-4. Een negatief hoofdstuk wordt geweigerd.
-5. Een status wijzigen naar dezelfde status wordt geweigerd.
-6. Een verwijderde serie krijgt geen voortgang of status meer. Haar titel is daarna weer vrij: opnieuw toevoegen maakt een nieuwe serie (nieuwe `series_id`) die opnieuw begint. Gelezen hoofdstukken van de oude serie blijven meetellen in de statistieken.
-7. Bij het toevoegen kies je de status (standaard Reading). Een andere beginstatus wordt opgeslagen als `SeriesStarted` gevolgd door `StatusChanged`; het beginhoofdstuk telt niet mee als gelezen, zodat een afgeronde serie toevoegen je statistieken niet opblaast. Daarna kan elke status naar elke andere.
-8. Genres komen uit een vaste lijst (`GENRES` in `app/reading/genres.py`). `GenresChanged` bevat steeds de volledige nieuwe lijst; dezelfde genres opnieuw opslaan levert geen event op. Bij het toevoegen gaan genres mee als `GenresChanged` na `SeriesStarted`.
-9. Een cover is optioneel. Een cover die niet lukt (geen afbeelding, te groot, netwerkfout) blokkeert het opslaan van de serie nooit.
-10. **Plan to Read** is de backlog: series die je nog wilt beginnen. Toevoegen als Plan to Read volgt regel 7 (`SeriesStarted` + `StatusChanged(READING → PLAN_TO_READ)`). Voortgang loggen zet hem via regel 2 op Reading. Plan to Read telt nergens mee als "reading" (Currently reading, startscherm).
+1. A title may only be in the library once (case and spaces are ignored). Rereading = status back to Reading.
+2. Logging progress on On-Hold, Completed or Dropped puts the series back on Reading automatically.
+3. Logging a lower chapter is allowed (a correction or rereading), but doesn't count in ReadingActivity.
+4. A negative chapter is refused.
+5. Changing a status to the same status is refused.
+6. A removed series gets no more progress or status changes. Its title is free again afterwards: adding it again makes a new series (new `series_id`) that starts over. Chapters read in the old series keep counting in the statistics.
+7. When adding, you choose the status (Reading by default). Another starting status is stored as `SeriesStarted` followed by `StatusChanged`; the starting chapter doesn't count as read, so adding a finished series doesn't inflate your statistics. After that, any status can go to any other.
+8. Genres come from a fixed list (`GENRES` in `app/reading/genres.py`). `GenresChanged` always holds the complete new list; saving the same genres again produces no event. When adding, the genres go along as `GenresChanged` after `SeriesStarted`.
+9. A cover is optional. A cover that fails (not an image, too large, network error) never blocks saving the series.
+10. **Plan to Read** is the backlog: series you still want to start. Adding as Plan to Read follows rule 7 (`SeriesStarted` + `StatusChanged(READING → PLAN_TO_READ)`). Logging progress puts it on Reading through rule 2. Plan to Read never counts as "reading" (Currently reading, home screen).
 
-Hoofdstukken zijn `float`, zodat hoofdstukken als 45.5 mogelijk zijn.
+Chapters are `float`, so chapters like 45.5 are possible.
 
-**Gathering dust** (paneel op het Dashboard): series op Reading zonder voortgang of statuswijziging in meer dan `STALE_READING_DAYS` = 21 dagen (bovenaan `app/reading/web.py`), langst stil eerst (`LibraryProjection.stale(now, days)`). Plan to Read, On hold, Completed en Dropped zijn nooit stoffig. Per serie: +1 hoofdstuk, On hold of Drop (met bevestiging), via de gewone endpoints; **Not now** verbergt hem alleen tot je de pagina herlaadt (geen event). Het startscherm toont "N gathering dust".
+**Gathering dust** (a panel on the Dashboard): series on Reading without progress or a status change in more than `STALE_READING_DAYS` = 21 days (at the top of `app/reading/web.py`), quiet the longest first (`LibraryProjection.stale(now, days)`). Plan to Read, On hold, Completed and Dropped never gather dust. Per series: +1 chapter, On hold or Drop (with confirmation), through the ordinary endpoints; **Not now** only hides it until you reload the page (no event). The home screen shows "N gathering dust".
 
-## Watching (klaar)
+## Watching (done)
 
-| Onderdeel   | Inhoud |
+| Part        | Contents |
 | ----------- | ------ |
-| Soorten     | Series, Anime, Movie |
-| Statussen   | Watching, Rewatching, Completed, On hold, Dropped, Plan to Watch (geen afleveringen, geen cijfers) |
-| Events      | `ShowAdded` (met beginstatus en optioneel `cover`), `ShowStatusChanged`, `ShowGenresChanged`, `ShowRemoved` |
+| Kinds       | Series, Anime, Movie |
+| Statuses    | Watching, Rewatching, Completed, On hold, Dropped, Plan to Watch (no episodes, no ratings) |
+| Events      | `ShowAdded` (with a starting status and optional `cover`), `ShowStatusChanged`, `ShowGenresChanged`, `ShowRemoved` |
 | Commands    | `AddShow`, `ChangeShowStatus`, `SetShowGenres`, `RemoveShow` |
-| Read models | Watchlist, WatchActivity (afgerond per dag) |
+| Read models | Watchlist, WatchActivity (finished per day) |
 
-Regels:
+Rules:
 
-1. Een titel mag één keer per soort in de lijst staan: *Dune* de film en *Dune* de serie mogen allebei.
-2. Elke status kan naar elke andere; naar dezelfde status wordt geweigerd.
-3. Afgerond telt alleen als je iets op Completed **zet**. Toevoegen als Completed is geschiedenis en telt niet mee in "Finished this month".
-4. Genres uit een eigen vaste lijst (`WATCH_GENRES` in `app/watching/genres.py`); verder zoals bij Reading.
-5. Na verwijderen is de titel weer vrij.
-6. **Plan to Watch** is de backlog: toevoegen is gewoon `ShowAdded(status=PLAN_TO_WATCH)`. Telt niet mee als "watching"; van Plan to Watch naar Completed zetten telt wél in "Finished this month" (regel 3).
-7. **Rewatching**: iets wat je al zag, nog een keer. Telt mee als "watching now" (en kan stof verzamelen); weer op Completed zetten telt als afgerond.
+1. A title may be in the list once per kind: *Dune* the film and *Dune* the series can both be there.
+2. Any status can go to any other; to the same status is refused.
+3. Finished only counts when you **set** something to Completed. Adding as Completed is history and doesn't count in "Finished this month".
+4. Genres from its own fixed list (`WATCH_GENRES` in `app/watching/genres.py`); otherwise as with Reading.
+5. After removing, the title is free again.
+6. **Plan to Watch** is the backlog: adding is simply `ShowAdded(status=PLAN_TO_WATCH)`. It doesn't count as "watching"; setting it from Plan to Watch to Completed does count in "Finished this month" (rule 3).
+7. **Rewatching**: something you have seen before, once more. Counts as "watching now" (and can gather dust); setting it to Completed again counts as finished.
 
-**Pick something** (Library van Reading en Watching, alleen met een backlog): toont een willekeurige titel uit Plan to Read/Watch, eventueel binnen één genre. *Another one* kiest een andere; *Start* stuurt de gewone statuswijziging (`ChangeStatus`/`ChangeShowStatus`). Het kiezen zelf (`GET /ui/<tracker>/pick`) is alleen lezen: geen command, geen event.
+**Pick something** (the Library of Reading and Watching, only with a backlog): shows a random title from Plan to Read/Watch, optionally within one genre. *Another one* picks a different one; *Start* sends the ordinary status change (`ChangeStatus`/`ChangeShowStatus`). The picking itself (`GET /ui/<tracker>/pick`) only reads: no command, no event.
 
-**Gathering dust**: zoals bij Reading, maar voor titels op Watching die meer dan `STALE_WATCHING_DAYS` = 30 dagen niet zijn toegevoegd of van status gewisseld (bovenaan `app/watching/web.py`; `WatchlistProjection.stale(now, days)`). Ruimer, want zonder afleveringen is "lang niets veranderd" een zwakker signaal. Genres aanpassen telt niet als activiteit.
+**Gathering dust**: as with Reading, but for titles on Watching that haven't been added or changed status in more than `STALE_WATCHING_DAYS` = 30 days (at the top of `app/watching/web.py`; `WatchlistProjection.stale(now, days)`). Looser, because without episodes "nothing changed for a long time" is a weaker signal. Changing genres doesn't count as activity.
 
-De event-klassen heten `Show...`, omdat de event store alleen de klassenaam opslaat; namen moeten uniek zijn over alle trackers heen.
+The event classes are called `Show...`, because the event store only stores the class name; names must be unique across all trackers.
 
-## Listening (klaar)
+## Listening (done)
 
-Wat ik op Spotify luister, automatisch bijgehouden. Er is geen formulier: plays komen binnen via de Spotify-sync (of `POST /listening/plays`).
+What I listen to on Spotify, tracked automatically. There is no form: plays come in through the Spotify sync (or `POST /listening/plays`).
 
-| Onderdeel   | Inhoud |
+| Part        | Contents |
 | ----------- | ------ |
 | Events      | `TrackPlayed` (played_at, track_id, track, artists, album, album_id, duration_ms, ms_played, source) |
 | Commands    | `RecordPlay` |
-| Streams     | één per moment: `play-<played_at in ISO, UTC>` |
-| Read models | RecentlyPlayed (laatste 50), ListeningActivity (minuten per dag en per week), TopArtists en TopTracks (per maand) |
-| Tabbladen   | Dashboard (minuten deze week, top 5 artiesten deze maand), History (laatste plays), Progress (minuten per dag/week, toplijsten) |
+| Streams     | one per moment: `play-<played_at in ISO, UTC>` |
+| Read models | RecentlyPlayed (last 50), ListeningActivity (minutes per day and per week), TopArtists and TopTracks (per month) |
+| Tabs        | Dashboard (minutes this week, top 5 artists this month), History (latest plays), Progress (minutes per day/week, top lists) |
 
-Regels:
+Rules:
 
-1. Een play op een moment dat al bekend is, wordt overgeslagen: geen fout, de handler geeft een lege lijst terug (de API antwoordt dan `200` met `"stored": false` in plaats van `201`). De sync haalt bewust overlappende data op.
-2. Een play zonder `track_id`, of met een negatieve `duration_ms` of `ms_played`, wordt geweigerd (`DomainError`).
-3. Plays worden nooit gewijzigd of verwijderd.
-4. Minuten: `ms_played` als die bekend is, anders `duration_ms`. De Spotify-API geeft alleen de lengte van een nummer, niet hoe lang je echt luisterde; minuten zijn dus een bovengrens.
-5. Dagen, weken en maanden volgen je eigen tijdzone; `played_at` wordt in UTC opgeslagen (een tijd zonder tijdzone geldt als UTC).
-6. Een nummer met meerdere artiesten telt in TopArtists voor elke artiest.
+1. A play at a moment that is already known is skipped: no error, the handler returns an empty list (the API then answers `200` with `"stored": false` instead of `201`). The sync fetches overlapping data on purpose.
+2. A play without a `track_id`, or with a negative `duration_ms` or `ms_played`, is refused (`DomainError`).
+3. Plays are never changed or removed.
+4. Minutes: `ms_played` when known, otherwise `duration_ms`. The Spotify API only gives a track's length, not how long you really listened; so minutes are an upper bound.
+5. Days, weeks and months follow your own time zone; `played_at` is stored in UTC (a time without a time zone counts as UTC).
+6. A track with several artists counts for each artist in TopArtists.
 
-### Spotify koppelen
+### Connecting Spotify
 
-1. Maak een app op [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard). Zet als **Redirect URI** precies `http://127.0.0.1:8000/listening/spotify/callback` (draait Progen op een andere poort: pas die aan en zet hem ook in `SPOTIFY_REDIRECT_URI`).
-2. Zet `SPOTIFY_CLIENT_ID` en `SPOTIFY_CLIENT_SECRET` in `.env` en herstart Progen.
-3. Klik in Settings op **Connect Spotify** en geef Progen toegang. Progen vraagt alleen `user-read-recently-played`; een `state`-parameter beschermt het inloggen tegen CSRF.
-4. Na het terugkomen haalt Progen je naam en profielfoto op (voor het dashboard van Listening; daarna hooguit één keer per dag opnieuw) en draait meteen een eerste sync. Daarna synct Progen elke `SYNC_INTERVAL_MINUTES` minuten (standaard 30) zolang de server draait, of direct via **Sync now**. **Disconnect** verwijdert de tokens; je plays blijven.
+1. Create an app at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard). Set the **Redirect URI** to exactly `http://127.0.0.1:8000/listening/spotify/callback` (if Progen runs on another port: change it and also put it in `SPOTIFY_REDIRECT_URI`).
+2. Put `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` in `.env` and restart Progen.
+3. Click **Connect Spotify** in Settings and give Progen access. Progen only asks for `user-read-recently-played`; a `state` parameter protects signing in against CSRF.
+4. After coming back, Progen fetches your name and profile photo (for Listening's dashboard; after that again at most once a day) and runs a first sync right away. From then on Progen syncs every `SYNC_INTERVAL_MINUTES` minutes (30 by default) while the server runs, or right away through **Sync now**. **Disconnect** removes the tokens; your plays stay.
 
-Hoe het werkt (`app/listening/spotify.py`, een automation-slice): de sync vraagt `GET /v1/me/player/recently-played?limit=50&after=<laatste played_at in ms>` en stuurt voor elk nummer hetzelfde `RecordPlay` als de API, met `source="api"`. Tokens staan in `data/spotify_token.json`, niet in de event store; de access token wordt automatisch ververst met de refresh token. Bij een 429 wacht de achtergrondtaak de `Retry-After` af. Fouten worden gelogd (logger `progen.listening`) en laten de app nooit crashen; de laatste sync en een eventuele fout staan in Settings.
+How it works (`app/listening/spotify.py`, an automation slice): the sync asks `GET /v1/me/player/recently-played?limit=50&after=<last played_at in ms>` and sends the same `RecordPlay` as the API for each track, with `source="api"`. Tokens live in `data/spotify_token.json`, not in the event store; the access token is refreshed automatically with the refresh token. On a 429 the background task waits out the `Retry-After`. Errors are logged (logger `progen.listening`) and never crash the app; the last sync and any error are shown in Settings. A lock makes sure the background sync, **Sync now** and the callback never run at the same time, so a play is never stored twice.
 
-**Beperking:** Spotify geeft per verzoek maximaal de laatste **50** nummers. Luister je tussen twee syncs meer dan 50 nummers (bij 30 minuten is dat haast onmogelijk, maar staat Progen een dag uit wel), dan zijn de oudere via de API niet meer op te halen. Gemiste nummers vul je aan met een import (hieronder).
+**Limitation:** Spotify returns at most the last **50** tracks per request. If you listen to more than 50 tracks between two syncs (with 30 minutes that is nearly impossible, but with Progen off for a day it isn't), the older ones can no longer be fetched through the API. Fill in missed tracks with an import (below).
 
-### Spotify-geschiedenis importeren
+### Importing your Spotify history
 
-De live sync krijgt van Spotify hooguit de laatste 50 nummers. Je hele geschiedenis, en wat de sync miste (de pc stond een dag uit), haal je binnen met de **Extended streaming history**:
+The live sync gets at most the last 50 tracks from Spotify. You bring in your whole history, and whatever the sync missed (the PC was off for a day), with the **Extended streaming history**:
 
-1. Vraag hem aan in Spotify: **Account › Privacy › Extended streaming history**. Het duurt een paar dagen tot weken; je krijgt een zip.
-2. Pak de zip uit. Ga in Progen naar **Settings › Spotify › Import streaming history** en kies de `Streaming_History_Audio_*.json`-bestanden (meerdere tegelijk mag).
-3. Je ziet eerst een voorbeeld, er is dan nog niets opgeslagen: hoeveel records, hoeveel nieuw, wat er overgeslagen wordt en waarom, de periode en de top 5 artiesten van de nieuwe plays. Een bestand dat geen export is, wordt bij naam genoemd.
-4. Klik **Import N plays**. Progen maakt eerst automatisch een back-up ("saved automatically before an import") en importeert dan in de achtergrond, met voortgang in het paneel. Je kunt Progen intussen gewoon gebruiken, ook de Spotify-sync loopt door. Aan het eind volgt een melding; de nieuwe plays staan meteen in Listening en Wrapped, zonder herstart.
+1. Request it in Spotify: **Account › Privacy › Extended streaming history**. It takes a few days to weeks; you get a zip.
+2. Unpack the zip. In Progen go to **Settings › Spotify › Import streaming history** and choose the `Streaming_History_Audio_*.json` files (several at once is fine).
+3. You first see a preview, with nothing saved yet: how many records, how many are new, what is skipped and why, the period, and the top 5 artists of the new plays. A file that isn't an export is named.
+4. Click **Import N plays**. Progen first makes a backup automatically ("saved automatically before an import") and then imports in the background, with progress in the panel. You can keep using Progen in the meantime, and the Spotify sync carries on too. At the end a message follows; the new plays show up in Listening and Wrapped right away, without a restart.
 
-**Je kunt dit zo vaak doen als je wilt**: vraag later een nieuwe export aan en importeer die; alleen wat Progen nog niet heeft komt erbij. Zo vul je gaten op die de live sync miste.
+**You can do this as often as you like**: request a new export later and import it; only what Progen doesn't have yet is added. That way you fill in the gaps the live sync missed.
 
-Vanaf de opdrachtregel kan het ook (bijvoorbeeld als de app niet start), met dezelfde code:
+It also works from the command line (for example if the app doesn't start), with the same code:
 
 ```
-.venv\Scripts\python.exe -m app.listening.export_import <bestanden of map> --dry-run
-.venv\Scripts\python.exe -m app.listening.export_import <bestanden of map>
+.venv\Scripts\python.exe -m app.listening.export_import <files or folder> --dry-run
+.venv\Scripts\python.exe -m app.listening.export_import <files or folder>
 ```
 
-Ook dan eerst een back-up. Een draaiende server ziet plays die zo zijn geïmporteerd pas na een herstart (de projecties worden bij het starten opgebouwd); het script zegt dat aan het eind.
+That makes a backup first too. A running server only sees plays imported this way after a restart (the projections are built at startup); the script says so at the end.
 
-Wat er overgeslagen wordt, en waarom:
+What is skipped, and why:
 
-- **Geen nummer** (geen `spotify_track_uri`): podcasts, audiobooks en lokale bestanden.
-- **Korter dan 30 seconden** (`MIN_MS_PLAYED`): dezelfde grens die Spotify gebruikt voor een "stream". Anders blazen doorgeklikte nummers Top tracks op.
-- **Al in Progen**: **hetzelfde nummer binnen 30 seconden** (`MATCH_WINDOW`) van een play die er al is. De API geeft tijden met milliseconden, de export hele seconden, en ze kunnen een paar seconden verschillen; daarom is "precies hetzelfde moment" niet genoeg. Zo komt een play die de sync al had er niet nog eens bij, ook niet als je hetzelfde bestand twee keer importeert of een nieuwere export de oude overlapt.
+- **Not a track** (no `spotify_track_uri`): podcasts, audiobooks and local files.
+- **Shorter than 30 seconds** (`MIN_MS_PLAYED`): the same limit Spotify uses for a "stream". Otherwise skipped tracks would inflate Top tracks.
+- **Already in Progen**: **the same track within 30 seconds** (`MATCH_WINDOW`) of a play that is already there. The API gives times with milliseconds, the export whole seconds, and they can differ by a few seconds; that is why "exactly the same moment" isn't enough. That way a play the sync already had isn't added again, not even when you import the same file twice or a newer export overlaps the old one.
 
-Hoe het werkt (`app/listening/export_import.py`, een automation-slice; het paneel in `import_web.py`): elk nummer gaat als hetzelfde `RecordPlay` als de live sync, met `source="export"`; de regels van de aggregate blijven zoals ze zijn. Voor "binnen 30 seconden" bouwt de import bij het begin een index van alle bestaande plays (per nummer de gesorteerde tijden). Uit de export bewaren we alleen wat in `TrackPlayed` staat; `ip_addr`, `platform`, `conn_country` en de rest gaan nergens heen, en het geüploade bestand wordt niet bewaard. `ms_played` is de echte luistertijd; de lengte van een nummer zit niet in de export, dus `duration_ms` = `ms_played` (alle minuten rekenen met `ms_played`).
+How it works (`app/listening/export_import.py`, an automation slice; the panel in `import_web.py`): each track goes through the same `RecordPlay` as the live sync, with `source="export"`; the aggregate's rules stay as they are. For "within 30 seconds", the import builds an index of all existing plays at the start (per track the sorted times). From the export we only keep what is in `TrackPlayed`; `ip_addr`, `platform`, `conn_country` and the rest go nowhere, and the uploaded file isn't stored. `ms_played` is the real listening time; a track's length isn't in the export, so `duration_ms` = `ms_played` (all minutes are counted with `ms_played`).
 
-Snelheid: de event store heeft een index op `stream_id`, en de import slaat per 2.000 plays op in één transactie (`EventStore.transaction()`), waarbij elk `RecordPlay` nog steeds langs de aggregate gaat. Tussen twee porties kunnen de app en de sync gewoon verder. Gemeten: 100.000 plays in ±10 seconden, met alle projecties live (met een commit per play zou het ±6 minuten duren). Met zoveel plays duurt het starten van Progen een paar seconden langer.
+Speed: the event store has an index on `stream_id`, and the import saves 2,000 plays per transaction (`EventStore.transaction()`), with every `RecordPlay` still going through the aggregate. Between two portions the app and the sync can simply carry on. Measured: 100,000 plays in ±10 seconds, with all projections live (with a commit per play it would take ±6 minutes). With that many plays, starting Progen takes a few seconds longer.
 
-## Planner (klaar)
+## Planner (done)
 
-Afspraken en plannen, als vervanging voor de agenda op je iPhone (`#planner`, tabbladen **Week**, **Upcoming**, **Day** en **Someday**). **Upcoming** is één lijst met alles wat er komt: eenmalige plannen vanaf vandaag die nog niet af zijn, onder Today, Tomorrow, This week, Next week en daarna per maand, en daaronder elke herhaling één keer ("Every Mon, Thu · 18:00", "Every month on the 12th") met de eerstvolgende keer die niet is overgeslagen of afgevinkt. Een zoekveld filtert op titel en notitie; een klik opent het plan. Alleen lezen (`AgendaProjection.upcoming`, `next_occurrence` in `schedule.py`). Onder Someday staat een lijstje **Done** met de laatste 10 afgevinkte plannen zonder datum; **Not done** zet er een terug (`ReopenPlan`).
+Appointments and plans, as a replacement for the calendar on your iPhone (`#planner`, tabs **Week**, **Upcoming**, **Day** and **Someday**). **Upcoming** is one list with everything that is coming: one-off plans from today on that aren't done yet, under Today, Tomorrow, This week, Next week and then per month, and below that each repeat once ("Every Mon, Thu · 18:00", "Every month on the 12th") with its next occurrence that isn't skipped or ticked off. A search field filters on title and note; a click opens the plan. Read only (`AgendaProjection.upcoming`, `next_occurrence` in `schedule.py`). Below Someday there is a short **Done** list with the last 10 ticked-off plans without a date; **Not done** puts one back (`ReopenPlan`).
 
-| Onderdeel   | Inhoud |
+| Part        | Contents |
 | ----------- | ------ |
-| Plannen     | Titel, datum (geen datum = Someday), tijd (geen tijd = de hele dag), duur, notitie, herhaling |
-| Herhaling   | Elke dag, elke week op één of meer weekdagen, elke maand op dezelfde dag (bij 31 in een korte maand: de laatste dag), optioneel tot een einddatum |
-| Events      | `PlanAdded`, `PlanRescheduled`, `PlanEdited`, `PlanDone`, `PlanReopened`, `PlanSkipped`, `PlanRemoved`, `ReminderSettingsChanged` (eigen stream `planner-settings`) |
+| Plans       | Title, date (no date = Someday), time (no time = all day), duration, note, repeat |
+| Repeat      | Every day, every week on one or more weekdays, every month on the same day (for the 31st in a short month: the last day), optionally until an end date |
+| Events      | `PlanAdded`, `PlanRescheduled`, `PlanEdited`, `PlanDone`, `PlanReopened`, `PlanSkipped`, `PlanRemoved`, `ReminderSettingsChanged` (own stream `planner-settings`) |
 | Commands    | `AddPlan`, `ReschedulePlan`, `EditPlan`, `MarkPlanDone`, `ReopenPlan`, `SkipPlan`, `RemovePlan`, `ChangeReminderSettings` |
-| Read models | Agenda (dag, week, Someday, herinneringen), PlannerActivity (hoe vaak een plan is verzet; nog niet in beeld) |
+| Read models | Agenda (day, week, Someday, reminders), PlannerActivity (how often a plan was moved; not shown yet) |
 
-Datum en tijd zijn **lokale tijd** (de klok van de pc), niet UTC zoals `at` van een event. Herhaalde keren worden in de projectie uitgerekend (`app/planner/schedule.py`), niet als losse events opgeslagen.
+Date and time are **local time** (the PC's clock), not UTC like an event's `at`. Repeated occurrences are worked out in the projection (`app/planner/schedule.py`), not stored as separate events.
 
-Regels:
+Rules:
 
-1. Een titel mag niet leeg zijn.
-2. Een tijd zonder datum wordt geweigerd; een herhaling zonder datum ook (een herhaling kan dus niet naar Someday).
-3. Afvinken, heropenen, verzetten, bewerken of overslaan van een verwijderd plan wordt geweigerd.
-4. Afvinken gaat per keer: bij een herhaling per voorkomen. Iets wat al af is nog eens afvinken wordt geweigerd; heropenen kan alleen als het af is. Een plan voor Someday is af op de dag dat je het afvinkt.
-5. `PlanDone` of `PlanSkipped` op een dag waarop het plan niet valt, wordt geweigerd. Overslaan kan alleen bij een herhaling, en elke keer maar één keer.
-6. Verzetten naar precies dezelfde datum en tijd, of bewerken zonder iets te veranderen, levert geen event op. Een herhaling verzetten verzet de hele reeks.
-7. Wekelijks zonder weekdagen = op de weekdag van de begindatum; een herhaling kan niet eindigen voordat hij begint.
-8. Herinneringen zijn één instelling voor alle plannen (Settings > Planner reminders): standaard 1 dag en 3 uur van tevoren, allebei aan. Plannen voor de hele dag krijgen hun herinnering om 9:00 (instelbaar): een dag of meer van tevoren op die dag, korter op de dag zelf. Dezelfde instelling opnieuw opslaan levert geen event op.
+1. A title may not be empty.
+2. A time without a date is refused; so is a repeat without a date (so a repeat can't go to Someday).
+3. Ticking off, reopening, moving, editing or skipping a removed plan is refused.
+4. Ticking off goes per occurrence: with a repeat, per occurrence. Ticking off something that is already done is refused; reopening only works when it is done. A plan for Someday is done on the day you tick it off.
+5. `PlanDone` or `PlanSkipped` on a day the plan doesn't fall on is refused. Skipping only works with a repeat, and each occurrence only once.
+6. Moving to exactly the same date and time, or editing without changing anything, produces no event. Moving a repeat moves the whole series.
+7. Weekly without weekdays = on the weekday of the start date; a repeat can't end before it starts.
+8. Reminders are one setting for all plans (Settings > Planner reminders): 1 day and 3 hours before by default, both on. All-day plans get their reminder at 9:00 (adjustable): a day or more before on that day, shorter on the day itself. Saving the same setting again produces no event.
 
-**Snel invoeren in gewone taal** (`app/planner/parse.py`, een eigen kleine parser). Eén veld bovenaan; tijdens het typen toont een preview wat Progen ervan maakt, Enter slaat op. Wat niet herkend wordt, is de titel. Nederlands en Engels door elkaar:
+**Quick entry in plain words** (`app/planner/parse.py`, a small parser of our own). One field at the top; while you type, a preview shows what Progen makes of it, Enter saves. Whatever isn't recognized is the title. Dutch and English mixed:
 
-| Je typt | Progen maakt ervan |
+| You type | Progen makes it |
 | ------- | ------------------ |
-| `Tandarts vr 14u` | Tandarts · de eerstvolgende vrijdag · 14:00 |
-| `overmorgen om 9 bellen` | bellen · overmorgen · 9:00 |
-| `dentist tomorrow 3pm` | dentist · morgen · 15:00 |
-| `12 okt verjaardag Sam`, `Party 12/10 20u30` | dag eerst; zonder jaar de eerstvolgende |
-| `Yoga next week tue 18:00`, `Kapper wo volgende week` | die weekdag in de volgende week |
-| `Sporten elke ma en do 7:00`, `every monday standup 9:30` | wekelijks op die dagen |
-| `Vitamines elke dag`, `Huur elke maand 1 nov` | dagelijks / maandelijks |
-| `Kapper volgende maandag`, `Film vanavond 20u`, `Tandarts om 9 uur` | de eerstvolgende maandag / vandaag 20:00 / 9:00 |
-| `Meeting 14:00-15:30`, `Lunch 12u-13u` | een begintijd met een duur |
+| `Tandarts vr 14u` | Tandarts · the next Friday · 14:00 |
+| `overmorgen om 9 bellen` | bellen · the day after tomorrow · 9:00 |
+| `dentist tomorrow 3pm` | dentist · tomorrow · 15:00 |
+| `12 okt verjaardag Sam`, `Party 12/10 20u30` | day first; without a year the next one |
+| `Yoga next week tue 18:00`, `Kapper wo volgende week` | that weekday in the next week |
+| `Sporten elke ma en do 7:00`, `every monday standup 9:30` | weekly on those days |
+| `Vitamines elke dag`, `Huur elke maand 1 nov` | daily / monthly |
+| `Kapper volgende maandag`, `Film vanavond 20u`, `Tandarts om 9 uur` | the next Monday / today 20:00 / 9:00 |
+| `Meeting 14:00-15:30`, `Lunch 12u-13u` | a start time with a duration |
 | `Learn Korean` | Someday |
 
-Dagen: vandaag/today, morgen/tomorrow, overmorgen, weekdagen voluit of kort (ma … zo, mon … sun); altijd de eerstvolgende, vandaag telt mee zolang de tijd nog niet voorbij is. Tijden: `14:00`, `14.30`, `14u`, `20u30`, `14 uur`, `om 9`, `9am`/`3pm`, en een tijdvak als `14:00-15:30` (dan ook de duur); vanochtend/vanmiddag/vanavond/tonight = vandaag, morgenavond = morgen; alleen een tijd = vandaag (of morgen als hij voorbij is). Korte weekdagen die ook een gewoon woord zijn (`do`, `zo`, `ma`, `di`, `wo`, `sun` …) tellen alleen naast een tijd of na `op`/`on`/`elke`/`every`, zodat "do the dishes" en "zo snel mogelijk" gewoon titels blijven. Met **More** zet je notitie, duur en herhaling precies.
+Days: vandaag/today, morgen/tomorrow, overmorgen, weekdays in full or short (ma … zo, mon … sun); always the next one, and today counts as long as the time hasn't passed yet. Times: `14:00`, `14.30`, `14u`, `20u30`, `14 uur`, `om 9`, `9am`/`3pm`, and a time range like `14:00-15:30` (then the duration too); vanochtend/vanmiddag/vanavond/tonight = today, morgenavond = tomorrow; only a time = today (or tomorrow if it has passed). Short weekdays that are also ordinary words (`do`, `zo`, `ma`, `di`, `wo`, `sun` …) only count next to a time or after `op`/`on`/`elke`/`every`, so "do the dishes" and "zo snel mogelijk" simply stay titles. With **More** you set the note, duration and repeat precisely.
 
-**Naar je iPhone:** in het venster van een plan geeft **Send to iPhone** een `.ics`-bestand (`GET /ui/planner/<id>.ics`, zelf geschreven volgens RFC 5545): het plan met herhaling (RRULE), overgeslagen keren (EXDATE) en een herinnering (VALARM) per herinnering uit Settings op dat moment. Mail het naar jezelf en open het op je iPhone.
+**To your iPhone:** in a plan's window, **Send to iPhone** gives an `.ics` file (`GET /ui/planner/<id>.ics`, written by hand following RFC 5545): the plan with its repeat (RRULE), skipped occurrences (EXDATE) and a reminder (VALARM) for each reminder in Settings at that moment. Mail it to yourself and open it on your iPhone.
 
-**Meldingen in Windows:** het icoon bij de klok vraagt elke minuut `GET /planner/due?since=…` op (alleen lezen, geen event) en toont nieuwe herinneringen als melding, bijvoorbeeld "Tomorrow: Tandarts at 14:00" of "In 3 hours: Tandarts at 14:00". Wat al gemeld is, onthoudt het icoon in het geheugen; na een herstart meldt het niets van vóór de start. **Dit werkt alleen zolang Progen draait**: zet daarom in Settings **Start with Windows** aan.
+**Notifications in Windows:** every minute the icon by the clock asks `GET /planner/due?since=…` (read only, no event) and shows new reminders as notifications, for example "Tomorrow: Tandarts at 14:00" or "In 3 hours: Tandarts at 14:00". The icon remembers what it already reported in memory; after a restart it reports nothing from before the start. **This only works while Progen is running**: so turn on **Start with Windows** in Settings.
 
 ## Wrapped
 
-Een jaaroverzicht over Reading, Watching en Listening heen (`#wrapped`, of de Wrapped-kaart op het startscherm). Alleen lezen: geen eigen events of commands. `WrappedProjection` wordt opgebouwd uit de events die er al zijn, dus hij werkt meteen met alle oude data, en loopt daarna live mee. Wrapped is geen tracker: hij staat niet in Settings, niet in de navigatiebalk en heeft geen eigen back-up (alles zit al in de events).
+A year in review across Reading, Watching and Listening (`#wrapped`, or the Wrapped card on the home screen). Read only: no events or commands of its own. `WrappedProjection` is built from the events that already exist, so it works right away with all old data, and follows along live after that. Wrapped isn't a tracker: it isn't in Settings or the navigation bar and has no backup of its own (everything is already in the events).
 
-| Tracker   | Wat er per jaar geteld wordt |
+| Tracker   | What is counted per year |
 | --------- | ---------------------------- |
-| Reading   | Gelezen hoofdstukken, top 5 series, genres, nieuw begonnen, afgerond, langste leesreeks |
-| Watching  | Afgerond per soort, genres van wat je afrondde, de covers daarvan |
-| Listening | Minuten (en uren), top 5 artiesten, top 5 nummers, drukste luisterdag |
-| Samen     | Per maand hoofdstukken / afgerond / minuten, drukste maand, actiefste dag, de jaren met data |
+| Reading   | Chapters read, top 5 series, genres, newly started, finished, longest reading streak |
+| Watching  | Finished per kind, genres of what you finished, their covers |
+| Listening | Minutes (and hours), top 5 artists, top 5 tracks, busiest listening day |
+| Together  | Chapters / finished / minutes per month, busiest month, most active day, the years with data |
 
-Regels:
+Rules:
 
-1. Dagen, maanden en jaren volgen de lokale tijdzone (`at` van het event, bij Listening `played_at`).
-2. Hoofdstukken: alleen vooruit telt (`chapter - previous_chapter > 0`), net als ReadingActivity.
-3. Genres van Reading: de gelezen hoofdstukken van een serie worden gelijk verdeeld over haar genres, volgens de **laatste** `GenresChanged`. Titels en covers van verwijderde series blijven in het overzicht.
-4. Een verwijderde en opnieuw toegevoegde serie (nieuwe `series_id`, bijvoorbeeld om een cover te krijgen) telt in Wrapped als **één serie**: zelfde titel zoals Reading die vergelijkt (hoofdletters en spaties eromheen tellen niet). Hoofdstukken van alle versies tellen samen; titel en cover komen van de nieuwste versie (zonder cover: de nieuwste oudere met cover), genres van de nieuwste versie met genres. Begonnen telt alleen in het jaar van de eerste versie, ook als je hem lang daarna echt opnieuw begint.
-5. **Afgerond** (Reading): een `StatusChanged` naar Completed, en een serie telt maar één keer per jaar. De **beginstatus** telt niet: toevoegen als Completed wordt opgeslagen als `SeriesStarted` + `StatusChanged(READING → COMPLETED)` (Reading regel 7). Een `StatusChanged` is een beginstatus als hij direct volgt op de `SeriesStarted` van dezelfde serie (geen ander Reading-event ertussen; plays van de Spotify-sync tellen niet) **en** binnen 5 seconden. Zo telt "toegevoegd, en een uur later uitgelezen" wel.
-6. **Begonnen** (Reading): een serie telt één keer, in het jaar dat je eraan begon. Toevoegen als Plan to Read of als Completed is niet beginnen; een serie uit Plan to Read halen wel.
-7. **Afgerond** (Watching): alleen een `ShowStatusChanged` naar Completed, net als WatchActivity. Toevoegen als Completed telt niet; van Plan to Watch naar Completed wel.
-8. Listening-minuten: `ms_played` als die bekend is, anders `duration_ms` (zoals ListeningActivity).
-9. Drukste maand en actiefste dag: activiteit = hoofdstukken + afgeronde titels + gespeelde nummers.
-10. De knop **Compare with …** (vorig jaar) laat bij de grote getallen het verschil met het jaar ervoor zien.
+1. Days, months and years follow the local time zone (the event's `at`, for Listening `played_at`).
+2. Chapters: only forward counts (`chapter - previous_chapter > 0`), just like ReadingActivity.
+3. Reading's genres: a series' chapters read are split evenly over its genres, following the **last** `GenresChanged`. Titles and covers of removed series stay in the overview.
+4. A removed and re-added series (new `series_id`, for example to get a cover) counts as **one series** in Wrapped: the same title the way Reading compares it (case and surrounding spaces don't count). Chapters of all versions count together; the title and cover come from the newest version (without a cover: the newest older one with a cover), the genres from the newest version with genres. Started only counts in the year of the first version, even if you really start it again long after.
+5. **Finished** (Reading): a `StatusChanged` to Completed, and a series counts only once per year. The **starting status** doesn't count: adding as Completed is stored as `SeriesStarted` + `StatusChanged(READING → COMPLETED)` (Reading rule 7). A `StatusChanged` is a starting status if it directly follows the `SeriesStarted` of the same series (no other Reading event in between; plays from the Spotify sync don't count) **and** within 5 seconds. That way "added, and finished an hour later" does count.
+6. **Started** (Reading): a series counts once, in the year you started it. Adding as Plan to Read or as Completed isn't starting; taking a series out of Plan to Read is.
+7. **Finished** (Watching): only a `ShowStatusChanged` to Completed, just like WatchActivity. Adding as Completed doesn't count; from Plan to Watch to Completed does.
+8. Listening minutes: `ms_played` when known, otherwise `duration_ms` (like ListeningActivity).
+9. Busiest month and most active day: activity = chapters + finished titles + tracks played.
+10. The **Compare with …** button (the previous year) shows the difference with the year before next to the big numbers.
 
 ### Covers
 
-- Bij "Add ..." kun je een cover zoeken, zelf een afbeelding uploaden of een link plakken. Zoeken is een hulp-endpoint (`GET /ui/<tracker>/covers/search`), geen command of event.
-- Watching zoekt bij AniList (anime), TVmaze (series) en TMDB (films en series; alleen met `TMDB_API_KEY`).
-- Bronnen voor Reading (`app/reading/cover_sources.py`), allemaal tegelijk bevraagd:
-  - [AniList](https://anilist.co): manga, manhwa en novels (`type: MANGA` omvat ook format `NOVEL`; er is geen formatfilter). Van veel Chinese webnovels staat hier alleen de manhua-bewerking.
-  - [MangaUpdates](https://www.mangaupdates.com): ook webnovels (type "Novel", geen typefilter). `hit_title` is de naam waarop MangaUpdates matchte, vaak een alternatieve naam ("Coiling Dragon" voor "Panlong"); die telt mee in de vergelijking.
-  - [MyAnimeList](https://myanimelist.net) via [Jikan](https://jikan.moe): novels en light novels (`type=novel` en `type=lightnovel`, twee verzoeken), met genres en thema's. Jikan staat maximaal 3 verzoeken per seconde toe; Progen wacht `JIKAN_MIN_INTERVAL` (0,4 s) tussen verzoeken. Bij een 429 stopt deze bron (wat al gevonden is, telt mee). Is Jikan onbereikbaar, dan geeft Progen na `JIKAN_CONNECT_TIMEOUT` (3 s) op en slaat de bron `JIKAN_COOLDOWN` (5 minuten) over, zodat zoeken niet steeds wacht.
-  - [Open Library](https://openlibrary.org): boeken, ook webnovels in print (bijvoorbeeld Shadow Slave)
-  - [Google Books](https://books.google.com): optioneel met `GOOGLE_BOOKS_API_KEY` in `.env`; te kleine thumbnails (onder `MIN_SOURCE_SIZE`) worden overgeslagen
-- Een bron is een functie `bron(client, zoekterm) -> list[SourceResult]` met `@cover_source("Naam")` erboven. Toevoegen of weghalen = de lijst `SOURCES` aanpassen.
-- Elke bron zoekt in drie stappen en stopt zodra iets past: de titel zoals getypt, genormaliseerd, en de langste losse woorden (bronnen vinden zelf niets bij een typfout). Alle resultaten worden samen vergeleken met rapidfuzz, tegen **elke** titel die een bron meegeeft (AniList: Engels, romaji, native en synonyms; MangaUpdates: titel en `hit_title`; MyAnimeList: titel, Engels, Japans, synonyms en alle `titles`); de beste score telt. Zo vind je "I Shall Seal the Heavens" ook als de bron hem "Wo Yu Feng Tian" noemt. Achtervoegsels als "(Novel)" of ", Book 1" tellen niet mee; alles wordt gesorteerd op beste match en dubbele URL's verdwijnen.
-- Faalt of hangt een bron (deadline `SOURCE_DEADLINE`), dan tonen we de andere. Alleen als alle bronnen falen, volgt een foutmelding.
-- Korte titels (tot 10 tekens) moeten strenger kloppen, zodat "Frieren" niet "Frieden" vindt. Het deel vóór een dubbele punt telt ook mee ("Frieren" vindt "Frieren: Beyond Journey's End"), maar lager dan een exacte titel, zodat een vervolg altijd ná de serie zelf komt.
-- Instelbaar bovenaan `app/cover_search.py`: `COVER_MATCH_THRESHOLD`, `SHORT_TITLE_THRESHOLD`, `SUBTITLE_FACTOR`, `FALLBACK_WORDS`, `SOURCE_DEADLINE`, `MIN_SOURCE_SIZE`. Resultaten worden 10 minuten per titel bewaard, maar maar 1 minuut als een bron faalde.
-- Bij het opslaan wordt de cover gedownload en met Pillow gecontroleerd, rechtgezet (EXIF), vanuit het midden bijgesneden tot 300×450 (2:3) en als WebP met een UUID-naam in `data/covers/` gezet. Alleen http/https, maximaal 5 MB, timeout 10 s. Alleen de bestandsnaam staat in het event.
-- Genres: AniList (genres en tags met rank ≥ 60), MangaUpdates (genres), Google Books (categorieën) en Open Library (onderwerpen) leveren genres mee. Die worden vertaald naar de vaste lijst en in het formulier alvast aangevinkt; wat je zelf aan- of uitvinkt, blijft staan als je naar een volgende cover bladert. Later aanpassen kan via ⋯ > *Edit genres* op een kaart.
-- Een cover van een bestaande serie wijzigen kan nog niet; daar is een apart event voor nodig (bijvoorbeeld `SeriesCoverChanged`).
+- With "Add ..." you can search for a cover, upload an image yourself or paste a link. Searching is a helper endpoint (`GET /ui/<tracker>/covers/search`), not a command or event.
+- Watching searches AniList (anime), TVmaze (series) and TMDB (films and series; only with `TMDB_API_KEY`).
+- Sources for Reading (`app/reading/cover_sources.py`), all asked at once:
+  - [AniList](https://anilist.co): manga, manhwa and novels (`type: MANGA` also covers format `NOVEL`; there is no format filter). For many Chinese web novels only the manhua adaptation is here.
+  - [MangaUpdates](https://www.mangaupdates.com): web novels too (type "Novel", no type filter). `hit_title` is the name MangaUpdates matched on, often an alternative name ("Coiling Dragon" for "Panlong"); it counts in the comparison.
+  - [MyAnimeList](https://myanimelist.net) through [Jikan](https://jikan.moe): novels and light novels (`type=novel` and `type=lightnovel`, two requests), with genres and themes. Jikan allows at most 3 requests per second; Progen waits `JIKAN_MIN_INTERVAL` (0.4 s) between requests. On a 429 this source stops (whatever was already found counts). If Jikan is unreachable, Progen gives up after `JIKAN_CONNECT_TIMEOUT` (3 s) and skips the source for `JIKAN_COOLDOWN` (5 minutes), so searching doesn't keep waiting.
+  - [Open Library](https://openlibrary.org): books, also web novels in print (Shadow Slave, for example)
+  - [Google Books](https://books.google.com): optional with `GOOGLE_BOOKS_API_KEY` in `.env`; thumbnails that are too small (below `MIN_SOURCE_SIZE`) are skipped. The size check downloads through the same 5 MB limit as covers; a larger image counts as not big enough.
+- A source is a function `source(client, search_term) -> list[SourceResult]` with `@cover_source("Name")` above it. Adding or removing one = changing the `SOURCES` list.
+- Each source searches in three steps and stops as soon as something fits: the title as typed, normalized, and the longest single words (sources find nothing on a typo by themselves). All results are compared together with rapidfuzz, against **every** title a source returns (AniList: English, romaji, native and synonyms; MangaUpdates: title and `hit_title`; MyAnimeList: title, English, Japanese, synonyms and all `titles`); the best score counts. That way you also find "I Shall Seal the Heavens" when the source calls it "Wo Yu Feng Tian". Suffixes like "(Novel)" or ", Book 1" don't count; everything is sorted by best match and duplicate URLs disappear.
+- If a source fails or hangs (deadline `SOURCE_DEADLINE`), we show the others. Only when all sources fail does an error follow.
+- Short titles (up to 10 characters) must match more strictly, so "Frieren" doesn't find "Frieden". The part before a colon counts too ("Frieren" finds "Frieren: Beyond Journey's End"), but lower than an exact title, so a sequel always comes after the series itself.
+- Adjustable at the top of `app/cover_search.py`: `COVER_MATCH_THRESHOLD`, `SHORT_TITLE_THRESHOLD`, `SUBTITLE_FACTOR`, `FALLBACK_WORDS`, `SOURCE_DEADLINE`, `MIN_SOURCE_SIZE`. Results are kept for 10 minutes per title, but only 1 minute if a source failed.
+- When saving, the cover is downloaded and checked with Pillow, straightened (EXIF), cropped from the center to 300×450 (2:3) and stored as WebP with a UUID name in `data/covers/`. Only http/https, at most 5 MB, timeout 10 s. Only the file name is in the event.
+- Genres: AniList (genres and tags with rank ≥ 60), MangaUpdates (genres), Google Books (categories) and Open Library (subjects) return genres. They are mapped onto the fixed list and checked in the form ahead of time; whatever you check or uncheck yourself stays when you browse to the next cover. Changing them later works through ⋯ > *Edit genres* on a card.
+- Changing the cover of an existing series isn't possible yet; that needs a separate event (`SeriesCoverChanged`, for example).
 
-## Sunny (de assistent)
+## Sunny (the assistant)
 
-Sunny is een AI-assistent in de app: een ronde, donkere knop rechtsonder op elke pagina behalve Settings. Klik erop en een chatpaneel schuift van rechts in. Het gesprek blijft staan als je van pagina wisselt; **New chat** wist het, Esc sluit het paneel. Het ontwerp staat in `app/assistant/identity/` (IDENTITY, SOUL, USER vormen samen de systeemprompt; TOOLS en OUTCOME beschrijven wat Sunny mag en wanneer het klaar is).
+Sunny is an AI assistant in the app: a round, dark button at the bottom right of every page except Settings. Click it and a chat panel slides in from the right. The conversation stays when you switch pages; **New chat** clears it, Esc closes the panel. The design is in `app/assistant/identity/` (IDENTITY, SOUL and USER together form the system prompt; TOOLS and OUTCOME describe what Sunny may do and when it is done).
 
-Wat Sunny kan:
+What Sunny can do:
 
-- **Vragen beantwoorden uit je eigen data**, zonder bevestiging want er verandert niets: "welk nummer luisterde ik het meest van 1 sep tot 15 okt?", "hoe lang heb ik X niet gelezen?", "heb ik plannen volgende maand?".
-- **Bijhouden en wijzigen in één zin**: "ik ben bij hoofdstuk 120 van Solo Leveling", "zet Severance op dropped", "ik rewatch Frieren", "elke ma 12:00 gym". Sunny zet dat om in acties en toont ze eerst als **kaart** met per actie één regel (`Solo Leveling · chapter 119 → 120`, `New plan · gym · from Mon 12 Oct · 12:00 · every Mon`).
-- **Niets wordt opgeslagen voordat je op Confirm klikt.** Confirm voert de acties uit via dezelfde command handlers als de rest van de app (gewone events, met toast en verversen van de open pagina); Cancel doet niets. **Verwijderen** vraagt na Confirm nog één keer bevestiging, met de naam erbij.
-- Nooit: Settings, back-ups, imports, Spotify koppelen of afsluiten. Sunny verzint geen titels of getallen; wat niet in je tracker staat, zegt het.
+- **Answer questions from your own data**, without confirmation because nothing changes: "which track did I listen to most from 1 Sep to 15 Oct?", "how long haven't I read X?", "do I have plans next month?".
+- **Track and change things in one sentence**: "I'm at chapter 120 of Solo Leveling", "set Severance to dropped", "I'm rewatching Frieren", "elke ma 12:00 gym". Sunny turns that into actions and first shows them as a **card** with one line per action (`Solo Leveling · chapter 119 → 120`, `New plan · gym · from Mon 12 Oct · 12:00 · every Mon`).
+- **Nothing is saved before you click Confirm.** Confirm runs the actions through the same command handlers as the rest of the app (ordinary events, with a toast and a refresh of the open page); Cancel does nothing. **Removing** asks for confirmation once more after Confirm, with the name included.
+- Never: Settings, backups, imports, connecting Spotify or shutting down. Sunny doesn't make up titles or numbers; whatever isn't in your tracker, it says so.
 
-Instellen: zet `ANTHROPIC_API_KEY` in `.env` (zie `.env.example`) en herstart Progen. Zonder sleutel toont het paneel alleen "Add ANTHROPIC_API_KEY to .env to summon Sunny from the shadows".
+Setting up: put `ANTHROPIC_API_KEY` in `.env` (see `.env.example`) and restart Progen. Without a key, the panel only shows "Add ANTHROPIC_API_KEY to .env to summon Sunny from the shadows".
 
-**Kosten:** elk bericht aan Sunny gaat naar de API van Anthropic en kost een klein beetje van je API-tegoed. Sunny gebruikt standaard **Claude Haiku 5.5** met lage effort en hooguit 1024 tokens per antwoord; de vaste systeemprompt en de toollijst worden gecachet, alleen de laatste 10 berichten gaan mee, en Sunny zoekt één titel op in plaats van je hele bibliotheek. Zet in de console van Anthropic een maandlimiet. **Het model kies je in Settings › Sunny**: Claude Haiku 5.5 (standaard, snelst en goedkoopst), Claude Sonnet 5.5 (slimmer, ±20× de prijs) of Claude Opus 5.5 (het slimst en het duurst), met de prijs per model erbij. Een wijziging geldt meteen, zonder herstart. De keuze wordt bewaard als event (`AssistantSettingsChanged`, eigen stream `assistant-settings`), dus hij zit in je back-ups; de modellen zelf staan in `app/assistant/models.py`. Effort (laag) en 1024 tokens per antwoord zijn voor elk model gelijk. Het paneel in Settings zegt ook of er een `ANTHROPIC_API_KEY` in `.env` staat (de key zelf wordt nooit getoond), en onder de kop van het chatpaneel zie je welk model Sunny gebruikt. Wat er naar Anthropic gaat: je bericht, de laatste berichten van het gesprek en de gegevens die Sunny voor dat antwoord opzoekt; verder niets.
+**Costs:** every message to Sunny goes to Anthropic's API and costs a little of your API credit. By default Sunny uses **Claude Haiku 5.5** with low effort and at most 1024 tokens per answer; the fixed system prompt and the tool list are cached, only the last 10 messages go along, and Sunny looks up one title instead of your whole library. Set a monthly limit in Anthropic's console. **You choose the model in Settings › Sunny**: Claude Haiku 5.5 (the default, fastest and cheapest), Claude Sonnet 5.5 (smarter, ±20× the price) or Claude Opus 5.5 (the smartest and the most expensive), with the price per model next to it. A change applies right away, without a restart. The choice is stored as an event (`AssistantSettingsChanged`, own stream `assistant-settings`), so it is in your backups; the models themselves are in `app/assistant/models.py`. Effort (low) and 1024 tokens per answer are the same for every model. The panel in Settings also says whether there is an `ANTHROPIC_API_KEY` in `.env` (the key itself is never shown), and below the chat panel's heading you see which model Sunny uses. What goes to Anthropic: your message, the latest messages of the conversation and the data Sunny looks up for that answer; nothing else.
 
-**Als de API niet meewerkt**, zegt Sunny dat in een eigen waarschuwingsballon (geen crash), met **Try again** om hetzelfde bericht opnieuw te sturen. Openstaande Confirm-kaarten blijven werken: die hebben de API niet nodig.
+**If the API doesn't cooperate**, Sunny says so in a warning balloon of its own (no crash), with **Try again** to send the same message again. Open Confirm cards keep working: they don't need the API.
 
-| Sunny zegt | Wat je doet |
+| Sunny says | What you do |
 | --- | --- |
-| "My key expired. Or someone revoked it. …" | Maak een nieuwe key op console.anthropic.com, zet hem in `.env` als `ANTHROPIC_API_KEY` en herstart Progen. |
-| "I'm out of credits. …" | Vul je tegoed aan in de console onder Billing en probeer het opnieuw. |
-| "You hit the monthly limit you set. …" | Verhoog de maandlimiet in de console, of wacht tot volgende maand. |
-| "This key isn't allowed to do that. …" | Controleer de workspace en rechten van de key in de console. |
-| "Too many requests at once. …" / "Anthropic's servers are having a bad day. …" | Even wachten en opnieuw proberen (de SDK probeert het zelf al een paar keer). |
-| "I can't reach Anthropic. Is the internet on?" | Controleer je internetverbinding. |
+| "My key expired. Or someone revoked it. …" | Create a new key at console.anthropic.com, put it in `.env` as `ANTHROPIC_API_KEY` and restart Progen. |
+| "I'm out of credits. …" | Top up your credit in the console under Billing and try again. |
+| "You hit the monthly limit you set. …" | Raise the monthly limit in the console, or wait until next month. |
+| "This key isn't allowed to do that. …" | Check the key's workspace and permissions in the console. |
+| "Too many requests at once. …" / "Anthropic's servers are having a bad day. …" | Wait a moment and try again (the SDK already retries a few times itself). |
+| "I can't reach Anthropic. Is the internet on?" | Check your internet connection. |
 
-Bij een key-, rechten-, tegoed- of limietprobleem staat de melding (met **Open console**) ook bovenaan zodra je het paneel opent, tot de eerstvolgende aanroep weer lukt. Herkenning in `classify()` in `app/assistant/agent.py`; de zoekwoorden voor "tegoed op" en "maandlimiet" staan als constanten bovenaan (`CREDIT_WORDS`, `SPEND_LIMIT_WORDS`), voor als Anthropic de tekst verandert. Een onbekende fout geeft "Something went wrong talking to Anthropic (status X)." en komt volledig in het log.
+With a key, permission, credit or limit problem, the message (with **Open console**) is also shown at the top as soon as you open the panel, until the next call succeeds again. Recognition is in `classify()` in `app/assistant/agent.py`; the search words for "out of credit" and "monthly limit" are constants at the top (`CREDIT_WORDS`, `SPEND_LIMIT_WORDS`), for when Anthropic changes the text. An unknown error gives "Something went wrong talking to Anthropic (status X)." and goes into the log in full.
 
-Hoe het werkt (`app/assistant/`): `prompt.py` bouwt de systeemprompt (het vaste deel met `cache_control`, de datum van vandaag als apart blok erna); `tools.py` heeft de tools als JSON-schema's met `strict: true` (leestools lezen de projecties direct, schrijftools geven alleen een voorstel terug); `agent.py` draait de loop (hooguit 5 rondes per bericht; de geschiedenis gaat als platte tekst mee); `session.py` houdt het gesprek bij (berichten, voorstellen, Confirm/Cancel; tijdens de API-aanroep blijven Confirm, Cancel en New chat gewoon werken) en `web.py` heeft de dunne routes. Gesprek en voorstellen staan alleen in het geheugen van de app, niet in de event store. Tests gebruiken een nep-client en praten nooit met de echte API.
+How it works (`app/assistant/`): `prompt.py` builds the system prompt (the fixed part with `cache_control`, today's date as a separate block after it); `tools.py` has the tools as JSON schemas with `strict: true` (read tools read the projections directly, write tools only return a proposal); `agent.py` runs the loop (at most 5 rounds per message; the history goes along as plain text); `session.py` keeps the conversation (messages, proposals, Confirm/Cancel; during the API call, Confirm, Cancel and New chat keep working) and `web.py` has the thin routes. The conversation and proposals only live in the app's memory, not in the event store. Tests use a fake client and never talk to the real API.
 
-## Beveiliging
+## Security
 
-Progen draait alleen op je eigen computer (`127.0.0.1`), maar je browser kan ook verzoeken sturen namens een website die je open hebt. Daarom (`app/security.py`, geldt automatisch voor elke route):
+Progen only runs on your own computer (`127.0.0.1`), but your browser can also send requests on behalf of a website you have open. So (`app/security.py`, applies automatically to every route):
 
-- **Alleen `127.0.0.1` en `localhost` als adres.** Een website die zijn eigen naam naar 127.0.0.1 laat wijzen (*DNS rebinding*), krijgt overal `400`, ook bij lezen.
-- **Wijzigingen (POST, PUT, PATCH, DELETE) moeten aantonen dat ze van Progen of een eigen script komen**, met iets wat een andere website niet zonder toestemming (CORS) kan meesturen, en die geeft Progen niet:
-  - `HX-Request: true`: de webpagina zelf (htmx stuurt dit altijd mee);
-  - `Content-Type: application/json`: de JSON-API en scripts (ook bij een `DELETE` zonder body);
+- **Only `127.0.0.1` and `localhost` as an address.** A website that points its own name at 127.0.0.1 (*DNS rebinding*) gets `400` everywhere, reading included.
+- **Changes (POST, PUT, PATCH, DELETE) must show that they come from Progen or your own script**, with something another website can't send along without permission (CORS), and Progen doesn't give that:
+  - `HX-Request: true`: the web page itself (htmx always sends this);
+  - `Content-Type: application/json`: the JSON API and scripts (also for a `DELETE` without a body);
   - `X-Progen-Shutdown: 1`: Stop Progen.
-- **Zegt de browser dat een verzoek van een andere site komt** (`Origin` of `Sec-Fetch-Site: cross-site`), dan wordt het geweigerd, ook met de juiste header.
-- Lezen (`GET`) is altijd toegestaan; een andere website kan de antwoorden toch niet lezen (same-origin policy).
-- Komt Progen ooit buiten je eigen computer (zie Roadmap 6), dan is daarnaast inloggen nodig.
+- **If the browser says a request comes from another site** (`Origin` or `Sec-Fetch-Site: cross-site`), it is refused, even with the right header.
+- Reading (`GET`) is always allowed; another website can't read the answers anyway (same-origin policy).
+- If Progen is ever reachable outside your own computer (see Roadmap 6), signing in is needed on top of this.
 
 ---
 
 ## Roadmap
 
-### 1. Opruimen voordat het tweede domein komt
+### 1. Cleaning up before the second domain
 
-- [ ] `DomainError` verplaatsen van `app/reading/aggregate.py` naar een gedeeld bestand `app/domain.py`, zodat elk domein hem kan gebruiken. De exception handler in `main.py` vangt hem dan voor alle domeinen.
-- [ ] `requirements.txt` bijwerken (`pip freeze > requirements.txt`).
-- [ ] Controleren dat `.venv/` en `data/` in `.gitignore` staan.
+- [x] Move `DomainError` from `app/reading/aggregate.py` to a shared file `app/domain.py`, so every domain can use it. The exception handler in `main.py` then catches it for all domains.
+- [x] Update `requirements.txt`: only what the app imports directly, pinned; pytest in `requirements-dev.txt`.
+- [x] Check that `.venv/` and `data/` are in `.gitignore`.
 
-### 2. Slaapdomein
+### 2. Sleep domain
 
-Eerst handmatig invoeren; automatisch importeren komt later (zie punt 5).
+Manual entry first; automatic importing comes later (see item 5).
 
-- [ ] Event model maken op een board (trigger → command → event → read model).
-- [ ] Open ontwerpvragen beantwoorden:
-  - Wat is het id van een stream? Voorstel: de datum van de nacht (bijv. `2026-09-30`), zodat er per nacht maar één registratie kan zijn.
-  - Welke velden? Voorstel: bedtijd, opstaan, eventueel kwaliteit (1–5).
-  - Hoe corrigeer ik een fout? Via een apart event (bijv. `SleepCorrected`), niet door het oude event aan te passen.
-- [ ] Mogelijke events: `SleepRecorded`, `SleepCorrected`.
-- [ ] Mogelijke read models: SleepThisWeek, gemiddelde slaapduur per week.
+- [ ] Make an event model on a board (trigger → command → event → read model).
+- [ ] Answer the open design questions:
+  - What is a stream's id? Proposal: the date of the night (e.g. `2026-09-30`), so there can only be one record per night.
+  - Which fields? Proposal: bedtime, wake-up time, optionally quality (1–5).
+  - How do I correct a mistake? Through a separate event (e.g. `SleepCorrected`), not by changing the old event.
+- [ ] Possible events: `SleepRecorded`, `SleepCorrected`.
+- [ ] Possible read models: SleepThisWeek, average sleep duration per week.
 
-### 3. Fitnessdomein
+### 3. Fitness domain
 
-- [ ] Event model maken.
-- [ ] Mogelijke events: `WorkoutLogged` (soort, duur, eventueel afstand of sets).
-- [ ] Mogelijke read models: WorkoutHistory, totalen per week.
+- [ ] Make an event model.
+- [ ] Possible events: `WorkoutLogged` (kind, duration, optionally distance or sets).
+- [ ] Possible read models: WorkoutHistory, totals per week.
 
 ### 4. Dashboard
 
-- [x] De webpagina uitbreiden met een sectie per domein.
-- [x] Grafieken toevoegen: hoofdstukken per week, afgerond per maand, luisterminuten (CSS-balken, geen CDN nodig). Slaapduur volgt met het slaapdomein.
-- [x] Domeinen combineren in een nieuwe projectie: **Wrapped**, het jaaroverzicht over alle trackers (zie [Wrapped](#wrapped)). Werkt meteen met alle oude data, omdat de projectie uit de events wordt opgebouwd.
-- [ ] Verbanden tussen domeinen, bijvoorbeeld: lees ik meer na een goede nacht slaap? (zodra er een slaapdomein is)
+- [x] Extend the web page with a section per domain.
+- [x] Add charts: chapters per week, finished per month, listening minutes (CSS bars, no CDN needed). Sleep duration follows with the sleep domain.
+- [x] Combine domains in a new projection: **Wrapped**, the year in review across all trackers (see [Wrapped](#wrapped)). Works right away with all old data, because the projection is built from the events.
+- [ ] Connections between domains, for example: do I read more after a good night's sleep? (once there is a sleep domain)
 
-### 5. Automatisch importeren
+### 5. Automatic importing
 
-- [ ] Kiezen welke wearable of app de slaap- en fitnessdata levert, en uitzoeken of die een API of export heeft.
-- [ ] Een importer bouwen als **automation-slice**: een script dat op een schema draait, nieuwe data ophaalt, en precies dezelfde commands stuurt als de webpagina. De domeinlogica hoeft daarvoor niet te veranderen.
-- [ ] Voorkomen dat dezelfde data twee keer wordt geïmporteerd (de stream-id per nacht uit punt 2 helpt hierbij).
+- [ ] Choose which wearable or app delivers the sleep and fitness data, and find out whether it has an API or export.
+- [ ] Build an importer as an **automation slice**: a script that runs on a schedule, fetches new data, and sends exactly the same commands as the web page. The domain logic doesn't need to change for it.
+- [ ] Prevent the same data from being imported twice (the stream id per night from item 2 helps here).
 
-### 6. Beveiliging en hosting
+### 6. Security and hosting
 
-- [ ] Een API-key of wachtwoord toevoegen voordat de app buiten het thuisnetwerk bereikbaar wordt.
-- [ ] Een plek kiezen om hem te laten draaien (Raspberry Pi thuis, of een kleine VPS).
-- [x] Back-ups van `data/tracker.db` en covers, met terugzetten (Settings).
+- [ ] Add an API key or password before the app becomes reachable outside the home network.
+- [ ] Choose a place to run it (a Raspberry Pi at home, or a small VPS).
+- [x] Backups of `data/tracker.db` and covers, with restoring (Settings).
 
-### 7. Sunny, de assistent
+### 7. Sunny, the assistant
 
-- [x] Vragen beantwoorden en acties voorstellen in gewone taal; alles wat schrijft pas na Confirm (vertrouwensfase 1 uit IDENTITY.md).
-- [x] Ontbrekende stukken: top nummers en artiesten over een vrije periode, de status Rewatching, plannen in een periode.
-- [ ] Fase 2: eenvoudige logs (bijv. hoofdstuk +1) zonder Confirm, met een Undo-knop.
-- [ ] Fase 3: een "heartbeat", bijvoorbeeld een ochtendsamenvatting van je dag.
-- [x] In Settings kunnen wisselen van model (Haiku, Sonnet of Opus 5.5).
+- [x] Answer questions and propose actions in plain words; everything that writes only after Confirm (trust phase 1 from IDENTITY.md).
+- [x] Missing pieces: top tracks and artists over a free period, the Rewatching status, plans in a period.
+- [ ] Phase 2: simple logs (e.g. chapter +1) without Confirm, with an Undo button.
+- [ ] Phase 3: a "heartbeat", for example a morning summary of your day.
+- [x] Being able to switch models in Settings (Haiku, Sonnet or Opus 5.5).
 
-### Ideeën voor later
+### Ideas for later
 
-- Beoordeling of notities per serie (nieuwe events, bijv. `SeriesRated`).
-- Export van alle data naar JSON of CSV.
-- Nieuwe domeinen naar behoefte.
-
----
-
-## Werkwijze: een nieuw domein toevoegen
-
-Elk domein volgt dezelfde stappen als Reading en Watching. Bestaande domeinen hoeven daarvoor niet te veranderen.
-
-1. **Event model** maken: slices met trigger, command, event en read model, plus de regels als given/when/then.
-2. **`app/<domein>/events.py`**: events als `@dataclass(frozen=True)`, namen in de verleden tijd, met een `at`-veld. Velden mogen `datetime`, `date`, `time`, enums, tuples, optioneel (`X | None`) en geneste frozen dataclasses zijn; de event store zet ze terug naar het juiste type.
-3. **`aggregate.py`**: toestand opbouwen in `_apply`, regels checken in de beslismethodes. Tests in `tests/<domein>/`.
-4. **`commands.py`**: commands en een command handler (laden → beslissen → opslaan). Tests met een `:memory:` event store.
-5. **`projections.py`**: read models met een `apply(event)`-methode. Test ook dat een herbouwd read model gelijk is aan het live read model.
-6. **`api.py`**: een `create_<domein>_router(...)`-functie. `GET` leest uit projecties, `POST` stuurt commands.
-7. **`app/main.py`** koppelen:
-   - de nieuwe events toevoegen aan `EVENT_TYPES`
-   - de nieuwe projecties toevoegen aan `projections`
-   - de handler aanmaken en de router toevoegen met `include_router`
-   - een `Tracker(...)` toevoegen aan `trackers` (naam, icoon, event na een wijziging, samenvatting voor het startscherm); dan staat hij vanzelf op het startscherm, in Settings en in elke back-up
-8. **Webpagina**: `web.py` met `/ui/<domein>/dashboard`, `/library`, `/progress` en (als je iets kunt toevoegen) `/add-form`; andere tabbladen kan ook, zoals `/history` bij Listening (geef `tabs` mee aan `ui.tracker_tabs`), templates met `ui.tracker_tabs(...)` bovenaan, een link in de navigatie (`index.html`) en een regel in `TRACKERS` in `trackly.js`.
-   - Event-klassen moeten uniek zijn over alle domeinen heen (de event store bewaart alleen de klassenaam).
-9. `python -m pytest` moet groen blijven, zonder warnings.
+- A rating or notes per series (new events, e.g. `SeriesRated`).
+- Exporting all data to JSON or CSV.
+- New domains as needed.
 
 ---
 
-## Belangrijke afspraken
+## How to: adding a new domain
 
-- **Bestaande events nooit wijzigen.** Oude events in de database moeten altijd leesbaar blijven. Een veld toevoegen mag alleen met een standaardwaarde. Verandert de betekenis, maak dan een nieuw event.
-- **Een event-klasse nooit hernoemen.** De klassenaam staat in de database (kolom `type`) en wordt gebruikt om events terug te bouwen.
-- **Nooit rechtstreeks in de database schrijven.** Alles gaat via commands, zodat de regels altijd gecontroleerd worden.
-- **Eerst de test, dan de code.** Elke regel uit het event model wordt een given/when/then-test.
-- **Claude Code gebruiken voor kleine stukken**, niet voor hele domeinen tegelijk: laat het uitleggen, reviewen of één bestand schrijven, zodat ik blijf begrijpen hoe alles werkt.
+Every domain follows the same steps as Reading and Watching. Existing domains don't need to change for it.
+
+1. Make an **event model**: slices with trigger, command, event and read model, plus the rules as given/when/then.
+2. **`app/<domain>/events.py`**: events as `@dataclass(frozen=True)`, names in the past tense, with an `at` field. Fields may be `datetime`, `date`, `time`, enums, tuples, optional (`X | None`) and nested frozen dataclasses; the event store turns them back into the right type. End the file with an `EVENT_TYPES` list.
+3. **`aggregate.py`**: build the state in `_apply`, check the rules in the decision methods. Tests in `tests/<domain>/`.
+4. **`commands.py`**: commands and a command handler (load → decide → save). Tests with a `:memory:` event store.
+5. **`projections.py`**: read models with an `apply(event)` method. Also test that a rebuilt read model equals the live read model.
+6. **`api.py`**: a `create_<domain>_router(...)` function. `GET` reads from projections, `POST` sends commands.
+7. Wire it up:
+   - add the domain's `EVENT_TYPES` to `ALL_EVENT_TYPES` in `app/event_types.py`
+   - in `app/main.py`: add the new projections to `projections`
+   - create the handler and add the router with `include_router`
+   - add a `Tracker(...)` to `trackers` (name, icon, event after a change, summary for the home screen); then it shows up on the home screen, in Settings and in every backup by itself
+8. **Web page**: `web.py` with `/ui/<domain>/dashboard`, `/library`, `/progress` and (if you can add something) `/add-form`; other tabs are possible too, like `/history` for Listening (pass `tabs` to `ui.tracker_tabs`), templates named `<domain>_*.html` with `ui.tracker_tabs(...)` at the top, a link in the navigation (`index.html`) and a line in `TRACKERS` in `trackly.js`. Shared helpers for charts are in `app/charts.py`, for covers in `app/covers.py` and `app/web.py`, and the clock is `app/clock.py`.
+   - Event classes must be unique across all domains (the event store only keeps the class name).
+9. `python -m pytest` must stay green, without warnings.
+
+---
+
+## Important agreements
+
+- **Never change existing events.** Old events in the database must always stay readable. Adding a field is only allowed with a default value. If the meaning changes, make a new event.
+- **Never rename an event class.** The class name is in the database (column `type`) and is used to rebuild events.
+- **Never write to the database directly.** Everything goes through commands, so the rules are always checked.
+- **First the test, then the code.** Every rule from the event model becomes a given/when/then test.
+- **Use Claude Code for small pieces**, not for whole domains at once: let it explain, review or write one file, so I keep understanding how everything works.
