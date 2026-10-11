@@ -74,8 +74,13 @@ def _nullable(schema: dict) -> dict:
     return {"anyOf": [schema, {"type": "null"}]}
 
 
+MAX_STRICT_TOOLS = 20  # the API refuses a request with more strict tools (400)
+
+
 def _tool(name: str, description: str, properties: dict) -> dict:
-    return {"name": name, "description": description, "strict": True,
+    """Strict when there is input to check; a tool without input gains nothing from it and would only
+    count towards MAX_STRICT_TOOLS."""
+    return {"name": name, "description": description, "strict": bool(properties),
             "input_schema": {"type": "object", "properties": properties, "required": list(properties),
                              "additionalProperties": False}}
 

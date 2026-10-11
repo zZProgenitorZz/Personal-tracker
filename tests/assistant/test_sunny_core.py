@@ -8,7 +8,7 @@ from fakes import FakeClient, response, text, thinking, tool
 from app.assistant import agent as agent_module
 from app.assistant.agent import Agent, trim_history
 from app.assistant.prompt import IDENTITY_DIR, system_blocks
-from app.assistant.tools import TOOL_DEFINITIONS, ToolError, TrackerData, run_tool
+from app.assistant.tools import MAX_STRICT_TOOLS, TOOL_DEFINITIONS, ToolError, TrackerData, run_tool
 from app.eventstore import EventStore
 from app.listening.commands import ListeningCommandHandler, RecordPlay
 from app.listening.projections import ListeningActivityProjection, TopArtistsProjection, TopTracksProjection
@@ -86,8 +86,10 @@ def test_tools_are_strict_and_the_last_one_carries_the_cache_marker():
                      "plan_skip", "plan_reschedule", "plan_edit", "delete_item"]
     for definition in TOOL_DEFINITIONS:
         schema = definition["input_schema"]
-        assert definition["strict"] is True and schema["additionalProperties"] is False
+        assert definition["strict"] is bool(schema["properties"]) and schema["additionalProperties"] is False
         assert set(schema["required"]) == set(schema["properties"])
+    # The API refuses more than 20 strict tools with a 400, so every message would fail.
+    assert sum(t["strict"] for t in TOOL_DEFINITIONS) <= MAX_STRICT_TOOLS == 20
     assert TOOL_DEFINITIONS[-1]["cache_control"] == {"type": "ephemeral"}
     assert all("cache_control" not in t for t in TOOL_DEFINITIONS[:-1])
 
