@@ -574,7 +574,7 @@ document.addEventListener("htmx:afterSettle", () => {
 // (sessionStorage, so also after an htmx swap or a reload). Not on Settings: they wait until you leave.
 
 const REMINDER_CHECK_MS = 60 * 1000;
-const POP_CLOSE_MS = 60 * 1000;
+const POP_CLOSE_MS = 600 * 1000;
 let popTimer = null;
 
 function stored(name, fallback) {
