@@ -15,7 +15,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Any, Callable, Iterator
 
 import anthropic
 
@@ -45,6 +45,20 @@ PROBLEM_TEXTS = {
     "overloaded": "Anthropic's servers are having a bad day. Try again in a moment.",
     "offline": "I can't reach Anthropic. Is the internet on?",
 }
+# What the thinking bubble says while a tool runs (one line per tool); others get DEFAULT_STATUS.
+TOOL_STATUS = {
+    "find_item": "Looking for it…",
+    "reading_overview": "Checking your library…",
+    "watching_overview": "Checking your watch list…",
+    "top_tracks": "Digging through your plays…",
+    "top_artists": "Digging through your plays…",
+    "listening_minutes": "Counting your minutes…",
+    "plans_between": "Checking your planner…",
+    "history_between": "Looking through your history…",
+    "item_history": "Looking through your history…",
+    "notices": "Checking what needs you…",
+}
+DEFAULT_STATUS = "Looking that up…"
 CONSOLE_KINDS = {"auth", "credits", "limit"}       # get an "Open console" button
 STICKY_KINDS = {"auth", "permission", "credits", "limit"}  # stay visible when opening until a call succeeds
 
@@ -152,28 +166,52 @@ class Agent:
         self._settings = settings or (lambda: AssistantSettings([]))  # without a setting: the default model
 
     def ask(self, message: str, history: list[dict]) -> Reply:
+        """The whole answer at once: ask_stream() read to the end."""
+        return next(value for kind, value in self.ask_stream(message, history) if kind == "reply")
+
+    def ask_stream(self, message: str, history: list[dict]) -> Iterator[tuple[str, Any]]:
+        """Sunny's answer as it comes: ("text", delta) for every piece of text, ("status", line) for
+        every tool in a tool round, and once at the end ("reply", Reply). After an API error the
+        reply carries the problem; any text streamed before it isn't part of that reply."""
         messages = trim_history(history) + [{"role": "user", "content": message}]
         actions: list[PendingAction] = []
+        texts: list[str] = []  # every text block of every round: the reply text is what was streamed
         response = None
         model = self._settings().model  # again with every message: a choice in Settings applies right away
         try:
             for _ in range(MAX_ROUNDS):
-                response = self._client.messages.create(
-                    model=model, max_tokens=MAX_TOKENS, output_config={"effort": EFFORT},
-                    system=system_blocks(self._data.now().date()), tools=TOOL_DEFINITIONS, messages=messages)
+                response = yield from self._round(model, messages, texts)
                 if response.stop_reason != "tool_use":
                     break
+                tools = [block for block in response.content if block.type == "tool_use"]
+                for block in tools:
+                    yield "status", TOOL_STATUS.get(block.name, DEFAULT_STATUS)
                 messages.append({"role": "assistant", "content": response.content})  # returned unchanged
-                messages.append({"role": "user", "content": [self._run(block, actions)
-                                                              for block in response.content
-                                                              if block.type == "tool_use"]})
+                messages.append({"role": "user", "content": [self._run(block, actions) for block in tools]})
         except anthropic.APIError as exc:  # everything from the SDK: status, connection and timeout errors
             problem = classify(exc)
-            return Reply(problem.text, actions, problem)
+            yield "reply", Reply(problem.text, actions, problem)
+            return
+        yield "reply", self._reply(response, "\n".join(texts).strip(), actions)
 
+    def _round(self, model: str, messages: list, texts: list[str]):
+        """One call to the API, streamed. Yields the text deltas, returns the final message."""
+        with self._client.messages.stream(
+                model=model, max_tokens=MAX_TOKENS, output_config={"effort": EFFORT},
+                system=system_blocks(self._data.now().date()), tools=TOOL_DEFINITIONS, messages=messages) as stream:
+            for event in stream:
+                if event.type == "content_block_start" and event.content_block.type == "text" and texts:
+                    yield "text", "\n"  # a new text block: the same line break as in the reply text
+                elif event.type == "text":
+                    yield "text", event.text
+            response = stream.get_final_message()
+        texts += [b.text for b in response.content if b.type == "text"]
+        return response
+
+    @staticmethod
+    def _reply(response, text: str, actions: list[PendingAction]) -> Reply:
         if response.stop_reason == "refusal":
             return Reply("That's not something I'll help with.", actions)
-        text = "\n".join(b.text for b in response.content if b.type == "text").strip()
         if response.stop_reason == "tool_use":
             text = text or "That took me too many steps. Say it a bit simpler?"
         elif not text:

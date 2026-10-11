@@ -11,11 +11,23 @@
   {% endif %}
   {% for item in entries %}{{ sunny.entry(item) }}{% endfor %}
 </div>
-<p id="sunny-typing" class="sunny-typing" aria-live="polite">Sunny is lurking in the shadows…</p>
-<form id="sunny-form" class="sunny-form" hx-post="/ui/assistant/message" hx-target="#sunny-log" hx-swap="beforeend"
-      hx-indicator="#sunny-typing" hx-disabled-elt="find input, find button" autocomplete="off">
-  <input id="sunny-input" class="input" name="message" maxlength="2000" required
+{# trackly.js sends the form itself (fetch + NDJSON, see /ui/assistant/stream) and uses these two pieces:
+   the bubble while Sunny is busy, and the balloon for a connection that drops halfway. #}
+<template id="sunny-thinking">
+  <div class="sunny-msg from-sunny sunny-live" aria-live="polite">
+    <span class="sunny-stream-text"></span>
+    <span class="sunny-thinking">
+      <span class="sunny-thinking-flame">{{ ui.icon('sunny', 20) }}</span>
+      <span class="sunny-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="sunny-thinking-line">Sunny is lurking in the shadows…</span>
+    </span>
+  </div>
+</template>
+<template id="sunny-offline">{{ sunny.problem(offline, retry_text="…") }}</template>
+<form id="sunny-form" class="sunny-form" autocomplete="off">
+  <input id="sunny-input" class="input" name="message" maxlength="2000"
          placeholder="Ask or log something…" aria-label="Message to Sunny" enterkeyhint="send">
-  <button class="btn btn-primary btn-sm sunny-send" aria-label="Send">{{ ui.icon('send', 16) }}</button>
+  <button class="btn btn-primary btn-sm sunny-send" aria-label="Send">{{ ui.icon('send', 16) }}<span
+          class="sunny-spinner" aria-hidden="true"></span></button>
 </form>
 {% endif %}

@@ -240,7 +240,7 @@ def test_an_api_error_is_a_friendly_reply(data):
         def __init__(self):
             self.messages = self
 
-        def create(self, **request):
+        def stream(self, **request):
             raise anthropic.APIConnectionError(request=httpx2.Request("POST", "https://api.anthropic.com"))
 
     reply = Agent(Broken(), data).ask("hi", [])

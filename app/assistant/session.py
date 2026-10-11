@@ -10,6 +10,7 @@ import logging
 import threading
 import uuid
 from dataclasses import dataclass, field
+from typing import Any, Iterator
 
 from ..domain import DomainError
 from .agent import Agent, SunnyProblem, make_client
@@ -95,9 +96,22 @@ class Sunny:
     def send(self, text: str, retry: bool) -> list[dict]:
         """A message from Progen; returns the new entries. With retry (Try again) the message
         is already in the conversation."""
+        return next(value for kind, value in self.send_stream(text, retry) if kind == "entries")
+
+    def send_stream(self, text: str, retry: bool) -> Iterator[tuple[str, Any]]:
+        """The same as send(), as it comes: the agent's ("text", delta) and ("status", line) events,
+        and at the end ("entries", the new entries)."""
         with self._lock:
             history = list(self.history)
-        reply = Agent(self.client, self.data, self.settings.settings).ask(text, history)  # outside the lock
+        reply = None
+        for kind, value in Agent(self.client, self.data, self.settings.settings).ask_stream(text, history):
+            if kind == "reply":
+                reply = value
+            else:
+                yield kind, value  # outside the lock: Confirm, Cancel and New chat keep working
+        yield "entries", self._remember(text, retry, reply)
+
+    def _remember(self, text: str, retry: bool, reply) -> list[dict]:
         with self._lock:
             if not retry:
                 self.entries.append({"kind": "user", "text": text})

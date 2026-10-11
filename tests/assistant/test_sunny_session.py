@@ -3,7 +3,7 @@ import datetime as dt
 import threading
 
 import pytest
-from fakes import FakeClient, response, text
+from fakes import FakeClient, FakeStream, response, text
 from fastapi.testclient import TestClient
 
 import app.clock as clock
@@ -75,10 +75,10 @@ class SlowClient:
         self.thinking = threading.Event()
         self.release = threading.Event()
 
-    def create(self, **request):
+    def stream(self, **request):
         self.thinking.set()
         assert self.release.wait(5), "the test never released the slow client"
-        return response(text("Took my time."))
+        return FakeStream(response(text("Took my time.")))
 
 
 def test_confirm_cancel_and_new_chat_work_while_sunny_thinks(app):

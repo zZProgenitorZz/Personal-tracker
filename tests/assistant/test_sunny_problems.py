@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import anthropic
 import httpx2
 import pytest
-from fakes import FakeClient, response, text, tool
+from fakes import FakeClient, response, say, text, tool
 from fastapi.testclient import TestClient
 
 import app.clock as clock
@@ -67,7 +67,7 @@ class Raises:
         self.error = error
         self.messages = self
 
-    def create(self, **request):
+    def stream(self, **request):
         raise self.error
 
 
@@ -133,28 +133,26 @@ def app_and_client(monkeypatch):
 def test_a_problem_is_a_warning_bubble_with_console_and_try_again(app_and_client):
     app, client = app_and_client
     app.state.sunny.client = Raises(CASES[2][1])  # out of credit
-    reply = client.post("/ui/assistant/message", data={"message": "how many chapters?"})
-    assert reply.status_code == 200
-    html = reply.text
+    html = say(client, "how many chapters?")
     assert "sunny-problem" in html and "I&#39;m out of credits" in html
     assert 'href="https://console.anthropic.com"' in html and 'target="_blank"' in html and "Open console" in html
-    assert "Try again" in html and '"message": "how many chapters?"' in html and '"retry": "1"' in html
+    assert "Try again" in html and 'data-sunny-retry="how many chapters?"' in html
     assert "how many chapters?" in client.get("/ui/assistant").text  # the message stays in the conversation
 
 
 def test_rate_and_offline_have_no_console_link(app_and_client):
     app, client = app_and_client
     app.state.sunny.client = Raises(connection_error())
-    html = client.post("/ui/assistant/message", data={"message": "hi"}).text
+    html = say(client, "hi")
     assert "Is the internet on?" in html and "Open console" not in html and "Try again" in html
 
 
 def test_try_again_does_not_repeat_the_message_in_the_chat(app_and_client):
     app, client = app_and_client
     app.state.sunny.client = Raises(connection_error())
-    client.post("/ui/assistant/message", data={"message": "hi"})
+    say(client, "hi")
     app.state.sunny.client = FakeClient(response(text("Hello, Progen.")))
-    client.post("/ui/assistant/message", data={"message": "hi", "retry": "1"})
+    say(client, "hi", retry=True)
     log = client.get("/ui/assistant").text
     assert log.count('class="sunny-msg from-user">hi<') == 1 and "Hello, Progen." in log
 
@@ -162,18 +160,18 @@ def test_try_again_does_not_repeat_the_message_in_the_chat(app_and_client):
 def test_key_or_credit_problem_shows_when_opening_until_a_call_works(app_and_client):
     app, client = app_and_client
     app.state.sunny.client = Raises(CASES[0][1])  # key expired
-    client.post("/ui/assistant/message", data={"message": "hi"})
+    say(client, "hi")
     opened = client.get("/ui/assistant").text
     assert "sunny-banner" in opened and "My key expired" in opened.split("sunny-banner", 1)[1]
     app.state.sunny.client = FakeClient(response(text("Back from the shadows.")))
-    client.post("/ui/assistant/message", data={"message": "hi again"})
+    say(client, "hi again")
     assert "sunny-banner" not in client.get("/ui/assistant").text
 
 
 def test_a_passing_problem_does_not_stick_when_opening(app_and_client):
     app, client = app_and_client
     app.state.sunny.client = Raises(connection_error())
-    client.post("/ui/assistant/message", data={"message": "hi"})
+    say(client, "hi")
     assert "sunny-banner" not in client.get("/ui/assistant").text
 
 
@@ -182,10 +180,10 @@ def test_confirm_still_works_after_a_problem(app_and_client):
     sid = client.get("/reading/library").json()[0]["series_id"]
     app.state.sunny.client = FakeClient(response(tool("set_reading_progress", {"series_id": sid, "chapter": 120})),
                                         response(text("Confirm it.")))
-    card = client.post("/ui/assistant/message", data={"message": "120"}).text
+    card = say(client, "120")
     proposal = card.split('id="sunny-card-', 1)[1].split('"', 1)[0]
     app.state.sunny.client = Raises(CASES[2][1])  # now the credit has run out
-    client.post("/ui/assistant/message", data={"message": "and 121?"})
+    say(client, "and 121?")
     confirmed = client.post(f"/ui/assistant/confirm/{proposal}")  # local: no API needed
     assert confirmed.headers["HX-Trigger"] == "reading-changed"
     assert client.get("/reading/library").json()[0]["current_chapter"] == 120

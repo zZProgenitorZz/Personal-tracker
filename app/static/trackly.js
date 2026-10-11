@@ -442,23 +442,116 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !document.querySelector("dialog[open]")) closeSunny();
 });
 
-// Show your own message right away; Sunny's answer comes below it when the server is done.
-document.addEventListener("htmx:beforeRequest", (event) => {
-  if (event.detail.elt.id !== "sunny-form") return;
-  const text = event.detail.elt.message.value.trim();
+// ---- Sunny: sending and the streamed answer ----
+// The form goes through fetch and reads /ui/assistant/stream line by line (NDJSON): text pieces,
+// status lines while a tool runs, and last the rendered entries. The input is cleared and keeps
+// focus at once; while an answer streams, Enter waits (the typed text stays for later).
+
+let sunnyBusy = false;
+
+function sunnyAtBottom() {
+  const log = el("sunny-log");
+  return !log || log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+}
+
+function sunnyBusyState(busy) {
+  sunnyBusy = busy;
+  el("sunny-form")?.classList.toggle("is-busy", busy);
+}
+
+function fromTemplate(id) {
+  return el(id).content.firstElementChild.cloneNode(true);
+}
+
+document.addEventListener("submit", (event) => {
+  if (event.target.id !== "sunny-form") return;
+  event.preventDefault();
+  if (sunnyBusy) return;  // one answer at a time; the text stays in the field
+  const input = el("sunny-input");
+  const text = input.value.trim();
   if (!text) return;
+  input.value = "";
+  input.focus();
   const bubble = document.createElement("div");
   bubble.className = "sunny-msg from-user";
   bubble.textContent = text;
   el("sunny-log").append(bubble);
   scrollSunny();
+  askSunny(text, false);
 });
 
-document.addEventListener("htmx:afterRequest", (event) => {
-  if (event.detail.elt.id !== "sunny-form") return;
-  event.detail.elt.reset();
-  setTimeout(() => el("sunny-input") && el("sunny-input").focus(), 0);
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-sunny-retry]");
+  if (!button || sunnyBusy) return;
+  // "fresh": the connection dropped before Progen kept the message, so it goes as a new one.
+  askSunny(button.dataset.sunnyRetry, !button.dataset.sunnyFresh);
+  el("sunny-input")?.focus();
 });
+
+async function askSunny(text, retry) {
+  const bubble = fromTemplate("sunny-thinking");
+  el("sunny-log").append(bubble);
+  scrollSunny();
+  sunnyBusyState(true);
+  let finished = false;
+  try {
+    const response = await fetch("/ui/assistant/stream", {
+      method: "POST",
+      headers: { "HX-Request": "true" },  // a change: the CSRF check wants to see it comes from the page
+      body: new URLSearchParams({ message: text, retry: retry ? "1" : "" }),
+    });
+    if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let end;
+      while ((end = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, end).trim();
+        buffer = buffer.slice(end + 1);
+        if (line) finished = sunnyLine(JSON.parse(line), bubble) || finished;
+      }
+    }
+    if (!finished) throw new Error("the answer stopped halfway");
+  } catch {
+    if (!finished) {
+      const problem = fromTemplate("sunny-offline");
+      const again = problem.querySelector("[data-sunny-retry]");
+      again.dataset.sunnyRetry = text;
+      again.dataset.sunnyFresh = "1";
+      bubble.replaceWith(problem);
+      scrollSunny();
+    }
+  } finally {
+    sunnyBusyState(false);
+  }
+}
+
+function sunnyLine(message, bubble) {
+  const follow = sunnyAtBottom();
+  const thinking = bubble.querySelector(".sunny-thinking");
+  if (message.t === "text") {
+    thinking.hidden = true;  // the answer has started; the flame comes back if a tool runs
+    bubble.querySelector(".sunny-stream-text").textContent += message.v;  // model text: never innerHTML
+  } else if (message.t === "status") {
+    thinking.hidden = false;
+    bubble.querySelector(".sunny-thinking-line").textContent = message.v;
+  } else if (message.t === "done") {
+    // The real entries, rendered by the server like everywhere else (cards, problems, escaping).
+    const holder = document.createElement("div");
+    holder.innerHTML = message.html;
+    const entries = [...holder.children];
+    bubble.replaceWith(...entries);
+    entries.forEach((entry) => htmx.process(entry));
+    scrollSunny();
+    return true;
+  }
+  if (follow) scrollSunny();  // only when you were already at the bottom
+  return false;
+}
 
 document.addEventListener("htmx:afterSwap", (event) => {
   if (["sunny-log", "sunny-body"].includes(event.detail.target.id) || event.detail.target.closest?.("#sunny-log")) {

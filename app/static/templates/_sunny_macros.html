@@ -21,9 +21,8 @@
     <div class="sunny-problem-actions">
       {% if p.console %}<a class="btn btn-ghost btn-sm" href="https://console.anthropic.com" target="_blank" rel="noopener">{{ ui.icon('arrow-right', 14) }}Open console</a>{% endif %}
       {% if retry_text %}
-      <button class="btn btn-ghost btn-sm" type="button" hx-post="/ui/assistant/message"
-              hx-vals='{{ {"message": retry_text, "retry": "1"}|tojson }}' hx-target="#sunny-log" hx-swap="beforeend"
-              hx-indicator="#sunny-typing" hx-disabled-elt="this">{{ ui.icon('refresh', 14) }}Try again</button>
+      {# trackly.js sends the message again through /ui/assistant/stream #}
+      <button class="btn btn-ghost btn-sm" type="button" data-sunny-retry="{{ retry_text }}">{{ ui.icon('refresh', 14) }}Try again</button>
       {% endif %}
     </div>
     {% endif %}

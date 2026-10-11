@@ -3,17 +3,29 @@
 Thin routes: read the input, let Sunny (session.py) do the work, render. Without ANTHROPIC_API_KEY
 the panel shows one tidy line instead of an error.
 """
+import json
+
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 
 from ..domain import DomainError
-from ..web import render, toast
-from .agent import api_key
+from ..web import render, templates, toast
+from .agent import PROBLEM_TEXTS, SunnyProblem, api_key
 from .commands import ChangeAssistantModel
 from .models import MODELS, model_by_id
 from .session import Outcome, Sunny
 
 CHANGED = "assistant-changed"
+# The panel shows this balloon itself when the connection to Progen drops halfway through an answer.
+OFFLINE = SunnyProblem("offline", PROBLEM_TEXTS["offline"])
+
+
+def _line(data: dict) -> str:
+    return json.dumps(data, ensure_ascii=False) + "\n"
+
+
+def _done(entries: list[dict]) -> str:
+    return _line({"t": "done", "html": templates.get_template("_sunny_entries.html").render(entries=entries)})
 
 
 def create_assistant_router(sunny: Sunny) -> APIRouter:
@@ -21,7 +33,7 @@ def create_assistant_router(sunny: Sunny) -> APIRouter:
 
     def body(request: Request):
         return render(request, "_sunny_body.html", available=sunny.client is not None, entries=sunny.entries,
-                      banner=sunny.standing_problem)
+                      banner=sunny.standing_problem, offline=OFFLINE)
 
     def result(request: Request, outcome: Outcome):
         response = render(request, "_sunny_result.html", proposal=outcome.proposal, note=outcome.note,
@@ -34,14 +46,24 @@ def create_assistant_router(sunny: Sunny) -> APIRouter:
     def show(request: Request):
         return body(request)
 
-    @router.post("/message")
-    def message(request: Request, message: str = Form(""), retry: str = Form("")):
-        """A message from Progen. With retry (the Try again button) the message is already in the conversation."""
+    @router.post("/stream")
+    def stream(message: str = Form(""), retry: str = Form("")):
+        """A message from Progen, answered as it comes: one JSON line per event (NDJSON),
+        {"t": "text"|"status", "v": ...}, and last {"t": "done", "html": the new entries, rendered as
+        everywhere}. With retry (the Try again button) the message is already in the conversation.
+        A POST, so the CSRF check applies: the panel sends HX-Request."""
         text = message.strip()
-        if sunny.client is None:
-            return render(request, "_sunny_entries.html", entries=[{"kind": "unavailable"}])
-        new = sunny.send(text, retry=bool(retry)) if text else []
-        return render(request, "_sunny_entries.html", entries=new)
+
+        def lines():
+            if sunny.client is None:
+                yield _done([{"kind": "unavailable"}])
+            elif not text:
+                yield _done([])
+            else:
+                for kind, value in sunny.send_stream(text, retry=bool(retry)):
+                    yield _done(value) if kind == "entries" else _line({"t": kind, "v": value})
+
+        return StreamingResponse(lines(), media_type="application/x-ndjson")
 
     @router.post("/confirm/{proposal_id}")
     def confirm(request: Request, proposal_id: str):
