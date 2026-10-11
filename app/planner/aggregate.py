@@ -53,7 +53,7 @@ class Plan:
     def add(self, plan_id: str, title: str, day: dt.date | None, time: dt.time | None,
             duration_min: int | None, note: str, repeat: Repeat | None) -> list:
         if self.exists:
-            raise DomainError("Dit plan bestaat al")
+            raise DomainError("This plan already exists")
         title = _title(title)
         _check_when(day, time)
         repeat = _checked_repeat(day, repeat)
@@ -63,7 +63,7 @@ class Plan:
         self._require_active()
         _check_when(day, time)
         if day is None and self.repeat is not None:
-            raise DomainError("Een herhaling heeft een datum nodig")
+            raise DomainError("A repeat needs a date")
         if self.repeat is not None:
             _checked_repeat(day, self.repeat)  # de einddatum mag niet vóór de nieuwe begindatum liggen
         if (day, time) == (self.day, self.time):
@@ -82,26 +82,26 @@ class Plan:
         self._require_active()
         if self.day is None:
             if self.done:  # Someday: af op de dag dat je hem afvinkt, maar maar één keer
-                raise DomainError(f"'{self.title}' is al af")
+                raise DomainError(f"'{self.title}' is already done")
         else:
             self._require_occurrence(on)
             if on in self.done:
-                raise DomainError(f"'{self.title}' is al af")
+                raise DomainError(f"'{self.title}' is already done")
         return self._record(PlanDone(self.plan_id, on))
 
     def reopen(self, on: dt.date) -> list:
         self._require_active()
         if on not in self.done:
-            raise DomainError(f"'{self.title}' is niet af")
+            raise DomainError(f"'{self.title}' isn't done")
         return self._record(PlanReopened(self.plan_id, on))
 
     def skip(self, on: dt.date) -> list:
         self._require_active()
         if self.repeat is None:
-            raise DomainError("Alleen een herhaling kun je één keer overslaan")
+            raise DomainError("Only a repeat can be skipped once")
         self._require_occurrence(on)
         if on in self.skipped:
-            raise DomainError("Die keer is al overgeslagen")
+            raise DomainError("That time is already skipped")
         return self._record(PlanSkipped(self.plan_id, on))
 
     def remove(self) -> list:
@@ -110,13 +110,13 @@ class Plan:
 
     def _require_active(self) -> None:
         if not self.exists:
-            raise DomainError("Onbekend plan")
+            raise DomainError("Unknown plan")
         if self.removed:
-            raise DomainError(f"'{self.title}' is verwijderd")
+            raise DomainError(f"'{self.title}' was removed")
 
     def _require_occurrence(self, on: dt.date) -> None:
         if not occurs_on(self.day, self.repeat, on) or on in self.skipped:
-            raise DomainError(f"'{self.title}' valt niet op {on:%d-%m-%Y}")
+            raise DomainError(f"'{self.title}' doesn't fall on {on:%d-%m-%Y}")
 
     def _record(self, event) -> list:
         self._apply(event)
@@ -126,18 +126,18 @@ class Plan:
 def _title(title: str) -> str:
     title = title.strip()
     if not title:
-        raise DomainError("Een plan heeft een titel nodig")
+        raise DomainError("A plan needs a title")
     return title
 
 
 def _check_when(day: dt.date | None, time: dt.time | None) -> None:
     if time is not None and day is None:
-        raise DomainError("Een tijd zonder datum kan niet: kies ook een dag")
+        raise DomainError("A time needs a date: pick a day too")
 
 
 def _duration(minutes: int | None) -> int | None:
     if minutes is not None and minutes <= 0:
-        raise DomainError("Een duur moet langer dan 0 minuten zijn")
+        raise DomainError("A duration must be longer than 0 minutes")
     return minutes or None
 
 
@@ -145,11 +145,11 @@ def _checked_repeat(day: dt.date | None, repeat: Repeat | None) -> Repeat | None
     if repeat is None:
         return None
     if day is None:
-        raise DomainError("Een herhaling heeft een datum nodig")
+        raise DomainError("A repeat needs a date")
     if any(not 0 <= d <= 6 for d in repeat.weekdays):
-        raise DomainError("Onbekende weekdag")
+        raise DomainError("Unknown weekday")
     if repeat.until is not None and repeat.until < day:
-        raise DomainError("Een herhaling kan niet eindigen voordat hij begint")
+        raise DomainError("A repeat can't end before it starts")
     return with_weekdays(day, Repeat(repeat.every, tuple(sorted(set(repeat.weekdays))), repeat.until))
 
 
@@ -172,7 +172,7 @@ class ReminderSettings:
                all_day_time: dt.time) -> list:
         for minutes in (first_minutes, second_minutes):
             if not 0 < minutes <= self.MAX_MINUTES:
-                raise DomainError("Een herinnering moet tussen 1 minuut en 14 dagen van tevoren zijn")
+                raise DomainError("A reminder must be between 1 minute and 14 days before")
         new = (bool(first_enabled), first_minutes, bool(second_enabled), second_minutes, all_day_time)
         if new == self.current:
             return []  # dezelfde instelling: geen event

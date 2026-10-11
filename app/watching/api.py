@@ -41,7 +41,7 @@ def create_watching_router(
     def entry_or_404(show_id: str):
         entry = watchlist.get(show_id)
         if entry is None:
-            raise HTTPException(status_code=404, detail="Titel niet gevonden")
+            raise HTTPException(status_code=404, detail="Title not found")
         return entry
 
     # Lezen: vragen aan de read models

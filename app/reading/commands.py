@@ -53,7 +53,7 @@ class ReadingCommandHandler:
     def handle(self, command) -> list:
         if isinstance(command, StartSeries):
             if self._library.find_by_title(command.title):
-                raise DomainError(f"'{command.title.strip()}' staat al in je bibliotheek")
+                raise DomainError(f"'{command.title.strip()}' is already in your library")
             series = ReadingSeries([])
             events = series.start(
                 str(uuid.uuid4()),

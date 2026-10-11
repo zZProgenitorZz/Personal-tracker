@@ -28,7 +28,7 @@ class AssistantSettings:
 
     def change(self, model: str) -> list:
         if model_by_id(model) is None:
-            raise DomainError(f"Onbekend model: {model}")
+            raise DomainError(f"Unknown model: {model}")
         if model == self.model:
             return []  # hetzelfde model: geen event
         self.stored = model

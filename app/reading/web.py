@@ -283,7 +283,7 @@ def create_reading_web_router(
         """Inhoud van het venster "Edit genres", met de huidige genres aangevinkt."""
         entry = library.get(series_id)
         if entry is None:
-            return toast(request, "Onbekende serie", error=True)
+            return toast(request, "Unknown series", error=True)
         return render(request, "_genre_editor.html", title=entry.title, options=GENRES, selected=entry.genres,
                       action=f"/ui/reading/series/{series_id}/genres")
 

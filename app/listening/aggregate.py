@@ -22,11 +22,11 @@ class Play:
 
     def record(self, command) -> list:
         if not command.track_id or not command.track_id.strip():
-            raise DomainError("Een play heeft een track_id nodig")
+            raise DomainError("A play needs a track_id")
         if command.duration_ms < 0:
-            raise DomainError("duration_ms kan niet negatief zijn")
+            raise DomainError("duration_ms can't be negative")
         if command.ms_played is not None and command.ms_played < 0:
-            raise DomainError("ms_played kan niet negatief zijn")
+            raise DomainError("ms_played can't be negative")
         if self.recorded:
             return []  # al bekend: de sync haalt bewust overlappende data op
         event = TrackPlayed(

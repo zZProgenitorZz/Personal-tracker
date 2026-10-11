@@ -361,3 +361,26 @@ def test_token_is_not_part_of_a_backup(app_client):
     client.post("/ui/backups")
     backups = [p for p in data.rglob("*") if "backups" in p.parts]
     assert backups and not any(p.name.startswith("spotify") for p in backups)
+
+
+def test_two_syncs_at_the_same_time_store_each_play_once(tmp_path, fake, clock, monkeypatch):
+    # The background sync, "Sync now" and the callback can overlap; the lock keeps them one at a time.
+    import threading
+    import time
+    fake.items = [item("2026-10-08T12:00:00.000Z", "Second", "spotify:track:2"),
+                  item("2026-10-08T11:56:00.000Z", "First")]
+    sync, _, store, _ = make_sync(tmp_path, fake, clock, VALID)
+    real_load = store.load_stream
+
+    def slow_load(stream_id):  # widen the window between "is it known?" and "store it"
+        events = real_load(stream_id)
+        time.sleep(0.05)
+        return events
+
+    monkeypatch.setattr(store, "load_stream", slow_load)
+    threads = [threading.Thread(target=sync.run) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(10)
+    assert sorted(p.track for p in store.load_type(TrackPlayed)) == ["First", "Second"]

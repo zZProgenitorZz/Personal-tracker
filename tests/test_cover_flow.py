@@ -155,7 +155,7 @@ def test_invalid_upload_does_not_block_saving(client):
 def test_rejected_series_leaves_no_cover_file(client, covers):
     add(client, cover_url=SOLO_1)
     response = add(client, title="solo leveling", cover_url=SOLO_2)
-    assert "staat al in je bibliotheek" in response.text
+    assert "is already in your library" in response.text
     assert len(list(covers.iterdir())) == 1
 
 

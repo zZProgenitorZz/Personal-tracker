@@ -1,5 +1,7 @@
 from ..domain import DomainError
-from .events import ShowAdded, ShowGenresChanged, ShowRemoved, ShowStatusChanged, WatchKind, WatchStatus
+from .events import (
+    WATCH_STATUS_LABELS, ShowAdded, ShowGenresChanged, ShowRemoved, ShowStatusChanged, WatchKind, WatchStatus,
+)
 from .genres import WATCH_GENRES
 
 
@@ -36,14 +38,14 @@ class WatchItem:
     def add(self, show_id: str, title: str, kind: WatchKind, status: WatchStatus = WatchStatus.WATCHING,
             cover: str | None = None, genres=()) -> list:
         if self.exists:
-            raise DomainError("Deze titel bestaat al")
+            raise DomainError("This title already exists")
         events = self._record(ShowAdded(show_id, title, kind, status, cover=cover))
         return events + self.set_genres(genres)
 
     def change_status(self, new_status: WatchStatus) -> list:
         self._require_active()
         if new_status is self.status:
-            raise DomainError(f"Status is al {new_status.value}")
+            raise DomainError(f"Already {WATCH_STATUS_LABELS[new_status]}")
         return self._record(ShowStatusChanged(self.show_id, self.status, new_status))
 
     def set_genres(self, genres) -> list:
@@ -51,7 +53,7 @@ class WatchItem:
         try:
             chosen = WATCH_GENRES.validated(genres)
         except ValueError as exc:
-            raise DomainError(f"Onbekend genre: {exc}") from exc
+            raise DomainError(f"Unknown genre: {exc}") from exc
         if chosen == self.genres:
             return []  # niets veranderd, dus ook geen event
         return self._record(ShowGenresChanged(self.show_id, chosen))
@@ -62,9 +64,9 @@ class WatchItem:
 
     def _require_active(self) -> None:
         if not self.exists:
-            raise DomainError("Onbekende titel")
+            raise DomainError("Unknown title")
         if self.removed:
-            raise DomainError(f"'{self.title}' is verwijderd")
+            raise DomainError(f"'{self.title}' was removed")
 
     def _record(self, event) -> list:
         self._apply(event)

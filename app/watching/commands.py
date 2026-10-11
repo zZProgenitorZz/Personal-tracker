@@ -48,7 +48,7 @@ class WatchingCommandHandler:
             title = command.title.strip()
             # Uniek per soort: Dune de film en Dune de serie mogen allebei.
             if self._watchlist.find(title, command.kind):
-                raise DomainError(f"'{title}' staat al in je lijst")
+                raise DomainError(f"'{title}' is already in your list")
             item = WatchItem([])
             events = item.add(str(uuid.uuid4()), title, command.kind, command.status, command.cover, command.genres)
         elif isinstance(command, ChangeShowStatus):

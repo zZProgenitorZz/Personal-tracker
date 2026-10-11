@@ -47,7 +47,7 @@ def create_reading_router(
     def entry_or_404(series_id: str):
         entry = library.get(series_id)
         if entry is None:
-            raise HTTPException(status_code=404, detail="Serie niet gevonden")
+            raise HTTPException(status_code=404, detail="Series not found")
         return entry
 
     # Lezen: vragen aan de read models

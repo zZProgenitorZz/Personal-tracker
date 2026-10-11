@@ -170,7 +170,7 @@ def create_watching_web_router(
     def edit_genres(request: Request, show_id: str):
         entry = watchlist.get(show_id)
         if entry is None:
-            return toast(request, "Onbekende titel", error=True)
+            return toast(request, "Unknown title", error=True)
         return render(request, "_genre_editor.html", title=entry.title, options=WATCH_GENRES.names,
                       selected=entry.genres, action=f"/ui/watching/shows/{show_id}/genres")
 

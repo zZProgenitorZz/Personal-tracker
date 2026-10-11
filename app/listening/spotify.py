@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import secrets
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -296,8 +297,15 @@ class ListeningSync:
         self._status_file = Path(status_file)
         self.interval_seconds = interval_seconds
         self._clock = clock
+        # The background sync, "Sync now" and the callback never run at the same time:
+        # otherwise two runs could both store the same play.
+        self._lock = threading.Lock()
 
     def run(self) -> SyncResult:
+        with self._lock:
+            return self._run()
+
+    def _run(self) -> SyncResult:
         latest = self._recent.latest_played_at()
         after_ms = int(latest.timestamp() * 1000) if latest else None
         try:

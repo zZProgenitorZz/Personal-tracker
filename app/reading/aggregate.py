@@ -1,5 +1,7 @@
 from ..domain import DomainError
-from .events import GenresChanged, Kind, ProgressLogged, SeriesRemoved, SeriesStarted, Status, StatusChanged
+from .events import (
+    STATUS_LABELS, GenresChanged, Kind, ProgressLogged, SeriesRemoved, SeriesStarted, Status, StatusChanged,
+)
 from .genres import validated
 
 
@@ -40,7 +42,7 @@ class ReadingSeries:
     def start(self, series_id: str, title: str, kind: Kind, source: str, start_chapter: float,
               cover: str | None = None, status: Status = Status.READING, genres=()) -> list:
         if self.exists:
-            raise DomainError("Deze serie bestaat al")
+            raise DomainError("This series already exists")
         events = self._record(SeriesStarted(series_id, title, kind, source, start_chapter, cover=cover))
         # Een serie begint altijd als Reading; een andere beginstatus is een gewone statuswijziging.
         if status is not Status.READING:
@@ -51,7 +53,7 @@ class ReadingSeries:
     def log_progress(self, chapter: float) -> list:
         self._require_active()
         if chapter < 0:
-            raise DomainError("Hoofdstuk kan niet negatief zijn")
+            raise DomainError("A chapter can't be negative")
         events = []
         if self.status is not Status.READING:
             events += self._record(StatusChanged(self.series_id, self.status, Status.READING))
@@ -61,7 +63,7 @@ class ReadingSeries:
     def change_status(self, new_status: Status) -> list:
         self._require_active()
         if new_status is self.status:
-            raise DomainError(f"Status is al {new_status.value}")
+            raise DomainError(f"Already {STATUS_LABELS[new_status]}")
         return self._record(StatusChanged(self.series_id, self.status, new_status))
 
     def set_genres(self, genres) -> list:
@@ -69,7 +71,7 @@ class ReadingSeries:
         try:
             chosen = validated(genres)
         except ValueError as exc:
-            raise DomainError(f"Onbekend genre: {exc}") from exc
+            raise DomainError(f"Unknown genre: {exc}") from exc
         if chosen == self.genres:
             return []  # niets veranderd, dus ook geen event
         return self._record(GenresChanged(self.series_id, chosen))
@@ -80,9 +82,9 @@ class ReadingSeries:
 
     def _require_active(self) -> None:
         if not self.exists:
-            raise DomainError("Onbekende serie")
+            raise DomainError("Unknown series")
         if self.removed:
-            raise DomainError(f"'{self.title}' is verwijderd")
+            raise DomainError(f"'{self.title}' was removed")
 
     def _record(self, event) -> list:
         self._apply(event)

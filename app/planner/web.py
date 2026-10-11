@@ -197,7 +197,7 @@ def create_planner_web_router(handler: PlannerCommandHandler, agenda: AgendaProj
     def plan_dialog(request: Request, plan_id: str, on: str = ""):
         plan = agenda.get(plan_id)
         if plan is None:
-            return toast(request, "Onbekend plan", error=True)
+            return toast(request, "Unknown plan", error=True)
         shown = parse_day(on, plan.day or today())
         occurrence = Occurrence(plan, shown)
         when = "Someday" if plan.day is None else nice_day(shown, today())
