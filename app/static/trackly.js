@@ -1,26 +1,26 @@
-// De schil van Progen: navigatie, vensters, coverkiezer en toasts.
-// Alle data en acties lopen via htmx; dit script regelt alleen wat daaromheen zit.
+// Progen's shell: navigation, dialogs, cover picker and toasts.
+// All data and actions go through htmx; this script only handles what surrounds them.
 
 const el = (id) => document.getElementById(id);
 
 
-// ---- Navigatie via de hash, zodat terugknop en verversen werken ----
-// #home, #settings, #wrapped(/jaar), en per tracker #<tracker>, #<tracker>/library, #<tracker>/progress.
+// ---- Navigation through the hash, so the back button and refreshing work ----
+// #home, #settings, #wrapped(/year), and per tracker #<tracker>, #<tracker>/library, #<tracker>/progress.
 
-// Per tracker: de tekst van de knop "Add ..." (null = geen knop) en de tabbladen.
+// Per tracker: the text of the "Add ..." button (null = no button) and the tabs.
 const TRACKERS = {
   reading: { add: "Add series", tabs: ["dashboard", "library", "progress"] },
   watching: { add: "Add title", tabs: ["dashboard", "library", "progress"] },
-  listening: { add: null, tabs: ["dashboard", "history", "progress"] },  // plays komen uit Spotify
-  planner: { add: null, tabs: ["week", "upcoming", "day", "someday"] },  // invoeren gaat via het veld bovenaan
+  listening: { add: null, tabs: ["dashboard", "history", "progress"] },  // plays come from Spotify
+  planner: { add: null, tabs: ["week", "upcoming", "day", "someday"] },  // entry goes through the field at the top
 };
 const OLD_ADDRESSES = { dashboard: "reading", library: "reading/library", progress: "reading/progress" };
 
 function currentRoute() {
   let hash = location.hash.slice(1);
-  hash = OLD_ADDRESSES[hash] || hash;  // bladwijzers van vóór het startscherm blijven werken
+  hash = OLD_ADDRESSES[hash] || hash;  // bookmarks from before the home screen keep working
   const [section, given] = hash.split("/");
-  const tab = given || (TRACKERS[section] ? TRACKERS[section].tabs[0] : "");  // zonder tabblad: het eerste
+  const tab = given || (TRACKERS[section] ? TRACKERS[section].tabs[0] : "");  // without a tab: the first one
   if (TRACKERS[section] && TRACKERS[section].tabs.includes(tab)) return { section, tab, url: `/ui/${section}/${tab}` };
   if (section === "settings") return { section, url: "/ui/settings" };
   if (section === "wrapped") {  // #wrapped, #wrapped/2025, #wrapped/2025/compare
@@ -45,12 +45,12 @@ function showPage() {
     link.toggleAttribute("aria-current", active);
   });
 
-  // De knop "Add ..." hoort bij de tracker waar je bent.
+  // The "Add ..." button belongs to the tracker you are on.
   const tracker = TRACKERS[route.section];
   document.querySelector(".nav-add").hidden = !(tracker && tracker.add);
   if (tracker && tracker.add) el("nav-add-label").textContent = tracker.add;
 
-  const onSettings = route.section === "settings";  // Sunny is er overal behalve op Settings
+  const onSettings = route.section === "settings";  // Sunny is everywhere except on Settings
   el("sunny-fab").hidden = onSettings;
   if (onSettings) closeSunny();
 
@@ -58,7 +58,7 @@ function showPage() {
   document.title = `${name}${route.tab && route.tab !== tracker.tabs[0] ? " · " + route.tab : ""} · Progen`;
 
   htmx.ajax("GET", route.url, { target: "#page", swap: "innerHTML" }).then(() => {
-    // Alleen bij navigeren animeren, niet bij het verversen na een actie.
+    // Only animate when navigating, not when refreshing after an action.
     main.classList.add("entering");
     setTimeout(() => main.classList.remove("entering"), 800);
     window.scrollTo({ top: 0 });
@@ -69,7 +69,7 @@ window.addEventListener("hashchange", showPage);
 document.addEventListener("DOMContentLoaded", showPage);
 
 
-// ---- Vensters ----
+// ---- Dialogs ----
 
 function openAddForm() {
   const tracker = currentTracker();
@@ -87,24 +87,24 @@ document.addEventListener("click", (event) => {
   } else if (event.target.closest("[data-close-dialog]")) {
     event.target.closest("dialog").close();
   } else if (event.target.tagName === "DIALOG") {
-    event.target.close(); // klik op de achtergrond
+    event.target.close(); // click on the backdrop
   }
 });
 
-// De server stuurt een van deze events mee als een actie gelukt is.
-for (const changed of ["reading-changed", "watching-changed", "planner-changed"]) {  // listening heeft geen formulier
+// The server sends one of these events along when an action succeeded.
+for (const changed of ["reading-changed", "watching-changed", "planner-changed"]) {  // listening has no form
   document.addEventListener(changed, () => {
     if (el("add-dialog").open) {
       el("add-dialog").close();
       resetObjectUrl();
     }
     el("genre-dialog").close();
-    el("pick-dialog").close();  // na Start
-    el("plan-dialog").close();  // na een actie in een plan
+    el("pick-dialog").close();  // after Start
+    el("plan-dialog").close();  // after an action in a plan
   });
 }
 
-// "Edit genres" in het ⋯-menu laadt het formulier in #genre-editor; dan het venster openen.
+// "Edit genres" in the ⋯ menu loads the form into #genre-editor; then open the dialog.
 document.addEventListener("htmx:afterSwap", (event) => {
   if (event.detail.target.id === "genre-editor") el("genre-dialog").showModal();
   if (event.detail.target.id === "pick-slot" && !el("pick-dialog").open) el("pick-dialog").showModal();
@@ -112,16 +112,16 @@ document.addEventListener("htmx:afterSwap", (event) => {
 });
 
 
-// ---- Cover kiezen in het formulier ----
-// Drie bronnen: zoeken (htmx vult #cover-preview), een upload of een geplakte
-// link. Er is altijd maar één bron actief. De server doet de echte controle en
-// het opslaan; dit is alleen de preview. Het formulier wordt steeds opnieuw
-// geladen, daarom luisteren we op document in plaats van op de velden zelf.
+// ---- Choosing a cover in the form ----
+// Three sources: search (htmx fills #cover-preview), an upload or a pasted
+// link. Only one source is ever active. The server does the real check and
+// the saving; this is only the preview. The form is loaded again and again,
+// so we listen on document instead of on the fields themselves.
 
 const MAX_COVER_BYTES = 5 * 1024 * 1024;
 const COVER_HINT = "Search for a cover by title, upload an image, or paste a link.";
 const GENRE_HINT = "optional · found covers fill these in";
-let coverSkips = 0;   // hoeveel zoekresultaten op rij niet laadden
+let coverSkips = 0;   // how many search results in a row didn't load
 let objectUrl = null;
 
 function setCaption(text, isError = false) {
@@ -166,9 +166,9 @@ function coverTitle() {
   return el("item-title").value.trim() || "this title";
 }
 
-// Genres die bij een gevonden cover horen, alvast aanvinken in het formulier.
-// Zelf aangevinkte of uitgezette genres blijven zoals jij ze zette; alleen de
-// vorige suggestie wordt vervangen als je naar de volgende cover bladert.
+// Checks the genres that go with a found cover in the form ahead of time.
+// Genres you checked or unchecked yourself stay as you set them; only the
+// previous suggestion is replaced when you browse to the next cover.
 function suggestGenres(genres) {
   for (const box of document.querySelectorAll("#add-dialog [name=genres]")) {
     if (box.dataset.touched) continue;
@@ -183,7 +183,7 @@ function resetGenres() {
   el("genre-hint").textContent = GENRE_HINT;
 }
 
-// Zoekresultaat geladen: deze telt.
+// Search result loaded: this one counts.
 function coverLoaded(img) {
   coverSkips = 0;
   suggestGenres(img && img.dataset.genres ? img.dataset.genres.split(",") : []);
@@ -192,7 +192,7 @@ function coverLoaded(img) {
   el("cover-clear").hidden = false;
 }
 
-// Zoekresultaat laadt niet: sla hem over, maar ga hooguit één ronde rond.
+// Search result doesn't load: skip it, but go around at most once.
 function coverFailed(img) {
   const total = Number(img.dataset.coverTotal);
   img.remove();
@@ -238,7 +238,7 @@ document.addEventListener("change", (event) => {
   }
 });
 
-// Een andere titel betekent andere zoekresultaten: de oude vervallen.
+// Another title means other search results: the old ones expire.
 document.addEventListener("input", (event) => {
   if (event.target.id === "item-title" && el("cover-preview").querySelector("[name=cover_url]")) {
     clearSearch();
@@ -252,7 +252,7 @@ document.addEventListener("click", (event) => {
 });
 
 
-// ---- Optiemenu op een kaart ----
+// ---- Options menu on a card ----
 
 function closeMenus(except) {
   document.querySelectorAll("details.card-menu[open]").forEach((menu) => {
@@ -270,10 +270,10 @@ document.addEventListener("keydown", (event) => {
 });
 
 
-// ---- Bevestigen voor iets ingrijpends ----
-// Een knop met hx-confirm="<naam>" vraagt eerst om bevestiging in een eigen
-// venster; data-confirm-kind kiest de tekst. Annuleren is de standaard:
-// Enter of Escape doet niets.
+// ---- Confirming something drastic ----
+// A button with hx-confirm="<name>" first asks for confirmation in a dialog of
+// its own; data-confirm-kind picks the text. Cancel is the default:
+// Enter or Escape does nothing.
 
 const CONFIRM_TEXTS = {
   remove: {
@@ -315,7 +315,7 @@ document.addEventListener("htmx:confirm", (event) => {
   event.preventDefault();
   const text = CONFIRM_TEXTS[event.detail.elt.dataset.confirmKind] || CONFIRM_TEXTS.remove;
   el("confirm-title").textContent = text.title(event.detail.question);
-  el("confirm-body").innerHTML = text.body;  // vaste tekst hierboven, geen invoer van buiten
+  el("confirm-body").innerHTML = text.body;  // fixed text above, no input from outside
   el("confirm-action").textContent = text.action;
   confirmed = () => event.detail.issueRequest(true);
   const d = el("confirm-dialog");
@@ -330,8 +330,8 @@ el("confirm-dialog").addEventListener("close", (event) => {
 
 
 // ---- Gathering dust: "Not now" ----
-// Verbergt een titel alleen in deze weergave: geen event, niets opgeslagen. Het dashboard
-// ververst na elke actie; deze lijst houdt de verborgen titels verborgen tot je de pagina herlaadt.
+// Hides a title only in this view: no event, nothing saved. The dashboard
+// refreshes after every action; this list keeps the hidden titles hidden until you reload the page.
 
 const dustHidden = new Set();
 
@@ -356,8 +356,8 @@ document.addEventListener("click", (event) => {
 document.addEventListener("htmx:afterSwap", () => hideDust(document));
 
 
-// ---- Planner: na "Add" kun je meteen het volgende plan typen ----
-// De pagina ververst na elke wijziging; stond de cursor in het invoerveld, dan komt hij terug.
+// ---- Planner: after "Add" you can type the next plan right away ----
+// The page refreshes after every change; if the cursor was in the input field, it comes back.
 
 let planTextHadFocus = false;
 document.addEventListener("planner-changed", () => {
@@ -371,8 +371,8 @@ document.addEventListener("htmx:afterSwap", () => {
 });
 
 
-// ---- Planner · Upcoming: zoeken in de lijst (alleen in de browser) ----
-// Verbergt plannen die niet passen, en groepen die daardoor leeg raken. Blijft staan na een verversing.
+// ---- Planner · Upcoming: searching the list (only in the browser) ----
+// Hides plans that don't match, and groups that become empty because of it. Stays after a refresh.
 
 let upcomingQuery = "";
 
@@ -402,8 +402,8 @@ document.addEventListener("input", (event) => {
 document.addEventListener("htmx:afterSwap", filterUpcoming);
 
 
-// ---- Sunny: het paneel ----
-// Het gesprek staat op de server (in het geheugen), dus het blijft staan als je van pagina wisselt.
+// ---- Sunny: the panel ----
+// The conversation lives on the server (in memory), so it stays when you switch pages.
 
 function openSunny() {
   const panel = el("sunny-panel");
@@ -438,11 +438,11 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
-  // Esc sluit het paneel, tenzij er een venster (dialog) open is: dat gaat eerst dicht.
+  // Esc closes the panel, unless a dialog is open: that closes first.
   if (event.key === "Escape" && !document.querySelector("dialog[open]")) closeSunny();
 });
 
-// Je eigen bericht meteen tonen; Sunny's antwoord komt er onder als de server klaar is.
+// Show your own message right away; Sunny's answer comes below it when the server is done.
 document.addEventListener("htmx:beforeRequest", (event) => {
   if (event.detail.elt.id !== "sunny-form") return;
   const text = event.detail.elt.message.value.trim();

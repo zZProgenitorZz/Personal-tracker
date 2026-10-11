@@ -1,5 +1,5 @@
-"""Het model van Sunny kies je in Settings. Opgeslagen als event, zoals de planner-herinneringen.
-Nep-client, nooit de echte API."""
+"""You choose Sunny's model in Settings. Stored as an event, like the planner reminders.
+Fake client, never the real API."""
 import datetime as dt
 import logging
 import re
@@ -25,7 +25,7 @@ APP = Path(__file__).resolve().parents[2] / "app"
 NOW = SimpleNamespace(now=lambda: dt.datetime(2026, 10, 11, 10, 0))
 
 
-# ---- De lijst ----
+# ---- The list ----
 
 def test_three_models_with_name_description_and_price():
     assert [(m.id, m.name, m.price) for m in MODELS] == [
@@ -47,7 +47,7 @@ def test_no_model_ids_are_hardcoded_outside_models_py():
     assert found == []
 
 
-# ---- Opslag ----
+# ---- Storage ----
 
 def store_with(*events):
     store = EventStore(":memory:", ALL_EVENT_TYPES)
@@ -74,7 +74,7 @@ def test_change_the_model_and_it_stays_after_reloading(tmp_path):
 def test_the_same_model_again_gives_no_event():
     store = store_with(AssistantSettingsChanged("claude-sonnet-5-5"))
     assert AssistantCommandHandler(store).handle(ChangeAssistantModel("claude-sonnet-5-5")) == []
-    assert AssistantCommandHandler(store).handle(ChangeAssistantModel(DEFAULT_MODEL))  # terug naar Haiku mag
+    assert AssistantCommandHandler(store).handle(ChangeAssistantModel(DEFAULT_MODEL))  # back to Haiku is allowed
 
 
 def test_an_unknown_model_is_refused():
@@ -103,7 +103,7 @@ def test_the_agent_sends_the_chosen_model_and_picks_up_a_change_at_once():
     assert all(call["output_config"] == {"effort": "low"} and call["max_tokens"] == 1024 for call in client.calls)
 
 
-# ---- Settings en het paneel ----
+# ---- Settings and the panel ----
 
 @pytest.fixture
 def client():
@@ -116,7 +116,7 @@ def test_settings_has_a_sunny_panel_with_every_model_and_the_current_one_chosen(
     panel = client.get("/ui/assistant/settings").text
     for model in MODELS:
         assert f'value="{model.id}"' in panel and model.name in panel and model.price in panel
-        assert str(escape(model.description)) in panel  # zoals Jinja het in de HTML zet
+        assert str(escape(model.description)) in panel  # the way Jinja puts it in the HTML
     assert re.search(r'value="claude-haiku-5-5"\s+checked', panel)
 
 
@@ -129,7 +129,7 @@ def test_choosing_a_model_saves_it_and_toasts(client):
 
 
 def test_the_model_change_goes_through_the_csrf_check():
-    plain = TestClient(create_app(":memory:"))  # zonder HX-Request: zoals een andere website
+    plain = TestClient(create_app(":memory:"))  # without HX-Request: like another website
     assert plain.post("/ui/assistant/model", data={"model": "claude-opus-5-5"}).status_code == 403
 
 

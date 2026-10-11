@@ -1,23 +1,23 @@
-"""Je Spotify-geschiedenis importeren uit de Extended streaming history (een automation-slice).
+"""Importing your Spotify history from the Extended streaming history (an automation slice).
 
-Spotify levert op aanvraag JSON-bestanden met alles wat je ooit luisterde. Elk nummer gaat
-als hetzelfde command als de live sync: RecordPlay, met source="export". De regels van de
-aggregate blijven zoals ze zijn. Deze slice voegt alleen plays toe die Progen nog niet heeft,
-ook in de periode van de live sync: zo vult een nieuwe export de gaten op die de sync miste
-(Spotify geeft de sync hooguit de laatste 50 nummers).
+On request, Spotify delivers JSON files with everything you ever listened to. Each track goes
+through the same command as the live sync: RecordPlay, with source="export". The aggregate's
+rules stay as they are. This slice only adds plays Progen doesn't have yet,
+also in the period of the live sync: that way a new export fills the gaps the sync missed
+(Spotify gives the sync at most the last 50 tracks).
 
-Te bedienen vanuit Settings (Import streaming history), of vanaf de opdrachtregel:
+Run it from Settings (Import streaming history), or from the command line:
 
-    python -m app.listening.export_import <bestanden of map> [--dry-run]
+    python -m app.listening.export_import <files or folder> [--dry-run]
 
-Wat er overgeslagen wordt:
-- records zonder spotify_track_uri: podcasts, audiobooks en lokale bestanden;
-- plays korter dan MIN_MS_PLAYED (30 s), de grens die Spotify zelf gebruikt voor een "stream";
-- plays die Progen al heeft: hetzelfde nummer binnen MATCH_WINDOW (30 s). De API geeft
-  milliseconden en de export hele seconden, en ze kunnen een paar seconden verschillen, dus
-  het bestaande "zelfde moment" is daarvoor niet genoeg.
-Van een record bewaren we alleen wat in TrackPlayed staat; ip_addr, platform, land en de rest
-gaan nergens heen. Een geüpload bestand wordt alleen gelezen, niet bewaard.
+What gets skipped:
+- records without spotify_track_uri: podcasts, audiobooks and local files;
+- plays shorter than MIN_MS_PLAYED (30 s), the limit Spotify itself uses for a "stream";
+- plays Progen already has: the same track within MATCH_WINDOW (30 s). The API gives
+  milliseconds and the export whole seconds, and they can differ by a few seconds, so
+  the existing "same moment" isn't enough for that.
+From a record we only keep what is in TrackPlayed; ip_addr, platform, country and the rest
+go nowhere. An uploaded file is only read, never stored.
 """
 import argparse
 import bisect
@@ -35,7 +35,7 @@ from .events import TrackPlayed
 
 MIN_MS_PLAYED = 30_000
 MATCH_WINDOW = timedelta(seconds=30)
-BATCH = 2_000  # plays per transactie: snel, en de sync en de app kunnen ertussendoor
+BATCH = 2_000  # plays per transaction: fast, and the sync and the app can get in between
 PROJECT = Path(__file__).resolve().parent.parent.parent
 
 REASONS = {
@@ -47,7 +47,7 @@ REASONS = {
 
 
 class ExportFileError(ValueError):
-    """Een bestand dat geen Spotify streaming history is. De melding noemt het bestand."""
+    """A file that isn't Spotify streaming history. The message names the file."""
 
 
 @dataclass(frozen=True)
@@ -57,7 +57,7 @@ class ExportFile:
 
 
 def read_export(name: str, data: bytes) -> ExportFile:
-    """Lees één exportbestand uit het geheugen. Herkent bestanden die er niet een zijn."""
+    """Reads one export file from memory. Recognizes files that aren't one."""
     try:
         records = json.loads(data.decode("utf-8-sig"))
     except (UnicodeDecodeError, ValueError):
@@ -70,9 +70,9 @@ def read_export(name: str, data: bytes) -> ExportFile:
 
 
 def to_command(record: dict) -> tuple[RecordPlay | None, str | None]:
-    """Eén record als RecordPlay, of (None, reden) als hij overgeslagen wordt."""
+    """One record as RecordPlay, or (None, reason) if it is skipped."""
     try:
-        played_at = as_utc(datetime.fromisoformat(record["ts"]))  # het moment dat het nummer stopte
+        played_at = as_utc(datetime.fromisoformat(record["ts"]))  # the moment the track stopped
         ms_played = int(record["ms_played"])
     except (KeyError, TypeError, ValueError):
         return None, "unreadable"
@@ -84,16 +84,16 @@ def to_command(record: dict) -> tuple[RecordPlay | None, str | None]:
     artist = record.get("master_metadata_album_artist_name")
     return RecordPlay(
         played_at=played_at, track_id=uri, track=record.get("master_metadata_track_name") or "",
-        artists=[artist] if artist else [],  # de export geeft maar één artiest
-        album=record.get("master_metadata_album_album_name") or "", album_id="",  # zit niet in de export
-        duration_ms=ms_played,  # de lengte zit niet in de export; minuten rekenen met ms_played
+        artists=[artist] if artist else [],  # the export only gives one artist
+        album=record.get("master_metadata_album_album_name") or "", album_id="",  # not in the export
+        duration_ms=ms_played,  # the length isn't in the export; minutes are counted with ms_played
         ms_played=ms_played, source="export",
     ), None
 
 
 class KnownPlays:
-    """Alle plays die Progen al heeft, per nummer de gesorteerde tijden: zo is "zelfde nummer binnen
-    30 seconden" snel te vinden, ook bij honderdduizenden plays."""
+    """All plays Progen already has, per track the sorted times: that way "same track within
+    30 seconds" is quick to find, even with hundreds of thousands of plays."""
 
     def __init__(self):
         self._times: dict[str, list[datetime]] = defaultdict(list)
@@ -104,7 +104,7 @@ class KnownPlays:
         for event in store.load_type(TrackPlayed):
             known._times[event.track_id].append(as_utc(event.played_at))
         for times in known._times.values():
-            times.sort()  # één keer sorteren is veel sneller dan elke play op zijn plek zetten
+            times.sort()  # sorting once is much faster than putting each play in its place
         return known
 
     def add(self, track_id: str, played_at: datetime) -> None:
@@ -120,10 +120,10 @@ class KnownPlays:
 
 @dataclass
 class Preview:
-    """Wat een import zou doen; er is nog niets opgeslagen."""
+    """What an import would do; nothing has been stored yet."""
     files: list[str] = field(default_factory=list)
     records: int = 0
-    commands: list[RecordPlay] = field(default_factory=list)  # de nieuwe plays, klaar om op te slaan
+    commands: list[RecordPlay] = field(default_factory=list)  # the new plays, ready to be stored
     skipped: Counter = field(default_factory=Counter)
     artists: Counter = field(default_factory=Counter)
     first: datetime | None = None
@@ -148,8 +148,8 @@ class Preview:
 
 
 def prepare(files: list[ExportFile], known: KnownPlays) -> Preview:
-    """Bepaal welke plays nieuw zijn. `known` wordt bijgewerkt, zodat dubbele in de export zelf
-    (ook verspreid over bestanden) maar één keer meetellen."""
+    """Decides which plays are new. `known` is updated, so duplicates within the export itself
+    (also spread over files) only count once."""
     preview = Preview(files=[f.name for f in files])
     for export in files:
         for record in export.records:
@@ -162,7 +162,7 @@ def prepare(files: list[ExportFile], known: KnownPlays) -> Preview:
                 continue
             known.add(command.track_id, command.played_at)
             preview.commands.append(command)
-            moment = command.played_at.astimezone()  # lokale tijd, zoals de rest van Listening
+            moment = command.played_at.astimezone()  # local time, like the rest of Listening
             preview.first = min(preview.first or moment, moment)
             preview.last = max(preview.last or moment, moment)
             preview.artists.update(command.artists)
@@ -172,9 +172,9 @@ def prepare(files: list[ExportFile], known: KnownPlays) -> Preview:
 
 def run_import(store: EventStore, commands: list[RecordPlay], progress=lambda done, total: None,
                batch: int = BATCH) -> int:
-    """Sla de plays op, `batch` per transactie. Elk RecordPlay gaat langs de aggregate (zelfde moment =
-    al bekend); de projecties horen het na elke portie (store.subscribe), dus geen herstart nodig.
-    Geeft het aantal opgeslagen plays terug."""
+    """Stores the plays, `batch` per transaction. Each RecordPlay goes through the aggregate (same moment =
+    already known); the projections hear about it after each portion (store.subscribe), so no restart is needed.
+    Returns the number of stored plays."""
     handler = ListeningCommandHandler(store)
     stored = 0
     for start in range(0, len(commands), batch):
@@ -186,7 +186,7 @@ def run_import(store: EventStore, commands: list[RecordPlay], progress=lambda do
     return stored
 
 
-# ---- Vanaf de opdrachtregel ----
+# ---- From the command line ----
 
 def export_paths(paths: list[str]) -> list[Path]:
     found = []

@@ -1,5 +1,5 @@
-"""Events van Listening. Klassenamen zijn uniek over alle domeinen heen, want de
-event store slaat alleen de klassenaam op."""
+"""Events of Listening. Class names are unique across all domains, because the
+event store only stores the class name."""
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -10,16 +10,16 @@ def now() -> datetime:
 
 @dataclass(frozen=True)
 class TrackPlayed:
-    played_at: datetime        # wanneer je het nummer luisterde (UTC)
-    track_id: str              # Spotify-URI, bv. spotify:track:...
+    played_at: datetime        # when you listened to the track (UTC)
+    track_id: str              # Spotify URI, e.g. spotify:track:...
     track: str
     artists: list[str]
     album: str
     album_id: str
-    duration_ms: int           # lengte van het nummer
-    ms_played: int | None = None  # hoe lang je echt luisterde; de API geeft dit niet, een export wel
-    source: str = "api"        # "api" (live sync) of "export" (export_import.py)
-    at: datetime = field(default_factory=now)  # wanneer Progen het vastlegde
+    duration_ms: int           # length of the track
+    ms_played: int | None = None  # how long you really listened; the API doesn't give this, an export does
+    source: str = "api"        # "api" (live sync) or "export" (export_import.py)
+    at: datetime = field(default_factory=now)  # when Progen recorded it
 
 
 EVENT_TYPES = [TrackPlayed]

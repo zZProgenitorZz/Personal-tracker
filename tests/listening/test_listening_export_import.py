@@ -1,4 +1,4 @@
-"""Spotify Extended streaming history importeren: de kern. Alleen nep-exportbestanden, nooit echte."""
+"""Importing the Spotify Extended streaming history: the core. Only fake export files, never real ones."""
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -31,7 +31,7 @@ def podcast(ts="2021-03-14T19:00:00Z"):
 
 
 def export_file(name, records):
-    """Zoals een geüpload bestand: naam en inhoud (bytes)."""
+    """Like an uploaded file: name and content (bytes)."""
     return name, json.dumps(records).encode("utf-8")
 
 
@@ -41,13 +41,13 @@ def store():
 
 
 def live_play(store, when, track_id="spotify:track:abc"):
-    """Een play van de live sync (API): tijd met milliseconden."""
+    """A play from the live sync (API): time with milliseconds."""
     ListeningCommandHandler(store).handle(RecordPlay(when, track_id, "Blinding Lights", ["The Weeknd"],
                                                      "After Hours", "alb1", 200_000))
 
 
 def import_files(store, *files):
-    """Voorbeeld + import, zoals Settings het doet. Geeft (voorbeeld, aantal opgeslagen) terug."""
+    """Preview + import, the way Settings does it. Returns (preview, number stored)."""
     preview = prepare([read_export(name, data) for name, data in files], KnownPlays.from_store(store))
     stored = run_import(store, preview.commands)
     return preview, stored
@@ -57,7 +57,7 @@ def plays(store):
     return store.load_type(TrackPlayed)
 
 
-# ---- Vertaling naar RecordPlay ----
+# ---- Translating into RecordPlay ----
 
 def test_a_record_becomes_the_existing_record_play():
     command, reason = to_command(record())
@@ -75,7 +75,7 @@ def test_nothing_else_from_the_export_is_stored(store):
 
 
 def test_minutes_use_the_real_listening_time():
-    # duration_ms = ms_played; alle minuten rekenen met ms_played (listened_ms), dus niets telt dubbel.
+    # duration_ms = ms_played; all minutes are counted with ms_played (listened_ms), so nothing counts twice.
     command, _ = to_command(record(ms=90_000))
     event = TrackPlayed(command.played_at, command.track_id, command.track, command.artists, command.album,
                         command.album_id, command.duration_ms, command.ms_played, command.source)
@@ -86,7 +86,7 @@ def test_minutes_use_the_real_listening_time():
     assert tracks.top(2021, 3)[0].minutes == 1.5 and recent.recent()[0].minutes == 1.5
 
 
-# ---- Wat overgeslagen wordt ----
+# ---- What gets skipped ----
 
 @pytest.mark.parametrize("bad, reason", [
     (podcast(), "no_track"),
@@ -113,26 +113,26 @@ def test_an_empty_export_file_is_fine():
     assert read_export("Streaming_History_Audio_2018.json", b"[]").records == []
 
 
-# ---- Dubbel: zelfde nummer binnen 30 seconden ----
+# ---- Duplicates: the same track within 30 seconds ----
 
 def test_a_play_the_sync_already_has_is_not_added_again(store):
-    live_play(store, datetime(2024, 5, 1, 12, 0, 2, 734000, tzinfo=UTC))  # API: milliseconden, net anders
+    live_play(store, datetime(2024, 5, 1, 12, 0, 2, 734000, tzinfo=UTC))  # API: milliseconds, slightly different
     preview, stored = import_files(store, export_file("a.json", [record(ts="2024-05-01T12:00:00Z")]))
     assert stored == 0 and preview.skipped == {"already_known": 1} and len(plays(store)) == 1
 
 
 def test_the_window_is_thirty_seconds_and_per_track(store):
-    live_play(store, datetime(2024, 5, 1, 11, 59, 59, 900000, tzinfo=UTC))  # API: met milliseconden
+    live_play(store, datetime(2024, 5, 1, 11, 59, 59, 900000, tzinfo=UTC))  # API: with milliseconds
     _, stored = import_files(store, export_file("a.json", [
-        record(ts="2024-05-01T12:00:29Z"),                                   # binnen 30 s: dubbel
-        record(ts="2024-05-01T12:00:00Z", uri="spotify:track:other"),        # ander nummer: nieuw
-        record(ts=(datetime(2024, 5, 1, 12, 0, 0) + MATCH_WINDOW).strftime("%Y-%m-%dT%H:%M:%SZ")),  # 30,1 s: nieuw
+        record(ts="2024-05-01T12:00:29Z"),                                   # within 30 s: duplicate
+        record(ts="2024-05-01T12:00:00Z", uri="spotify:track:other"),        # another track: new
+        record(ts=(datetime(2024, 5, 1, 12, 0, 0) + MATCH_WINDOW).strftime("%Y-%m-%dT%H:%M:%SZ")),  # 30.1 s: new
     ]))
     assert stored == 2
 
 
 def test_a_gap_in_the_live_sync_is_filled(store):
-    # De pc stond uit: de sync mist de plays van 2 mei. De export heeft ze wel.
+    # The PC was off: the sync missed the plays of 2 May. The export has them.
     live_play(store, datetime(2024, 5, 1, 20, 0, 0, 481000, tzinfo=UTC))
     live_play(store, datetime(2024, 5, 3, 20, 0, 1, 112000, tzinfo=UTC))
     _, stored = import_files(store, export_file("Streaming_History_Audio_2024.json", [
@@ -160,7 +160,7 @@ def test_duplicates_inside_the_export_count_once(store):
     assert stored == 1 and preview.skipped == {"already_known": 2}
 
 
-# ---- Voorbeeld ----
+# ---- Preview ----
 
 def test_preview_counts_without_storing(store):
     files = [read_export("Streaming_History_Audio_2020.json", json.dumps([
@@ -176,7 +176,7 @@ def test_preview_counts_without_storing(store):
     assert preview.top_artists(5) == [("A", 2), ("B", 1)]
 
 
-# ---- Opslaan: in porties, projecties live bijgewerkt ----
+# ---- Saving: in portions, projections updated live ----
 
 def test_import_stores_in_batches_with_progress_and_live_projections(store):
     recent = RecentlyPlayedProjection()
@@ -187,11 +187,11 @@ def test_import_stores_in_batches_with_progress_and_live_projections(store):
     progress = []
     stored = run_import(store, commands, progress=lambda done, total: progress.append((done, total)), batch=10)
     assert stored == 25 and progress == [(10, 25), (20, 25), (25, 25)]
-    assert len(recent.recent()) == 25  # zonder herstart zichtbaar
+    assert len(recent.recent()) == 25  # visible without a restart
 
 
 def test_a_play_that_arrived_meanwhile_is_still_not_doubled(store):
-    # Het voorbeeld is van vóór een sync; bij het opslaan gaat de aggregate-regel (zelfde moment) nog steeds voor.
+    # The preview is from before a sync; when saving, the aggregate rule (same moment) still wins.
     command, _ = to_command(record())
     ListeningCommandHandler(store).handle(command)
     assert run_import(store, [command]) == 0 and len(plays(store)) == 1

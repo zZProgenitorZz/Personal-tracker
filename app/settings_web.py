@@ -24,7 +24,7 @@ def create_settings_router(db_path: str, trackers: list[Tracker], backups: Backu
         counts = [(t, t.summary()) for t in trackers]
         return render(request, "settings.html", db_path=location, counts=counts, **backup_context())
 
-    # ---- Automatisch starten bij aanmelden in Windows ----
+    # ---- Starting automatically when you sign in to Windows ----
 
     @router.get("/autostart")
     def autostart_panel(request: Request):
@@ -33,7 +33,7 @@ def create_settings_router(db_path: str, trackers: list[Tracker], backups: Backu
 
     @router.post("/autostart")
     def set_autostart(request: Request, enabled: str = Form("")):
-        # Dat dit van de app zelf komt, controleert app/security.py voor alle wijzigingen.
+        # app/security.py checks for every change that it comes from the app itself.
         autostart = request.app.state.autostart
         try:
             autostart.enable() if enabled else autostart.disable()
@@ -63,7 +63,7 @@ def create_settings_router(db_path: str, trackers: list[Tracker], backups: Backu
             return toast(request, f"Restore failed: {exc}", error=True)
         return toast(
             request, f"Restored the backup from {nice_date(info.created)}",
-            # Eén back-up bevat alle trackers, dus alles ververst.
+            # One backup holds all trackers, so everything refreshes.
             changed=", ".join([*(t.changed_event for t in trackers), BACKUPS_CHANGED]),
         )
 

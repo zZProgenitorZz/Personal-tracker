@@ -1,6 +1,6 @@
 {% import "_macros.html" as ui %}
 {% import "_planner_macros.html" as pm %}
-{# Planner · Someday: plannen zonder datum. "Plan it" opent de dialog met datum en tijd. #}
+{# Planner · Someday: plans without a date. "Plan it" opens the dialog with date and time. #}
 <div class="page planner" hx-disinherit="*" hx-get="/ui/planner/someday"
      hx-trigger="planner-changed from:body" hx-swap="outerHTML">
   {{ ui.tracker_tabs('planner', 'someday', tabs) }}
@@ -36,7 +36,7 @@
   {% endif %}
 
   {% if done %}
-  {# Wat je uit Someday hebt afgevinkt; "Not done" zet het terug. #}
+  {# What you ticked off from Someday; "Not done" puts it back. #}
   <section class="someday-done" aria-label="Done">
     <h2 class="wrapped-sub">Done</h2>
     <ul class="someday-list">

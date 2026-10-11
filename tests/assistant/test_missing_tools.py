@@ -1,4 +1,4 @@
-"""De stukken die Sunny nodig had ("Tools still missing" in IDENTITY.md): elk met tests."""
+"""The pieces Sunny needed ("Tools still missing" in IDENTITY.md): each with tests."""
 import datetime as dt
 from datetime import datetime, timezone
 
@@ -20,7 +20,7 @@ def play(day, track="Song", artists=("A",), track_id=None):
     return TrackPlayed(when, track_id or f"spotify:track:{track}", track, list(artists), "Album", "a", 180_000, at=when)
 
 
-# ---- Top nummers en artiesten over een vrije periode ----
+# ---- Top tracks and artists over a free period ----
 
 def test_top_tracks_and_artists_between_two_dates():
     tracks, artists = TopTracksProjection(), TopArtistsProjection()
@@ -31,7 +31,7 @@ def test_top_tracks_and_artists_between_two_dates():
     top = tracks.between(dt.date(2026, 9, 1), dt.date(2026, 10, 15), limit=5)
     assert [(t.track, t.plays, t.minutes) for t in top] == [("One", 2, 6.0), ("Two", 1, 3.0)]
     assert artists.between(dt.date(2026, 9, 1), dt.date(2026, 10, 15), limit=5) == [("B", 3), ("A", 2)]
-    assert tracks.top(2026, 9) == tracks.between(dt.date(2026, 9, 1), dt.date(2026, 9, 30))  # per maand werkt nog
+    assert tracks.top(2026, 9) == tracks.between(dt.date(2026, 9, 1), dt.date(2026, 9, 30))  # per month still works
 
 
 def test_listening_api_takes_from_and_to_and_month_still_works():
@@ -57,7 +57,7 @@ def test_rewatching_is_a_status_and_counts_as_watching():
         activity.apply(e)
     assert [e.title for e in watchlist.currently_watching()] == ["Frieren"]
     activity.apply(ShowStatusChanged("1", WatchStatus.REWATCHING, WatchStatus.COMPLETED))
-    assert sum(activity.per_day().values()) == 1  # nog eens uitgekeken telt als afgerond
+    assert sum(activity.per_day().values()) == 1  # watched through again counts as finished
 
 
 def test_old_events_still_work():
@@ -70,12 +70,12 @@ def test_rewatching_shows_everywhere_statuses_are_shown():
     assert 'value="rewatching"' in client.get("/ui/watching/add-form").text
     assert 'value="rewatching"' in client.get("/ui/watching/library").text          # filter
     grid = client.get("/ui/watching/library/grid").text
-    assert "pill-rewatching" in grid and "Rewatching" in grid                    # badge en statusmenu
+    assert "pill-rewatching" in grid and "Rewatching" in grid                    # badge and status menu
     css = client.get("/static/trackly.css").text
     assert ".pill-rewatching" in css and ".segmented-6" in css
 
 
-# ---- Plannen in een periode ----
+# ---- Plans in a period ----
 
 def test_agenda_between_lists_every_time_in_a_period():
     gym = Repeat(Frequency.WEEKLY, (0, 3))

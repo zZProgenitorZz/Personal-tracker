@@ -1,5 +1,5 @@
 {% import "_macros.html" as ui %}
-{# Sunny: ballonnen en de kaart met voorgestelde acties. #}
+{# Sunny: balloons and the card with proposed actions. #}
 
 {% macro bubble(entry) -%}
 {% if entry.kind == "user" %}
@@ -11,7 +11,7 @@
 {% endif %}
 {%- endmacro %}
 
-{# Een probleem met de API van Anthropic: rustige waarschuwing, eventueel "Open console" en "Try again". #}
+{# A problem with Anthropic's API: a calm warning, possibly "Open console" and "Try again". #}
 {% macro problem(p, retry_text=none, banner=false) -%}
 <div class="sunny-msg from-sunny sunny-problem{% if banner %} sunny-banner{% endif %}" role="alert">
   <span class="sunny-problem-icon" aria-hidden="true">{{ ui.icon('alert', 15) }}</span>

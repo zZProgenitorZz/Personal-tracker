@@ -1,8 +1,8 @@
-"""Gedeelde onderdelen voor de htmx-webpagina: templates, filters en toasts.
+"""Shared parts of the htmx web page: templates, filters and toasts.
 
-De webpagina is een dunne laag bovenop dezelfde commands en read models als de
-JSON-API. Elk domein heeft een eigen web.py met routes die HTML-fragmenten
-teruggeven; deze module bevat wat ze delen.
+The web page is a thin layer on top of the same commands and read models as the
+JSON API. Each domain has its own web.py with routes that return HTML fragments;
+this module holds what they share.
 """
 import random
 import zlib
@@ -21,7 +21,7 @@ STATIC = Path(__file__).parent / "static"
 templates = Jinja2Templates(directory=STATIC / "templates")
 
 
-# ---- Filters voor in de templates ----
+# ---- Filters for the templates ----
 
 def chapter(value: float) -> str:
     """57.0 -> '57', 45.5 -> '45.5'"""
@@ -37,7 +37,7 @@ def ago(moment: datetime) -> str:
 
 
 def quiet_for(moment: datetime, now: datetime) -> str:
-    """Hoe lang iets al stil ligt, in gewone taal: '3 weeks ago', '2 months ago'."""
+    """How long something has been quiet, in plain words: '3 weeks ago', '2 months ago'."""
     days = (now - moment).days
     for unit, size, below in [("day", 1, 14), ("week", 7, 60), ("month", 30, 365), ("year", 365, None)]:
         if below is None or days < below:
@@ -46,26 +46,26 @@ def quiet_for(moment: datetime, now: datetime) -> str:
 
 
 def hue(text: str) -> int:
-    """Een vaste kleurtoon per titel, binnen het paars-tot-teal palet."""
+    """A fixed hue per title, within the purple-to-teal palette."""
     return 160 + zlib.crc32(text.lower().encode()) % 140
 
 
 def initials(title: str) -> str:
-    """'Lord of the Mysteries' -> 'LM': kleine woorden als 'of' tellen niet mee."""
+    """'Lord of the Mysteries' -> 'LM': small words like 'of' don't count."""
     words = [w for w in title.split() if w[:1].isalnum()]
     main = [w for w in words if w[0].isupper() or w[0].isdigit()] or words
     return "".join(w[0] for w in main[:2]).upper() or "?"
 
 
 def nice_date(moment: datetime, seconds: bool = False) -> str:
-    """'Mon 6 Oct 2026 · 21:05' (of '21:05:33' met seconds=True)"""
+    """'Mon 6 Oct 2026 · 21:05' (or '21:05:33' with seconds=True)"""
     time = f"{moment:%H:%M:%S}" if seconds else f"{moment:%H:%M}"
     return f"{moment:%a} {moment.day} {moment:%b %Y} · {time}"
 
 
 templates.env.filters.update(chapter=chapter, ago=ago, quiet_for=quiet_for, hue=hue, initials=initials, nice_date=nice_date)
 
-# Lijn-iconen (stijl van Lucide), te gebruiken via de macro ui.icon(naam).
+# Line icons (Lucide style), used through the macro ui.icon(name).
 ICONS = {
     "book": '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
     "image": '<rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
@@ -107,19 +107,19 @@ ICONS = {
     "alert":'<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
 }
 templates.env.globals["ICONS"] = ICONS
-# Welk icoon hoort bij welke soort (reading en watching samen).
+# Which icon goes with which kind (reading and watching together).
 templates.env.globals["KIND_ICONS"] = {"novel": "book", "manhwa": "image", "movie": "film", "series": "tv", "anime": "star"}
 
 
-# ---- Antwoorden ----
+# ---- Responses ----
 
 def render(request: Request, name: str, **context):
     return templates.TemplateResponse(request, name, context)
 
 
 def toast(request: Request, message: str, *, error: bool = False, changed: str | None = None):
-    """Een melding rechtsonder. Met `changed` krijgen de onderdelen van de
-    pagina die naar dat event luisteren een seintje om zich te verversen."""
+    """A message at the bottom right. With `changed`, the parts of the
+    page that listen for that event get a nudge to refresh themselves."""
     response = render(request, "_toast.html", message=message, error=error)
     response.headers["HX-Retarget"] = "#toasts"
     response.headers["HX-Reswap"] = "beforeend"
@@ -130,19 +130,19 @@ def toast(request: Request, message: str, *, error: bool = False, changed: str |
 
 @dataclass
 class Backlog:
-    """Plan to Read/Watch van één tracker, voor de knop "Pick something" in de Library."""
+    """One tracker's Plan to Read/Watch, for the "Pick something" button in the Library."""
     tracker: str                     # "reading": /ui/reading/pick
-    entries: list                    # alleen de titels in de backlog
+    entries: list                    # only the titles in the backlog
     item_id: Callable[[object], str]
-    status_url: str                  # met {} voor het id; Start stuurt de bestaande statuswijziging
-    start_status: str                # "reading" of "watching"
+    status_url: str                  # with {} for the id; Start sends the existing status change
+    start_status: str                # "reading" or "watching"
     start_label: str
     genre_order: list[str]
 
 
 def pick_from_backlog(request: Request, backlog: Backlog, exclude: str = "", genre: str = ""):
-    """Eén willekeurige titel uit de backlog, niet dezelfde als `exclude` (tenzij er maar één is).
-    Een hulp bij het kiezen: leest alleen, geen command of event."""
+    """One random title from the backlog, not the same as `exclude` (unless there is only one).
+    A help with choosing: only reads, no command or event."""
     matching = [e for e in backlog.entries if not genre or genre in e.genres]
     others = [e for e in matching if backlog.item_id(e) != exclude]
     pick = random.choice(others or matching) if matching else None
@@ -168,8 +168,8 @@ def cover_search_response(request: Request, cover_search, title: str, index: int
 
 
 def save_cover(covers: CoverStore, upload: UploadFile | None, link: str, found: str) -> str | None:
-    """Bewaar de gekozen cover lokaal. Volgorde: upload, geplakte link, zoekresultaat.
-    Gooit CoverError als het niet lukt."""
+    """Stores the chosen cover locally. Order: upload, pasted link, search result.
+    Raises CoverError if that fails."""
     if upload is not None and upload.filename:
         data = upload.file.read(MAX_BYTES + 1)
         if len(data) > MAX_BYTES:
@@ -184,16 +184,16 @@ def save_cover(covers: CoverStore, upload: UploadFile | None, link: str, found: 
 
 @dataclass(frozen=True)
 class Tracker:
-    """Wat het startscherm en Settings van een tracker moeten weten."""
-    key: str                       # "reading": adres #reading en /ui/reading/...
+    """What the home screen and Settings need to know about a tracker."""
+    key: str                       # "reading": address #reading and /ui/reading/...
     name: str                      # "Reading"
-    icon: str                      # naam uit ICONS
-    changed_event: str             # htmx-event na een wijziging, bv. "reading-changed"
-    summary: Callable[[], dict]    # {"stats": [(waarde, label)], "covers": [...], "current": [...],
+    icon: str                      # name from ICONS
+    changed_event: str             # htmx event after a change, e.g. "reading-changed"
+    summary: Callable[[], dict]    # {"stats": [(value, label)], "covers": [...], "current": [...],
                                    #  "count": int, "unit": "series"}
 
 
-# ---- Pagina's die niet bij één domein horen ----
+# ---- Pages that don't belong to one domain ----
 
 def create_home_router(trackers: list[Tracker], wrapped: Callable[[], dict] | None = None) -> APIRouter:
     router = APIRouter(prefix="/ui", include_in_schema=False)

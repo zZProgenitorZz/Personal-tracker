@@ -1,4 +1,4 @@
-"""Planner als webpagina (#planner), op het startscherm, in Settings en als .ics. Vaste klok, geen netwerk."""
+"""Planner as a web page (#planner), on the home screen, in Settings and as .ics. Fixed clock, no network."""
 import datetime as dt
 
 import pytest
@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 import app.clock as clock
 from app.main import create_app
 
-NOW = dt.datetime(2026, 10, 8, 10, 0)  # donderdag
+NOW = dt.datetime(2026, 10, 8, 10, 0)  # Thursday
 
 
 @pytest.fixture
@@ -26,7 +26,7 @@ def plan_id(client, title):
     return next(p["plan_id"] for p in client.get("/planner/plans").json() if p["title"] == title)
 
 
-# ---- Snel invoeren ----
+# ---- Quick entry ----
 
 def test_quick_add_parses_the_text_and_announces_the_change(client):
     response = add(client, "Tandarts vr 14u")
@@ -90,7 +90,7 @@ def test_someday_lists_plans_without_a_date(client):
     assert "Learn Korean" not in client.get("/ui/planner/week").text
 
 
-# ---- De dialog van een plan ----
+# ---- A plan's dialog ----
 
 def test_dialog_has_the_actions(client):
     add(client, "Tandarts vr 14u")
@@ -125,10 +125,10 @@ def test_done_reopen_skip_reschedule_edit_and_remove(client):
 def test_refused_actions_give_an_error_toast(client):
     add(client, "Tandarts vr 14u")
     pid = plan_id(client, "Tandarts")
-    response = client.post(f"/ui/planner/plans/{pid}/done", data={"on": "2026-10-10"})  # valt niet op za
+    response = client.post(f"/ui/planner/plans/{pid}/done", data={"on": "2026-10-10"})  # doesn't fall on Sat
     assert "toast-error" in response.text
     same = client.post(f"/ui/planner/plans/{pid}/reschedule", data={"day": "2026-10-09", "time": "14:00"})
-    assert "HX-Trigger" not in same.headers and "toast-error" not in same.text  # niets veranderd
+    assert "HX-Trigger" not in same.headers and "toast-error" not in same.text  # nothing changed
 
 
 def test_plan_it_from_someday_and_back(client):
@@ -140,7 +140,7 @@ def test_plan_it_from_someday_and_back(client):
     assert "Learn Korean" in client.get("/ui/planner/someday").text
 
 
-# ---- .ics, herinneringen en het startscherm ----
+# ---- .ics, reminders and the home screen ----
 
 def test_ics_download(client):
     add(client, "Tandarts vr 14u")
@@ -148,7 +148,7 @@ def test_ics_download(client):
     assert response.headers["content-type"].startswith("text/calendar")
     assert 'attachment; filename="Tandarts.ics"' == response.headers["content-disposition"]
     assert "DTSTART:20261009T140000" in response.text and "TRIGGER:-P1D" in response.text
-    assert client.get("/ui/planner/bestaat-niet.ics").status_code == 404
+    assert client.get("/ui/planner/does-not-exist.ics").status_code == 404
 
 
 def test_due_returns_reminders_of_the_last_minute(client, monkeypatch):
@@ -172,7 +172,7 @@ def test_reminder_settings_in_settings(client):
     assert 'value="60" selected' in panel and 'value="08:00"' in panel
     again = client.post("/ui/planner/reminders", data={"first_enabled": "on", "first_minutes": "60",
                                                         "second_minutes": "180", "all_day_time": "08:00"})
-    assert "HX-Trigger" not in again.headers  # dezelfde instelling: geen event
+    assert "HX-Trigger" not in again.headers  # the same setting: no event
 
 
 def test_home_card_shows_today_with_at_most_three_plans(client):
@@ -182,7 +182,7 @@ def test_home_card_shows_today_with_at_most_three_plans(client):
     home = client.get("/ui/home").text
     card = home.split('href="#planner"', 1)[1].split("</a>", 1)[0]
     assert "Next: Standup at 11:00" in card and "5" in card
-    assert card.count('class="agenda-row"') <= 2  # met "Next" erbij maximaal drie plannen
+    assert card.count('class="agenda-row"') <= 2  # with "Next" at most three plans
     assert "planner-changed from:body" in home
 
 
@@ -197,13 +197,13 @@ def test_due_since_the_previous_check_never_reaches_before_it(client, monkeypatc
     add(client, "Tandarts vr 14u")
     monkeypatch.setattr(clock, "local_now", lambda: dt.datetime(2026, 10, 8, 14, 1))
     assert len(client.get("/planner/due", params={"since": "2026-10-08T13:59:30"}).json()) == 1
-    assert client.get("/planner/due", params={"since": "2026-10-08T14:00:00"}).json() == []  # viel er net vóór
+    assert client.get("/planner/due", params={"since": "2026-10-08T14:00:00"}).json() == []  # fell just before it
 
 
 def test_done_someday_plans_are_listed_and_can_be_reopened(client):
     add(client, "Learn Korean")
     pid = plan_id(client, "Learn Korean")
-    assert 'class="someday-done"' not in client.get("/ui/planner/someday").text  # nog niets af
+    assert 'class="someday-done"' not in client.get("/ui/planner/someday").text  # nothing done yet
     client.post(f"/ui/planner/plans/{pid}/done", data={"on": "2026-10-08"})
     page = client.get("/ui/planner/someday").text
     done = page.split('class="someday-done"', 1)[1]

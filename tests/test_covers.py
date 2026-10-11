@@ -23,7 +23,7 @@ def close_to(pixel, expected, tolerance=40) -> bool:
     return all(abs(a - b) <= tolerance for a, b in zip(pixel, expected))
 
 
-# ---- Verwerken ----
+# ---- Processing ----
 
 def test_valid_image_becomes_fixed_size_webp():
     result = decode(process_image(image_bytes(size=(640, 960))))
@@ -34,7 +34,7 @@ def test_valid_image_becomes_fixed_size_webp():
 
 def test_landscape_image_is_cropped_from_the_middle_not_stretched():
     source = Image.new("RGB", (600, 300), "green")
-    source.paste((255, 0, 0), (200, 0, 400, 300))  # middelste derde rood
+    source.paste((255, 0, 0), (200, 0, 400, 300))  # middle third red
     source.paste((0, 0, 255), (400, 0, 600, 300))
     out = BytesIO()
     source.save(out, "PNG")
@@ -45,7 +45,7 @@ def test_landscape_image_is_cropped_from_the_middle_not_stretched():
 
 
 def test_exif_orientation_is_applied():
-    # Bovenkant rood, onderkant blauw, met EXIF "draai 90° met de klok mee".
+    # Top red, bottom blue, with EXIF "rotate 90° clockwise".
     source = Image.new("RGB", (300, 200), "blue")
     source.paste((255, 0, 0), (0, 0, 300, 100))
     exif = Image.Exif()
@@ -65,7 +65,7 @@ def test_other_color_modes_become_rgb(mode, color):
 
 def test_not_an_image_is_rejected():
     with pytest.raises(CoverError, match="isn't a valid image"):
-        process_image(b"<html>dit is geen plaatje</html>")
+        process_image(b"<html>this is not an image</html>")
 
 
 def test_unsupported_image_format_is_rejected():
@@ -78,7 +78,7 @@ def test_too_large_file_is_rejected():
         process_image(b"\0" * (MAX_BYTES + 1))
 
 
-# ---- Opslaan en downloaden ----
+# ---- Saving and downloading ----
 
 def make_store(tmp_path, handler=None) -> tuple[CoverStore, list]:
     requests = []
@@ -108,7 +108,7 @@ def test_download_from_url(tmp_path):
     assert str(requests[0].url) == "https://example.com/cover.png"
 
 
-@pytest.mark.parametrize("url", ["ftp://example.com/a.png", "file:///etc/passwd", "javascript:alert(1)", "geen url"])
+@pytest.mark.parametrize("url", ["ftp://example.com/a.png", "file:///etc/passwd", "javascript:alert(1)", "not a url"])
 def test_only_http_and_https_are_allowed(tmp_path, url):
     store, requests = make_store(tmp_path)
     with pytest.raises(CoverError, match="http"):
@@ -144,7 +144,7 @@ def test_download_timeout(tmp_path):
 
 def test_download_network_error(tmp_path):
     def offline(request):
-        raise httpx.ConnectError("geen netwerk", request=request)
+        raise httpx.ConnectError("no network", request=request)
 
     store, _ = make_store(tmp_path, offline)
     with pytest.raises(CoverError, match="reach"):
@@ -161,7 +161,7 @@ def test_delete_only_touches_cover_files(tmp_path):
     covers = tmp_path / "covers"
     store, _ = make_store(covers)
     name = store.save(image_bytes())
-    (tmp_path / "keep.txt").write_text("blijf")
+    (tmp_path / "keep.txt").write_text("stay")
 
     store.delete("../keep.txt")
     store.delete(name)

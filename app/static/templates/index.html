@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#07060c">
 <title>Progen</title>
-{# PNG's in vaste maten, zodat Edge voor de taakbalk een scherp plaatje kan kiezen. Ze komen uit
-   icon-small.svg, een vereenvoudigde versie die op een paar pixels duidelijk blijft (scripts/make_icon.py). #}
+{# PNGs in fixed sizes, so Edge can pick a sharp image for the taskbar. They come from
+   icon-small.svg, a simplified version that stays clear at a few pixels (scripts/make_icon.py). #}
 <link rel="icon" href="/static/icons/icon-32.png" sizes="32x32" type="image/png">
 <link rel="icon" href="/static/icons/icon-48.png" sizes="48x48" type="image/png">
 <link rel="icon" href="/static/icons/icon-64.png" sizes="64x64" type="image/png">
@@ -31,7 +31,7 @@
       Progen
     </a>
 
-    {# Elke tracker heeft hier een link; binnen een tracker staan tabbladen (Dashboard, Library, Progress). #}
+    {# Each tracker has a link here; within a tracker there are tabs (Dashboard, Library, Progress). #}
     <nav class="nav-links" aria-label="Main">
       <a href="#home" data-page="home">{{ ui.icon('home') }}<span>Home</span></a>
       <a href="#reading" data-page="reading">{{ ui.icon('book') }}<span>Reading</span></a>
@@ -41,7 +41,7 @@
       <a href="#settings" data-page="settings">{{ ui.icon('settings') }}<span>Settings</span></a>
     </nav>
 
-    {# Alleen zichtbaar binnen een tracker; trackly.js zet de tekst ("Add series", "Add title"). #}
+    {# Only visible within a tracker; trackly.js sets the text ("Add series", "Add title"). #}
     <button class="btn btn-primary btn-sm nav-add" type="button" data-open-add hidden>
       {{ ui.icon('plus', 16) }}<span id="nav-add-label">Add</span>
     </button>
@@ -54,7 +54,7 @@
 
 <div id="toasts" class="toasts"></div>
 
-{# Het formulier van de actieve tracker wordt hierin geladen (/ui/<tracker>/add-form). #}
+{# The active tracker's form is loaded in here (/ui/<tracker>/add-form). #}
 <dialog id="add-dialog" class="dialog" aria-labelledby="add-title">
   <div id="add-form-slot"></div>
 </dialog>
@@ -63,7 +63,7 @@
   <div id="genre-editor"></div>
 </dialog>
 
-{# Sunny, de assistent: een knop rechtsonder en een paneel dat van rechts inschuift (niet op Settings). #}
+{# Sunny, the assistant: a button at the bottom right and a panel that slides in from the right (not on Settings). #}
 <button id="sunny-fab" class="sunny-fab" type="button" data-sunny-open aria-label="Ask Sunny" title="Ask Sunny"
         aria-controls="sunny-panel" aria-expanded="false">{{ ui.icon('moon', 22) }}</button>
 <aside id="sunny-panel" class="sunny-panel" aria-label="Sunny" aria-hidden="true" inert>
@@ -83,12 +83,12 @@
   </div>
 </aside>
 
-{# "Pick something" in de Library: /ui/<tracker>/pick wordt hierin geladen. #}
+{# "Pick something" in the Library: /ui/<tracker>/pick is loaded in here. #}
 <dialog id="pick-dialog" class="dialog dialog-pick" aria-label="Pick something from your backlog">
   <div id="pick-slot"></div>
 </dialog>
 
-{# Eén plan uit Planner: /ui/planner/plans/<id> wordt hierin geladen. #}
+{# One plan from Planner: /ui/planner/plans/<id> is loaded in here. #}
 <dialog id="plan-dialog" class="dialog dialog-plan" aria-labelledby="plan-title">
   <div id="plan-slot"></div>
 </dialog>

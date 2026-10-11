@@ -6,7 +6,7 @@ from .genres import WATCH_GENRES
 
 
 class WatchItem:
-    """Eén film, serie of anime, opgebouwd uit zijn events."""
+    """One film, series or anime, built from its events."""
 
     def __init__(self, events: list):
         self.show_id = None
@@ -21,7 +21,7 @@ class WatchItem:
     def exists(self) -> bool:
         return self.show_id is not None
 
-    # ---- Toestand opbouwen uit events ----
+    # ---- Building the state from events ----
 
     def _apply(self, event) -> None:
         if isinstance(event, ShowAdded):
@@ -33,7 +33,7 @@ class WatchItem:
         elif isinstance(event, ShowRemoved):
             self.removed = True
 
-    # ---- Beslissingen: regels checken, nieuwe events teruggeven ----
+    # ---- Decisions: check the rules, return new events ----
 
     def add(self, show_id: str, title: str, kind: WatchKind, status: WatchStatus = WatchStatus.WATCHING,
             cover: str | None = None, genres=()) -> list:
@@ -55,7 +55,7 @@ class WatchItem:
         except ValueError as exc:
             raise DomainError(f"Unknown genre: {exc}") from exc
         if chosen == self.genres:
-            return []  # niets veranderd, dus ook geen event
+            return []  # nothing changed, so no event either
         return self._record(ShowGenresChanged(self.show_id, chosen))
 
     def remove(self) -> list:

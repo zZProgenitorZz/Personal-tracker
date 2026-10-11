@@ -8,7 +8,7 @@ class Status(str, Enum):
     ON_HOLD = "on_hold"
     COMPLETED = "completed"
     DROPPED = "dropped"
-    PLAN_TO_READ = "plan_to_read"  # backlog: nog niet begonnen
+    PLAN_TO_READ = "plan_to_read"  # backlog: not started yet
 
 
 class Kind(str, Enum):
@@ -16,7 +16,7 @@ class Kind(str, Enum):
     MANHWA = "manhwa"
 
 
-# Hoe statussen en soorten in de app heten (pagina's, toasts en Sunny's kaarten).
+# What statuses and kinds are called in the app (pages, toasts and Sunny's cards).
 STATUS_LABELS = {
     Status.READING: "Reading",
     Status.ON_HOLD: "On hold",
@@ -39,7 +39,7 @@ class SeriesStarted:
     source: str
     start_chapter: float
     at: datetime = field(default_factory=now)
-    # Bestandsnaam in de covermap. Oudere events hebben dit veld niet, vandaar de default.
+    # File name in the covers folder. Older events don't have this field, hence the default.
     cover: str | None = None
 
 
@@ -62,7 +62,7 @@ class StatusChanged:
 @dataclass(frozen=True)
 class GenresChanged:
     series_id: str
-    genres: list[str]  # de volledige nieuwe lijst, niet een toevoeging
+    genres: list[str]  # the complete new list, not an addition
     at: datetime = field(default_factory=now)
 
 

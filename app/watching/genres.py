@@ -1,4 +1,4 @@
-"""De vaste genrelijst voor Watching (films, series en anime). Aanpassen: alfabetisch houden."""
+"""The fixed genre list for Watching (films, series and anime). When changing it: keep it alphabetical."""
 from ..genres import GenreSet
 
 WATCH_GENRES = GenreSet([

@@ -8,7 +8,7 @@ from .aggregate import ReadingSeries
 from .projections import LibraryProjection
 
 
-# ---- Commands: wat je wílt dat er gebeurt ----
+# ---- Commands: what you want to happen ----
 
 @dataclass(frozen=True)
 class StartSeries:
@@ -44,7 +44,7 @@ class RemoveSeries:
     series_id: str
 
 
-# ---- De handler: laden, beslissen, opslaan ----
+# ---- The handler: load, decide, save ----
 
 class ReadingCommandHandler:
     def __init__(self, store: EventStore, library: LibraryProjection):

@@ -1,4 +1,4 @@
-"""Sunny's gesprek (session.py): Confirm robuust, en geen lock tijdens de API-aanroep. Nep-clients, geen API."""
+"""Sunny's conversation (session.py): a robust Confirm, and no lock during the API call. Fake clients, no API."""
 import datetime as dt
 import threading
 
@@ -30,7 +30,7 @@ def solo(app):
     return app.state.sunny.data.library.find_by_title("Solo Leveling")
 
 
-# ---- Confirm: een onverwachte fout ----
+# ---- Confirm: an unexpected error ----
 
 def test_an_unexpected_error_fails_the_proposal_and_a_second_confirm_does_nothing(app, monkeypatch):
     sunny = app.state.sunny
@@ -52,7 +52,7 @@ def test_an_unexpected_error_fails_the_proposal_and_a_second_confirm_does_nothin
     assert result.changed == ["reading-changed"] and result.toast["error"]
     assert solo(app).current_chapter == 120 and len(calls) == 1
 
-    again = sunny.confirm("p1")  # nooit dubbel uitvoeren
+    again = sunny.confirm("p1")  # never run twice
     assert again.changed == [] and again.note is None and len(calls) == 1 and solo(app).current_chapter == 120
 
 
@@ -65,10 +65,10 @@ def test_the_web_route_still_answers_after_an_unexpected_error(app, monkeypatch)
     assert reply.status_code == 200 and "toast-error" in reply.text and "HX-Trigger" not in reply.headers
 
 
-# ---- Geen lock tijdens de API-aanroep ----
+# ---- No lock during the API call ----
 
 class SlowClient:
-    """Blijft "nadenken" tot de test hem loslaat."""
+    """Keeps "thinking" until the test lets it go."""
 
     def __init__(self):
         self.messages = self
@@ -108,7 +108,7 @@ def test_confirm_cancel_and_new_chat_work_while_sunny_thinks(app):
 
     slow.release.set()
     asking.join(5)
-    # Het antwoord komt gewoon in het nieuwe gesprek terecht.
+    # The answer simply ends up in the new conversation.
     assert [e["text"] for e in sunny.entries if e["kind"] == "sunny"] == ["Took my time."]
 
 

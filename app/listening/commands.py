@@ -5,7 +5,7 @@ from ..eventstore import EventStore
 from .aggregate import Play
 
 
-# ---- Commands: wat je wílt dat er gebeurt ----
+# ---- Commands: what you want to happen ----
 
 @dataclass(frozen=True)
 class RecordPlay:
@@ -21,23 +21,23 @@ class RecordPlay:
 
 
 def as_utc(moment: datetime) -> datetime:
-    """Een tijd zonder tijdzone geldt als UTC (zo levert Spotify ze ook)."""
+    """A time without a time zone counts as UTC (that is how Spotify delivers them too)."""
     return moment.replace(tzinfo=timezone.utc) if moment.tzinfo is None else moment.astimezone(timezone.utc)
 
 
 def stream_id(played_at: datetime) -> str:
-    """Elk moment is een eigen stream, zodat dezelfde play nooit twee keer wordt opgeslagen."""
+    """Each moment is its own stream, so the same play is never stored twice."""
     return f"play-{as_utc(played_at).isoformat()}"
 
 
-# ---- De handler: laden, beslissen, opslaan ----
+# ---- The handler: load, decide, save ----
 
 class ListeningCommandHandler:
     def __init__(self, store: EventStore):
         self._store = store
 
     def handle(self, command) -> list:
-        """Geeft de opgeslagen events terug; een lege lijst betekent: al bekend, niets opgeslagen."""
+        """Returns the stored events; an empty list means: already known, nothing stored."""
         if not isinstance(command, RecordPlay):
             raise TypeError(f"Onbekend command: {type(command).__name__}")
         command = replace(command, played_at=as_utc(command.played_at))

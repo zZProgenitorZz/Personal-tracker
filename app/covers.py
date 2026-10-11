@@ -1,9 +1,9 @@
-"""Cover-afbeeldingen: downloaden, controleren, gelijk maken en lokaal bewaren.
+"""Cover images: downloading, checking, making them uniform and storing them locally.
 
-Elke cover (gedownload, geüpload of via een geplakte URL) gaat door
-process_image en komt als 300×450 WebP met een UUID-naam in de covermap.
-Zo blijft een cover werken, ook als de oorspronkelijke site verandert.
-Gedeeld door alle domeinen; het zoeken naar covers is per domein.
+Every cover (downloaded, uploaded or from a pasted URL) goes through
+process_image and ends up as a 300×450 WebP with a UUID name in the covers folder.
+That way a cover keeps working, even if the original site changes.
+Shared by all domains; searching for covers is per domain.
 """
 import re
 import uuid
@@ -16,19 +16,19 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 from .domain import DomainError
 
-COVER_SIZE = (300, 450)          # 2:3, staand zoals een boekcover
+COVER_SIZE = (300, 450)          # 2:3, portrait like a book cover
 MAX_BYTES = 5 * 1024 * 1024      # 5 MB
-DOWNLOAD_TIMEOUT = 10.0          # seconden
+DOWNLOAD_TIMEOUT = 10.0          # seconds
 ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP", "GIF", "BMP"}
-BACKGROUND = (21, 18, 31)        # achter transparante delen, zelfde tint als de app
+BACKGROUND = (21, 18, 31)        # behind transparent parts, the same tint as the app
 
-Image.MAX_IMAGE_PIXELS = 40_000_000  # weiger "decompression bombs"
+Image.MAX_IMAGE_PIXELS = 40_000_000  # refuse "decompression bombs"
 
 _COVER_NAME = re.compile(r"[0-9a-f]{32}\.webp")
 
 
 class CoverError(Exception):
-    """Een cover die niet gebruikt kan worden. De melding is bedoeld voor de gebruiker."""
+    """A cover that can't be used. The message is meant for the user."""
 
 
 def too_large() -> CoverError:
@@ -36,8 +36,8 @@ def too_large() -> CoverError:
 
 
 def process_image(data: bytes, size: tuple[int, int] = COVER_SIZE) -> bytes:
-    """Controleer dat `data` een afbeelding is en maak er een WebP van `size` van
-    (standaard 300×450, een cover; de Spotify-profielfoto gebruikt een vierkant)."""
+    """Checks that `data` is an image and turns it into a WebP of `size`
+    (300×450 by default, a cover; the Spotify profile photo uses a square)."""
     if len(data) > MAX_BYTES:
         raise too_large()
     try:
@@ -61,7 +61,7 @@ def process_image(data: bytes, size: tuple[int, int] = COVER_SIZE) -> bytes:
     else:
         image = image.convert("RGB")
 
-    # Bijsnijden vanuit het midden, dus nooit uitrekken.
+    # Crop from the center, so never stretch.
     image = ImageOps.fit(image, size, method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
     out = BytesIO()
     image.save(out, "WEBP", quality=85, method=6)
@@ -75,7 +75,7 @@ class CoverStore:
         self._client = client
 
     def save(self, data: bytes) -> str:
-        """Verwerk de afbeelding en bewaar hem. Geeft de bestandsnaam terug."""
+        """Processes the image and stores it. Returns the file name."""
         webp = process_image(data)
         name = f"{uuid.uuid4().hex}.webp"
         (self.directory / name).write_bytes(webp)
@@ -85,7 +85,7 @@ class CoverStore:
         return self.save(self.download(url))
 
     def delete(self, name: str) -> None:
-        # Alleen eigen covers, zodat een vreemde naam nooit buiten de map komt.
+        # Only our own covers, so a strange name never reaches outside the folder.
         if _COVER_NAME.fullmatch(name):
             (self.directory / name).unlink(missing_ok=True)
 

@@ -1,4 +1,4 @@
-"""De live koppeling met Spotify, tegen een nep-Spotify (httpx.MockTransport). Geen netwerk."""
+"""The live connection with Spotify, against a fake Spotify (httpx.MockTransport). No network."""
 import base64
 import json
 import logging
@@ -18,7 +18,7 @@ from app.listening.spotify import (
 )
 from app.main import create_app
 
-T0 = 1_800_000_000.0  # nepklok, seconden
+T0 = 1_800_000_000.0  # fake clock, seconds
 
 
 def item(played_at: str, name="Song", uri="spotify:track:1", duration_ms=200_000):
@@ -28,12 +28,12 @@ def item(played_at: str, name="Song", uri="spotify:track:1", duration_ms=200_000
 
 
 class FakeSpotify:
-    """Nep-accounts.spotify.com en api.spotify.com. Onthoudt alle verzoeken."""
+    """Fake accounts.spotify.com and api.spotify.com. Remembers all requests."""
 
     def __init__(self):
         self.requests: list[httpx.Request] = []
         self.items: list[dict] = []
-        self.recent_status: list[int] = []      # statuscodes voor de volgende recently-played-verzoeken
+        self.recent_status: list[int] = []      # status codes for the next recently-played requests
         self.retry_after = "7"
         self.refresh_status = 200
         self.new_refresh_token = None
@@ -95,7 +95,7 @@ def make_sync(tmp_path, fake, clock, token=None):
 VALID = {"access_token": "A1", "refresh_token": "R1", "expires_at": T0 + 3600}
 
 
-# ---- Inloggen (Authorization Code flow) ----
+# ---- Signing in (Authorization Code flow) ----
 
 def test_authorize_url_asks_only_for_recently_played_with_a_state(tmp_path, fake, clock):
     spotify, _ = make_spotify(tmp_path, fake, clock)
@@ -138,7 +138,7 @@ def test_correct_state_exchanges_the_code_once(tmp_path, fake, clock):
     assert tokens.load() == {"access_token": "A1", "refresh_token": "R1", "expires_at": T0 + 3600}
     assert spotify.connected
     with pytest.raises(SpotifyError):
-        spotify.finish_authorization("the-code", state)  # een state werkt maar één keer
+        spotify.finish_authorization("the-code", state)  # a state only works once
 
 
 def test_not_configured_without_client_id(tmp_path, fake, clock):
@@ -148,7 +148,7 @@ def test_not_configured_without_client_id(tmp_path, fake, clock):
         spotify.authorize_url()
 
 
-# ---- Tokens verversen ----
+# ---- Refreshing tokens ----
 
 def test_expired_access_token_is_refreshed_first(tmp_path, fake, clock):
     spotify, tokens = make_spotify(tmp_path, fake, clock, {**VALID, "expires_at": T0 - 1})
@@ -156,7 +156,7 @@ def test_expired_access_token_is_refreshed_first(tmp_path, fake, clock):
     assert fake.token_requests()[0]["grant_type"] == ["refresh_token"]
     assert fake.token_requests()[0]["refresh_token"] == ["R1"]
     assert fake.recent_requests()[0].headers["authorization"] == "Bearer A2"
-    assert tokens.load()["refresh_token"] == "R1"  # Spotify stuurt niet altijd een nieuwe mee
+    assert tokens.load()["refresh_token"] == "R1"  # Spotify doesn't always send a new one along
 
 
 def test_new_refresh_token_is_kept(tmp_path, fake, clock):
@@ -196,7 +196,7 @@ def test_429_tells_how_long_to_wait(tmp_path, fake, clock):
     assert limited.value.retry_after == 7
 
 
-# ---- Synchroniseren ----
+# ---- Syncing ----
 
 def test_sync_records_plays_from_spotify(tmp_path, fake, clock):
     fake.items = [item("2026-10-08T12:00:00.000Z", "Second", "spotify:track:2"),
@@ -218,7 +218,7 @@ def test_sync_asks_only_for_plays_after_the_latest(tmp_path, fake, clock):
     fake.items = [item("2026-10-08T12:00:00.000Z")]
     sync, *_ = make_sync(tmp_path, fake, clock, VALID)
     sync.run()
-    sync.run()  # Spotify geeft dezelfde play nog eens (overlap): overgeslagen
+    sync.run()  # Spotify returns the same play again (overlap): skipped
     after = int(datetime(2026, 10, 8, 12, tzinfo=timezone.utc).timestamp() * 1000)
     assert fake.recent_requests()[1].url.params["after"] == str(after)
     assert sync.status()["skipped"] == 1 and sync.status()["stored"] == 0
@@ -242,7 +242,7 @@ def test_sync_status_is_remembered_across_restarts(tmp_path, fake, clock):
     assert json.loads((tmp_path / "spotify_sync.json").read_text())["last_sync_at"]
 
 
-# ---- De achtergrondtaak (één tik van de lus) ----
+# ---- The background task (one tick of the loop) ----
 
 def test_tick_without_token_does_nothing(tmp_path, fake, clock):
     sync, *_ = make_sync(tmp_path, fake, clock)
@@ -271,7 +271,7 @@ def test_tick_survives_unexpected_crashes(tmp_path, fake, clock, caplog, monkeyp
     assert "ZeroDivisionError" in caplog.text
 
 
-# ---- In de app: Settings, connect, callback ----
+# ---- In the app: Settings, connect, callback ----
 
 @pytest.fixture
 def app_client(tmp_path, fake, monkeypatch):
@@ -296,7 +296,7 @@ def test_connect_and_callback(app_client, fake):
     assert start.status_code == 307 and start.headers["location"].startswith("https://accounts.spotify.com/authorize")
     assert done.status_code == 303 and done.headers["location"] == "/#settings"
     assert (data / "spotify_token.json").exists()
-    assert len(client.get("/listening/recent").json()) == 1  # meteen een eerste sync
+    assert len(client.get("/listening/recent").json()) == 1  # a first sync right away
 
 
 def test_callback_with_wrong_state_is_refused(app_client):

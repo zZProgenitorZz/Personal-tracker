@@ -1,4 +1,4 @@
-"""Planner · Upcoming: al je komende plannen in één lijst. Alleen lezen uit AgendaProjection."""
+"""Planner · Upcoming: all your coming plans in one list. Read only from AgendaProjection."""
 import datetime as dt
 
 import pytest
@@ -11,7 +11,7 @@ from app.planner.parse import describe_repeat
 from app.planner.projections import AgendaProjection
 from app.planner.schedule import next_occurrence
 
-TODAY = dt.date(2026, 10, 8)  # donderdag
+TODAY = dt.date(2026, 10, 8)  # Thursday
 D = lambda m, d, y=2026: dt.date(y, m, d)  # noqa: E731
 
 
@@ -26,18 +26,18 @@ def plan(pid, title, day=TODAY, time=None, repeat=None, note=""):
     return PlanAdded(pid, title, day, time, None, note, repeat)
 
 
-# ---- De eerstvolgende keer ----
+# ---- The next occurrence ----
 
 def test_next_occurrence_of_a_single_plan():
     agenda = given(plan("1", "Dentist", D(10, 9)), plan("2", "Old", D(10, 1)), plan("3", "Done", D(10, 9)),
                    PlanDone("3", D(10, 9)))
     assert next_occurrence(agenda.get("1"), TODAY) == D(10, 9)
-    assert next_occurrence(agenda.get("2"), TODAY) is None   # voorbij
-    assert next_occurrence(agenda.get("3"), TODAY) is None   # af
+    assert next_occurrence(agenda.get("2"), TODAY) is None   # passed
+    assert next_occurrence(agenda.get("3"), TODAY) is None   # done
 
 
 def test_next_occurrence_skips_skipped_and_done_times():
-    gym = Repeat(Frequency.WEEKLY, (0, 3))  # ma en do
+    gym = Repeat(Frequency.WEEKLY, (0, 3))  # Mon and Thu
     agenda = given(plan("1", "Gym", D(10, 1), repeat=gym), PlanDone("1", TODAY), PlanSkipped("1", D(10, 12)))
     assert next_occurrence(agenda.get("1"), TODAY) == D(10, 15)
 
@@ -61,7 +61,7 @@ def test_upcoming_one_offs_are_sorted_and_past_done_and_someday_left_out():
                    plan("5", "Done", D(10, 20)), PlanDone("5", D(10, 20)),
                    plan("6", "Someday", None), plan("7", "Gone", D(10, 10)), PlanRemoved("7", "Gone"))
     one_offs, repeating = agenda.upcoming(TODAY)
-    assert [o.title for o in one_offs] == ["Standup", "Birthday", "Dentist"]  # datum, dan hele dag eerst
+    assert [o.title for o in one_offs] == ["Standup", "Birthday", "Dentist"]  # date, then all day first
     assert repeating == []
 
 
@@ -77,7 +77,7 @@ def test_upcoming_repeats_appear_once_in_order_of_their_next_time():
         ("Vitamins", TODAY), ("Gym", TODAY), ("Rent", D(11, 1)), ("Course", D(11, 2))]
 
 
-# ---- Hoe een herhaling heet ----
+# ---- What a repeat is called ----
 
 def test_describe_repeat_with_the_day_of_the_month():
     assert describe_repeat(Repeat(Frequency.MONTHLY), D(9, 12)) == "every month on the 12th"
@@ -88,7 +88,7 @@ def test_describe_repeat_with_the_day_of_the_month():
     assert describe_repeat(Repeat(Frequency.DAILY)) == "every day"
 
 
-# ---- De pagina ----
+# ---- The page ----
 
 @pytest.fixture
 def client(monkeypatch):
@@ -106,7 +106,7 @@ def test_upcoming_is_a_tab_after_week(client):
     assert tabs.index("Week") < tabs.index("Upcoming") < tabs.index("Day") < tabs.index("Someday")
     assert 'href="#planner/upcoming"' in tabs and "upcoming:" not in page
     assert '"upcoming"' in client.get("/static/trackly.js").text
-    assert "planner-changed from:body" in page and 'id="plan-text"' in page  # ververst zich, en snel invoeren
+    assert "planner-changed from:body" in page and 'id="plan-text"' in page  # refreshes itself, and quick entry
 
 
 def test_upcoming_groups_one_offs_by_when(client):
@@ -116,7 +116,7 @@ def test_upcoming_groups_one_offs_by_when(client):
     page = client.get("/ui/planner/upcoming").text
     heads = [h.split("<", 1)[0].strip() for h in page.split('class="wrapped-sub upcoming-head">')[1:]]
     assert heads == ["Today", "Tomorrow", "This week", "Next week", "November", "January 2027"]
-    lijst = page.split('class="upcoming-tools"', 1)[1]  # na het invoerveld (dat noemt "Dentist" als voorbeeld)
+    lijst = page.split('class="upcoming-tools"', 1)[1]  # after the input field (which mentions "Dentist" as an example)
     assert lijst.index("Standup") < lijst.index("Dentist") < lijst.index("Haircut") < lijst.index("Yoga") \
         < lijst.index("Party") < lijst.index("Ski")
     assert "Learn Korean" not in lijst
@@ -131,7 +131,7 @@ def test_upcoming_repeating_block(client):
     block = page.split(">Repeating<", 1)[1]
     assert "Every Mon, Thu · 18:00" in block and "Every month on the 12th" in block
     assert "Next: Mon 12 Oct" in block and "Next: Thu 8 Oct" in block and "Legs" in block and "data-repeat" in block
-    assert block.index("Gym") < block.index("Huur")  # gym valt eerder (vandaag 18:00)
+    assert block.index("Gym") < block.index("Huur")  # gym falls earlier (today 18:00)
 
 
 def test_a_click_opens_the_existing_dialog_with_the_next_time(client):

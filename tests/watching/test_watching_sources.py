@@ -1,4 +1,4 @@
-"""Coverbronnen voor Watching, met nep-API's (geen netwerk)."""
+"""Cover sources for Watching, with fake APIs (no network)."""
 import json
 
 import httpx
@@ -37,7 +37,7 @@ def test_tvmaze_series():
     client = client_answering([
         {"score": 0.9, "show": {"name": "Breaking Bad", "genres": ["Drama", "Crime", "Thriller"],
                                 "image": {"medium": "https://t/m.jpg", "original": "https://t/o.jpg"}}},
-        {"score": 0.5, "show": {"name": "Zonder plaatje", "genres": [], "image": None}},
+        {"score": 0.5, "show": {"name": "No image", "genres": [], "image": None}},
     ], seen)
     [result] = tvmaze(client, "Breaking Bad")
     assert (result.source, result.image_url, result.titles) == ("TVmaze", "https://t/o.jpg", ("Breaking Bad",))
@@ -49,12 +49,12 @@ def test_tmdb_is_skipped_without_key(monkeypatch):
     monkeypatch.delenv(TMDB_KEY_ENV, raising=False)
     seen = []
     assert tmdb(client_answering({"results": []}, seen), "Dune") == []
-    assert seen == []  # geen verzoek zonder sleutel
+    assert seen == []  # no request without a key
 
 
 @pytest.mark.parametrize("key, in_params, in_header", [
-    ("abc123", True, False),                                  # korte "API Key"
-    ("eyJhbGciOi.eyJhdWQiOi.signature", False, True),         # lange "Read Access Token"
+    ("abc123", True, False),                                  # a short "API Key"
+    ("eyJhbGciOi.eyJhdWQiOi.signature", False, True),         # a long "Read Access Token"
 ])
 def test_tmdb_accepts_both_kinds_of_key(monkeypatch, key, in_params, in_header):
     monkeypatch.setenv(TMDB_KEY_ENV, key)
@@ -72,7 +72,7 @@ def test_tmdb_movies_and_series(monkeypatch):
         {"media_type": "tv", "name": "Dune: Prophecy", "original_name": "Dune: Prophecy",
          "poster_path": "/q.jpg", "genre_ids": [10765, 18]},
         {"media_type": "person", "name": "Zendaya", "profile_path": "/z.jpg"},
-        {"media_type": "movie", "title": "Zonder poster", "poster_path": None, "genre_ids": []},
+        {"media_type": "movie", "title": "No poster", "poster_path": None, "genre_ids": []},
     ]})
     movie, series = tmdb(client, "Dune")
     assert movie.image_url == "https://image.tmdb.org/t/p/w780/p.jpg"

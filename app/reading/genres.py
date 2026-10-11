@@ -1,8 +1,8 @@
-"""De vaste genrelijst voor Reading (novels en manhwa).
+"""The fixed genre list for Reading (novels and manhwa).
 
-Een genre toevoegen of weghalen: pas GENRES aan (alfabetisch). Bestaande
-events met een genre dat niet meer in de lijst staat, blijven leesbaar; je kunt
-het alleen niet meer opnieuw kiezen.
+To add or remove a genre: change GENRES (alphabetical). Existing
+events with a genre that is no longer in the list stay readable; you just
+can't pick it again.
 """
 from ..genres import GenreSet
 

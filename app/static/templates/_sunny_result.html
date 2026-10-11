@@ -1,5 +1,5 @@
 {% import "_sunny_macros.html" as sunny %}
-{# Na Confirm of Cancel: de kaart in haar nieuwe toestand, Sunny's korte regel, en eventueel een toast. #}
+{# After Confirm or Cancel: the card in its new state, Sunny's short line, and possibly a toast. #}
 {% if proposal %}{{ sunny.card(proposal) }}{% endif %}
 {% if note %}<div class="sunny-msg from-sunny sunny-bubble{% if proposal and proposal.state == 'failed' %} is-error{% endif %}">{{ note }}</div>{% endif %}
 {% if toast %}

@@ -1,4 +1,4 @@
-"""Eén plan als iCalendar-bestand (RFC 5545), om naar je iPhone te sturen. Vaste voorbeelden."""
+"""One plan as an iCalendar file (RFC 5545), to send to your iPhone. Fixed examples."""
 import datetime as dt
 
 from app.planner.events import Frequency, Repeat
@@ -17,7 +17,7 @@ def entry(**fields):
 
 
 def lines(text):
-    assert "\n" not in text.replace("\r\n", "")  # alleen CRLF
+    assert "\n" not in text.replace("\r\n", "")  # only CRLF
     return text.split("\r\n")
 
 

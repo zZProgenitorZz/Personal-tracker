@@ -1,15 +1,15 @@
-"""Sunny's loop: één bericht van Progen → hooguit MAX_ROUNDS rondes met Claude → een antwoord,
-plus eventueel voorgestelde acties (die pas na Confirm worden uitgevoerd, zie web.py).
+"""Sunny's loop: one message from Progen → at most MAX_ROUNDS rounds with Claude → an answer,
+plus any proposed actions (which only run after Confirm, see web.py).
 
-- Leestool → meteen uitvoeren, compact resultaat terug naar het model.
-- Schrijftool → als PendingAction bewaren; het model hoort "proposed, waiting for Progen's
+- Read tool → run it right away, a compact result back to the model.
+- Write tool → keep it as a PendingAction; the model hears "proposed, waiting for Progen's
   confirmation".
-- De geschiedenis gaat als platte tekst mee (alleen de laatste HISTORY_MESSAGES): geen
-  denkblokken of tool-uitvoer van eerdere beurten. Zo mag de geschiedenis ingekort worden
-  zonder dat de API een gewijzigde denkketen weigert, en blijft elk bericht goedkoop.
-- Het vaste deel van de systeemprompt en de toollijst hebben cache_control.
-- Het model kies je in Settings › Sunny (AssistantSettings); het wordt bij elk bericht gelezen,
-  zodat een wijziging meteen geldt. Effort en max_tokens zijn voor elk model gelijk.
+- The history goes along as plain text (only the last HISTORY_MESSAGES): no
+  thinking blocks or tool output from earlier turns. That way the history may be shortened
+  without the API refusing a changed chain of thought, and every message stays cheap.
+- The fixed part of the system prompt and the tool list have cache_control.
+- You pick the model in Settings › Sunny (AssistantSettings); it is read with every message,
+  so a change applies right away. Effort and max_tokens are the same for every model.
 """
 import json
 import logging
@@ -30,8 +30,8 @@ HISTORY_MESSAGES = 10
 
 log = logging.getLogger("progen.assistant")
 
-# Zoekwoorden in de foutmelding van Anthropic (kleine letters). Verandert Anthropic de tekst,
-# dan hoef je alleen deze twee lijsten bij te werken.
+# Search words in Anthropic's error message (lower case). If Anthropic changes the text,
+# you only need to update these two lists.
 CREDIT_WORDS = ("credit balance", "purchase credits")
 SPEND_LIMIT_WORDS = ("usage limit", "spend limit", "spending limit", "monthly limit")
 
@@ -45,14 +45,14 @@ PROBLEM_TEXTS = {
     "overloaded": "Anthropic's servers are having a bad day. Try again in a moment.",
     "offline": "I can't reach Anthropic. Is the internet on?",
 }
-CONSOLE_KINDS = {"auth", "credits", "limit"}       # krijgen een knop "Open console"
-STICKY_KINDS = {"auth", "permission", "credits", "limit"}  # blijven zichtbaar bij openen tot een aanroep lukt
+CONSOLE_KINDS = {"auth", "credits", "limit"}       # get an "Open console" button
+STICKY_KINDS = {"auth", "permission", "credits", "limit"}  # stay visible when opening until a call succeeds
 
 
 @dataclass(frozen=True)
 class SunnyProblem:
     kind: str           # auth / permission / credits / limit / rate / overloaded / offline / unknown
-    text: str           # wat Sunny zegt
+    text: str           # what Sunny says
 
     @property
     def console(self) -> bool:
@@ -68,7 +68,7 @@ def _problem(kind: str, extra: str = "") -> SunnyProblem:
 
 
 def money_problem(message: str) -> str | None:
-    """"credits" of "limit" als de foutmelding daarover gaat, anders None."""
+    """"credits" or "limit" if the error message is about that, otherwise None."""
     text = message.lower()
     if any(word in text for word in CREDIT_WORDS):
         return "credits"
@@ -78,15 +78,15 @@ def money_problem(message: str) -> str | None:
 
 
 def _api_message(exc: anthropic.APIStatusError) -> str:
-    """De melding van de API zelf (body.error.message), anders de tekst van de exception."""
+    """The API's own message (body.error.message), otherwise the exception's text."""
     body = exc.body if isinstance(exc.body, dict) else {}
     error = body.get("error") if isinstance(body.get("error"), dict) else {}
     return str(error.get("message") or exc.message or "")
 
 
 def classify(exc: Exception) -> SunnyProblem:
-    """Vertaal een fout van de anthropic-SDK naar wat Sunny zegt. Meest specifieke klasse eerst.
-    429 en 5xx probeert de SDK zelf al opnieuw (max_retries); dit is wat overblijft."""
+    """Translates an error from the anthropic SDK into what Sunny says. Most specific class first.
+    The SDK already retries 429 and 5xx itself (max_retries); this is what remains."""
     if isinstance(exc, anthropic.AuthenticationError):
         return _problem("auth")
     if isinstance(exc, anthropic.PermissionDeniedError):
@@ -101,7 +101,7 @@ def classify(exc: Exception) -> SunnyProblem:
         return _problem("rate", f" (Anthropic says: try again in {wait}s.)" if wait.isdigit() else "")
     elif isinstance(exc, (anthropic.OverloadedError, anthropic.InternalServerError)):
         return _problem("overloaded")
-    elif isinstance(exc, anthropic.APIConnectionError):  # ook APITimeoutError
+    elif isinstance(exc, anthropic.APIConnectionError):  # APITimeoutError too
         return _problem("offline")
     if isinstance(exc, anthropic.APIStatusError):
         if exc.status_code == 402 or exc.type == "billing_error":
@@ -116,18 +116,18 @@ def classify(exc: Exception) -> SunnyProblem:
 
 
 def api_key() -> str:
-    """ANTHROPIC_API_KEY uit .env (of de omgeving), of "" als die er niet is."""
+    """ANTHROPIC_API_KEY from .env (or the environment), or "" if it isn't there."""
     return os.environ.get("ANTHROPIC_API_KEY", "").strip()
 
 
 def make_client() -> anthropic.Anthropic | None:
-    """Een client als er een API-key is; anders None."""
+    """A client if there is an API key; otherwise None."""
     key = api_key()
     return anthropic.Anthropic(api_key=key) if key else None
 
 
 def trim_history(history: list[dict]) -> list[dict]:
-    """De laatste HISTORY_MESSAGES berichten, beginnend bij een bericht van Progen."""
+    """The last HISTORY_MESSAGES messages, starting at a message from Progen."""
     trimmed = history[-HISTORY_MESSAGES:]
     while trimmed and trimmed[0]["role"] != "user":
         trimmed = trimmed[1:]
@@ -149,13 +149,13 @@ class Agent:
     def __init__(self, client, data: TrackerData, settings: Callable[[], AssistantSettings] | None = None):
         self._client = client
         self._data = data
-        self._settings = settings or (lambda: AssistantSettings([]))  # zonder instelling: het standaardmodel
+        self._settings = settings or (lambda: AssistantSettings([]))  # without a setting: the default model
 
     def ask(self, message: str, history: list[dict]) -> Reply:
         messages = trim_history(history) + [{"role": "user", "content": message}]
         actions: list[PendingAction] = []
         response = None
-        model = self._settings().model  # bij elk bericht opnieuw: een keuze in Settings geldt meteen
+        model = self._settings().model  # again with every message: a choice in Settings applies right away
         try:
             for _ in range(MAX_ROUNDS):
                 response = self._client.messages.create(
@@ -163,11 +163,11 @@ class Agent:
                     system=system_blocks(self._data.now().date()), tools=TOOL_DEFINITIONS, messages=messages)
                 if response.stop_reason != "tool_use":
                     break
-                messages.append({"role": "assistant", "content": response.content})  # ongewijzigd terug
+                messages.append({"role": "assistant", "content": response.content})  # returned unchanged
                 messages.append({"role": "user", "content": [self._run(block, actions)
                                                               for block in response.content
                                                               if block.type == "tool_use"]})
-        except anthropic.APIError as exc:  # alles van de SDK: status-, verbindings- en timeoutfouten
+        except anthropic.APIError as exc:  # everything from the SDK: status, connection and timeout errors
             problem = classify(exc)
             return Reply(problem.text, actions, problem)
 

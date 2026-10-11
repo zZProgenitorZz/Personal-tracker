@@ -1,6 +1,6 @@
 {% import "_macros.html" as ui %}
 {% import "_sunny_macros.html" as sunny %}
-{# De inhoud van Sunny's paneel (#sunny-body in index.html): het gesprek en het invoerveld. #}
+{# The contents of Sunny's panel (#sunny-body in index.html): the conversation and the input field. #}
 {% if not available %}
 <div class="sunny-log">{{ sunny.bubble({"kind": "unavailable"}) }}</div>
 {% else %}

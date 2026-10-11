@@ -1,20 +1,20 @@
 <#
 .SYNOPSIS
-    Zet een snelkoppeling "Progen" op je bureaublad (en eventueel in het Startmenu).
+    Puts a "Progen" shortcut on your desktop (and optionally in the Start menu).
 
 .DESCRIPTION
-    De snelkoppeling start launch.pyw met pythonw.exe uit .venv: geen consolevenster,
-    de server start als dat nodig is, en Progen opent als eigen venster.
-    Eén keer uitvoeren is genoeg; opnieuw uitvoeren werkt de snelkoppelingen bij.
+    The shortcut starts launch.pyw with pythonw.exe from .venv: no console window,
+    the server starts when needed, and Progen opens as its own window.
+    Running it once is enough; running it again updates the shortcuts.
 
 .PARAMETER StartMenu
-    Zet "Progen" en "Stop Progen" ook in het Startmenu.
+    Also puts "Progen" and "Stop Progen" in the Start menu.
 
 .PARAMETER StopOnDesktop
-    Zet "Stop Progen" ook op het bureaublad.
+    Also puts "Stop Progen" on the desktop.
 
 .PARAMETER Folder
-    Andere map dan het bureaublad (vooral om te testen).
+    A folder other than the desktop (mainly for testing).
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File scripts\install_shortcut.ps1 -StartMenu
@@ -31,10 +31,10 @@ $pythonw = Join-Path $root ".venv\Scripts\pythonw.exe"
 $icon = Join-Path $root "app\static\icon.ico"
 
 if (-not (Test-Path $pythonw)) {
-    Write-Error "Geen $pythonw gevonden. Maak eerst de venv aan (zie README, 'Snel starten')."
+    Write-Error "$pythonw not found. Create the venv first (see README, 'Quick start')."
 }
 if (-not (Test-Path $icon)) {
-    Write-Error "Geen $icon gevonden. Maak hem met: .venv\Scripts\python.exe scripts\make_icon.py"
+    Write-Error "$icon not found. Make it with: .venv\Scripts\python.exe scripts\make_icon.py"
 }
 
 $shell = New-Object -ComObject WScript.Shell
@@ -49,15 +49,15 @@ function New-ProgenShortcut([string]$Directory, [string]$Name, [string]$Script, 
     $shortcut.IconLocation = "$icon,0"
     $shortcut.Description = $Description
     $shortcut.Save()
-    Write-Host "Snelkoppeling gemaakt: $path"
+    Write-Host "Shortcut created: $path"
 }
 
 New-ProgenShortcut $Folder "Progen" "launch.pyw" "Open Progen"
 if ($StopOnDesktop) {
-    New-ProgenShortcut $Folder "Stop Progen" "stop.pyw" "Stop de Progen-server"
+    New-ProgenShortcut $Folder "Stop Progen" "stop.pyw" "Stop the Progen server"
 }
 if ($StartMenu) {
     $programs = Join-Path ([Environment]::GetFolderPath("Programs")) "Progen"
     New-ProgenShortcut $programs "Progen" "launch.pyw" "Open Progen"
-    New-ProgenShortcut $programs "Stop Progen" "stop.pyw" "Stop de Progen-server"
+    New-ProgenShortcut $programs "Stop Progen" "stop.pyw" "Stop the Progen server"
 }

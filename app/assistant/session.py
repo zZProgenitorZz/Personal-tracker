@@ -1,10 +1,10 @@
-"""Sunny's gesprek: wat er gezegd is, de voorstellen die op Confirm wachten, en een eventueel
-key- of tegoedprobleem. Alles in het geheugen van de app (één gebruiker, lokaal), niet in de
-event store: alleen wat je met Confirm uitvoert wordt een gewoon event.
+"""Sunny's conversation: what was said, the proposals waiting for Confirm, and a key or
+credit problem, if any. All in the app's memory (one user, local), not in the
+event store: only what you run with Confirm becomes an ordinary event.
 
-De lock beschermt alleen de toestand hieronder; tijdens de (trage) API-aanroep is hij vrij, zodat
-Confirm, Cancel en New chat gewoon werken terwijl Sunny nadenkt. Doe je New chat tijdens een
-aanroep, dan komt het antwoord in het nieuwe gesprek terecht.
+The lock only protects the state below; during the (slow) API call it is free, so
+Confirm, Cancel and New chat keep working while Sunny thinks. If you press New chat during a
+call, the answer ends up in the new conversation.
 """
 import logging
 import threading
@@ -38,7 +38,7 @@ class Proposal:
 
 @dataclass
 class Outcome:
-    """Wat Confirm of Cancel oplevert, voor de route: de kaart, Sunny's regel, een toast en de events."""
+    """What Confirm or Cancel produces, for the route: the card, Sunny's line, a toast and the events."""
     proposal: Proposal | None
     note: str | None = None
     toast: dict | None = None
@@ -49,11 +49,11 @@ class Outcome:
 class Sunny:
     data: TrackerData
     settings: AssistantCommandHandler
-    use_real_client: bool = True                       # in tests: nooit een echte client
-    history: list[dict] = field(default_factory=list)  # platte tekst, voor het model
-    entries: list[dict] = field(default_factory=list)  # wat het paneel toont
+    use_real_client: bool = True                       # in tests: never a real client
+    history: list[dict] = field(default_factory=list)  # plain text, for the model
+    entries: list[dict] = field(default_factory=list)  # what the panel shows
     proposals: dict[str, Proposal] = field(default_factory=dict)
-    # Een key- of tegoedprobleem van de vorige aanroep: staat bovenaan bij openen, tot een aanroep lukt.
+    # A key or credit problem from the previous call: shown at the top when opening, until a call succeeds.
     standing_problem: SunnyProblem | None = None
     _client: object = None
     _lock: threading.Lock = field(default_factory=threading.Lock)
@@ -74,25 +74,25 @@ class Sunny:
             self.entries.clear()
             self.proposals.clear()
 
-    # ---- Een bericht ----
+    # ---- A message ----
 
     def send(self, text: str, retry: bool) -> list[dict]:
-        """Een bericht van Progen; geeft de nieuwe entries terug. Met retry (Try again) staat het
-        bericht al in het gesprek."""
+        """A message from Progen; returns the new entries. With retry (Try again) the message
+        is already in the conversation."""
         with self._lock:
             history = list(self.history)
-        reply = Agent(self.client, self.data, self.settings.settings).ask(text, history)  # buiten de lock
+        reply = Agent(self.client, self.data, self.settings.settings).ask(text, history)  # outside the lock
         with self._lock:
             if not retry:
                 self.entries.append({"kind": "user", "text": text})
             if reply.problem:
-                # Een probleem met de API: een eigen ballon, en het bericht blijft staan voor Try again.
+                # A problem with the API: a balloon of its own, and the message stays for Try again.
                 if reply.problem.sticky:
                     self.standing_problem = reply.problem
                 new = [{"kind": "problem", "problem": reply.problem, "retry_text": text}]
                 self.entries.extend(new)
                 return new
-            self.standing_problem = None  # de API doet het weer
+            self.standing_problem = None  # the API works again
             new = [{"kind": "sunny", "text": reply.text, "error": False}]
             remembered = reply.text
             if reply.actions:
@@ -104,16 +104,16 @@ class Sunny:
             self.history += [{"role": "user", "content": text}, {"role": "assistant", "content": remembered}]
             return new
 
-    # ---- Confirm en Cancel ----
+    # ---- Confirm and Cancel ----
 
     def confirm(self, proposal_id: str) -> Outcome:
-        """Voert de voorgestelde acties uit via de gewone command handlers (lokaal, geen API nodig).
-        Daarna staat het voorstel nooit meer op pending: dubbel uitvoeren kan niet."""
+        """Runs the proposed actions through the ordinary command handlers (local, no API needed).
+        After that the proposal is never pending again: running it twice can't happen."""
         with self._lock:
             proposal = self.proposals.get(proposal_id)
             if proposal is None or proposal.state != "pending":
                 return Outcome(proposal)
-            proposal.state = "failed"  # meteen weg van pending, wat er hieronder ook gebeurt
+            proposal.state = "failed"  # off pending right away, whatever happens below
             done, failed = [], []
             for action in proposal.actions:
                 try:
@@ -121,7 +121,7 @@ class Sunny:
                     done.append(action)
                 except DomainError as exc:
                     failed.append(f"{action.label}: {exc}")
-                except Exception:  # nooit de app laten vallen; wel loggen
+                except Exception:  # never let the app fall over; do log it
                     log.exception("Sunny: confirming %r failed", action.label)
                     failed.append(f"{action.label}: unexpected error")
             if failed:

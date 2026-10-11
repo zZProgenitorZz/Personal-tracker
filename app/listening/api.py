@@ -11,10 +11,10 @@ from .projections import (
 )
 
 
-# ---- Wat de API binnen verwacht ----
+# ---- What the API expects to receive ----
 
 class PlayBody(BaseModel):
-    played_at: datetime  # zonder tijdzone geldt UTC
+    played_at: datetime  # without a time zone, UTC applies
     track_id: str
     track: str
     artists: list[str] = []
@@ -25,7 +25,7 @@ class PlayBody(BaseModel):
     source: str = "api"
 
 
-MONTH = Query(None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="YYYY-MM; standaard deze maand")
+MONTH = Query(None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="YYYY-MM; this month by default")
 
 
 def _year_month(month: str | None) -> tuple[int, int]:
@@ -36,7 +36,7 @@ def _year_month(month: str | None) -> tuple[int, int]:
     return int(year), int(number)
 
 
-# ---- De endpoints ----
+# ---- The endpoints ----
 
 def create_listening_router(
     handler: ListeningCommandHandler,
@@ -47,7 +47,7 @@ def create_listening_router(
 ) -> APIRouter:
     router = APIRouter(prefix="/listening", tags=["listening"])
 
-    # Lezen: vragen aan de read models
+    # Reading: questions for the read models
 
     @router.get("/recent")
     def get_recent():
@@ -61,7 +61,7 @@ def create_listening_router(
         }
 
     def period(start: date | None, end: date | None) -> tuple[date, date] | None:
-        """from en to samen (tot en met), anders None: dan geldt month."""
+        """from and to together (inclusive), otherwise None: then month applies."""
         if start is None and end is None:
             return None
         if start is None or end is None or end < start:
@@ -71,7 +71,7 @@ def create_listening_router(
     @router.get("/top-artists")
     def get_top_artists(month: str | None = MONTH, limit: int = 10,
                         start: date | None = Query(None, alias="from"), end: date | None = Query(None, alias="to")):
-        """Per maand (month=YYYY-MM, standaard deze), of een vrije periode met from en to (YYYY-MM-DD)."""
+        """Per month (month=YYYY-MM, this one by default), or a free period with from and to (YYYY-MM-DD)."""
         found = period(start, end)
         ranked = top_artists.between(*found, limit=limit) if found else top_artists.top(*_year_month(month), limit=limit)
         return [{"artist": a, "plays": n} for a, n in ranked]
@@ -79,15 +79,15 @@ def create_listening_router(
     @router.get("/top-tracks")
     def get_top_tracks(month: str | None = MONTH, limit: int = 10,
                        start: date | None = Query(None, alias="from"), end: date | None = Query(None, alias="to")):
-        """Per maand (month=YYYY-MM, standaard deze), of een vrije periode met from en to (YYYY-MM-DD)."""
+        """Per month (month=YYYY-MM, this one by default), or a free period with from and to (YYYY-MM-DD)."""
         found = period(start, end)
         return top_tracks.between(*found, limit=limit) if found else top_tracks.top(*_year_month(month), limit=limit)
 
-    # Schrijven: commands naar de handler
+    # Writing: commands to the handler
 
     @router.post("/plays", status_code=201)
     def record_play(body: PlayBody):
-        """201 als de play is opgeslagen, 200 als dit moment al bekend was (overgeslagen)."""
+        """201 if the play was stored, 200 if this moment was already known (skipped)."""
         command = RecordPlay(body.played_at, body.track_id, body.track, body.artists, body.album,
                              body.album_id, body.duration_ms, body.ms_played, body.source)
         stored = bool(handler.handle(command))

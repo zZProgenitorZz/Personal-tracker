@@ -1,14 +1,14 @@
-"""Netjes afsluiten vanaf deze computer (voor "Stop Progen", zie stop.pyw).
+"""Shutting down cleanly from this computer (for "Stop Progen", see stop.pyw).
 
-De server stopt via een gewone Ctrl+C (SIGINT) aan zichzelf: uvicorn rondt
-lopende verzoeken af, de achtergrondtaak stopt en de database wordt gesloten.
-Uvicorn wacht daarbij hooguit --timeout-graceful-shutdown seconden (zie launch.pyw).
-Leeft het proces daarna nog steeds, dan stopt het hard (vangnet): elke schrijfactie
-in de event store is dan al afgerond, dus er gaat niets verloren.
+The server stops through a plain Ctrl+C (SIGINT) to itself: uvicorn finishes
+running requests, the background task stops and the database is closed.
+Uvicorn waits at most --timeout-graceful-shutdown seconds for that (see launch.pyw).
+If the process is still alive after that, it stops hard (a safety net): every write
+to the event store has already finished by then, so nothing is lost.
 
-Alleen toegestaan vanaf 127.0.0.1 én met de header X-Progen-Shutdown. Die header
-houdt websites in je browser tegen: die kunnen wel naar 127.0.0.1 posten, maar
-geen eigen header meesturen zonder toestemming (CORS), en die geeft Progen niet.
+Only allowed from 127.0.0.1 and with the header X-Progen-Shutdown. That header
+stops websites in your browser: they can post to 127.0.0.1, but they can't
+send their own header without permission (CORS), and Progen doesn't give it.
 """
 import logging
 import os
@@ -20,7 +20,7 @@ from fastapi import APIRouter, Request, Response
 from .desktop import SHUTDOWN_HEADER
 
 LOCAL_HOSTS = {"127.0.0.1", "::1"}
-FORCE_EXIT_SECONDS = 20  # ruim boven de 5 seconden die uvicorn krijgt om netjes te stoppen
+FORCE_EXIT_SECONDS = 20  # well above the 5 seconds uvicorn gets to stop cleanly
 
 log = logging.getLogger("progen.shutdown")
 
@@ -32,9 +32,9 @@ def force_exit() -> None:
 
 
 def stop_this_server() -> None:
-    """Even wachten zodat het antwoord nog verstuurd wordt, dan Ctrl+C naar onszelf.
-    Daarnaast een vangnet: een daemon-timer die het proces hard stopt als het blijft hangen.
-    Stopt de server gewoon, dan verdwijnt die timer vanzelf mee."""
+    """Waits a moment so the response still gets sent, then Ctrl+C to ourselves.
+    Also a safety net: a daemon timer that stops the process hard if it hangs.
+    If the server just stops, that timer goes away with it."""
     threading.Timer(0.3, signal.raise_signal, [signal.SIGINT]).start()
     safety_net = threading.Timer(FORCE_EXIT_SECONDS, force_exit)
     safety_net.daemon = True

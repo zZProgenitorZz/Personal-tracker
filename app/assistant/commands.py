@@ -23,5 +23,5 @@ class AssistantCommandHandler:
         return events
 
     def settings(self) -> AssistantSettings:
-        """De huidige instelling, vers uit de store: een wijziging geldt meteen."""
+        """The current setting, fresh from the store: a change applies right away."""
         return AssistantSettings(self._store.load_stream(AssistantSettings.STREAM))

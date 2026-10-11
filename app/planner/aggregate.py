@@ -9,7 +9,7 @@ from .schedule import occurs_on, with_weekdays
 
 
 class Plan:
-    """Eén afspraak of plan, opgebouwd uit zijn events."""
+    """One appointment or plan, built from its events."""
 
     def __init__(self, events: list):
         self.plan_id = None
@@ -29,7 +29,7 @@ class Plan:
     def exists(self) -> bool:
         return self.plan_id is not None
 
-    # ---- Toestand opbouwen uit events ----
+    # ---- Building the state from events ----
 
     def _apply(self, event) -> None:
         if isinstance(event, PlanAdded):
@@ -48,7 +48,7 @@ class Plan:
         elif isinstance(event, PlanRemoved):
             self.removed = True
 
-    # ---- Beslissingen: regels checken, nieuwe events teruggeven ----
+    # ---- Decisions: check the rules, return new events ----
 
     def add(self, plan_id: str, title: str, day: dt.date | None, time: dt.time | None,
             duration_min: int | None, note: str, repeat: Repeat | None) -> list:
@@ -65,9 +65,9 @@ class Plan:
         if day is None and self.repeat is not None:
             raise DomainError("A repeat needs a date")
         if self.repeat is not None:
-            _checked_repeat(day, self.repeat)  # de einddatum mag niet vóór de nieuwe begindatum liggen
+            _checked_repeat(day, self.repeat)  # the end date may not lie before the new start date
         if (day, time) == (self.day, self.time):
-            return []  # niets veranderd, dus ook geen event
+            return []  # nothing changed, so no event either
         return self._record(PlanRescheduled(self.plan_id, day, time))
 
     def edit(self, title: str, note: str, duration_min: int | None, repeat: Repeat | None) -> list:
@@ -81,7 +81,7 @@ class Plan:
     def mark_done(self, on: dt.date) -> list:
         self._require_active()
         if self.day is None:
-            if self.done:  # Someday: af op de dag dat je hem afvinkt, maar maar één keer
+            if self.done:  # Someday: done on the day you tick it off, but only once
                 raise DomainError(f"'{self.title}' is already done")
         else:
             self._require_occurrence(on)
@@ -154,10 +154,10 @@ def _checked_repeat(day: dt.date | None, repeat: Repeat | None) -> Repeat | None
 
 
 class ReminderSettings:
-    """De instelling voor herinneringen: één voor alle plannen, in de stream "planner-settings"."""
+    """The reminder setting: one for all plans, in the stream "planner-settings"."""
 
     STREAM = "planner-settings"
-    # Standaard: 1 dag en 3 uur van tevoren, plannen van de hele dag om 9:00.
+    # Default: 1 day and 3 hours before, all-day plans at 9:00.
     DEFAULT = (True, 24 * 60, True, 3 * 60, dt.time(9))
     MAX_MINUTES = 14 * 24 * 60
 
@@ -175,6 +175,6 @@ class ReminderSettings:
                 raise DomainError("A reminder must be between 1 minute and 14 days before")
         new = (bool(first_enabled), first_minutes, bool(second_enabled), second_minutes, all_day_time)
         if new == self.current:
-            return []  # dezelfde instelling: geen event
+            return []  # the same setting: no event
         self.current = new
         return [ReminderSettingsChanged(*new)]

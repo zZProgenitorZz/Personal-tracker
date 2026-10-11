@@ -41,7 +41,7 @@ def test_duplicate_title_gives_400():
 
 def test_unknown_series_gives_404():
     client = make_client()
-    response = client.post("/reading/series/bestaat-niet/progress", json={"chapter": 5})
+    response = client.post("/reading/series/does-not-exist/progress", json={"chapter": 5})
     assert response.status_code == 404
 
 
@@ -49,7 +49,7 @@ def test_invalid_kind_gives_422():
     client = make_client()
     response = client.post(
         "/reading/series",
-        json={"title": "Iets", "kind": "comic", "source": "ergens"},
+        json={"title": "Something", "kind": "comic", "source": "somewhere"},
     )
     assert response.status_code == 422
 
@@ -62,7 +62,7 @@ def test_homepage_is_served():
 def test_remove_series():
     client = make_client()
     series_id = start_solo_leveling(client)
-    script = {"Content-Type": "application/json"}  # zo laat een script zien dat het geen andere website is
+    script = {"Content-Type": "application/json"}  # that's how a script shows it isn't another website
     assert client.delete(f"/reading/series/{series_id}").status_code == 403
     assert client.delete(f"/reading/series/{series_id}", headers=script).status_code == 204
     assert client.get("/reading/library").json() == []
@@ -70,21 +70,21 @@ def test_remove_series():
 
 
 def test_settings_are_read_from_env_file(tmp_path, monkeypatch):
-    # Eerst zetten en dan weghalen, zodat monkeypatch de oude toestand na de test terugzet.
-    monkeypatch.setenv("GOOGLE_BOOKS_API_KEY", "tijdelijk")
+    # Set it first and then remove it, so monkeypatch restores the old state after the test.
+    monkeypatch.setenv("GOOGLE_BOOKS_API_KEY", "temporary")
     monkeypatch.delenv("GOOGLE_BOOKS_API_KEY")
     env_file = tmp_path / ".env"
-    env_file.write_text("GOOGLE_BOOKS_API_KEY=uit-bestand\n", encoding="utf-8")
+    env_file.write_text("GOOGLE_BOOKS_API_KEY=from-file\n", encoding="utf-8")
     create_app(":memory:", env_file=env_file)
-    assert os.environ["GOOGLE_BOOKS_API_KEY"] == "uit-bestand"
+    assert os.environ["GOOGLE_BOOKS_API_KEY"] == "from-file"
 
 
 def test_real_environment_wins_over_env_file(tmp_path, monkeypatch):
-    monkeypatch.setenv("GOOGLE_BOOKS_API_KEY", "uit-terminal")
+    monkeypatch.setenv("GOOGLE_BOOKS_API_KEY", "from-terminal")
     env_file = tmp_path / ".env"
-    env_file.write_text("GOOGLE_BOOKS_API_KEY=uit-bestand\n", encoding="utf-8")
+    env_file.write_text("GOOGLE_BOOKS_API_KEY=from-file\n", encoding="utf-8")
     create_app(":memory:", env_file=env_file)
-    assert os.environ["GOOGLE_BOOKS_API_KEY"] == "uit-terminal"
+    assert os.environ["GOOGLE_BOOKS_API_KEY"] == "from-terminal"
 
 
 def test_start_series_with_status_via_api():

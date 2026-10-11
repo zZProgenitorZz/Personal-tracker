@@ -1,4 +1,4 @@
-"""Sunny in de app: de knop en het paneel, berichten, Confirm/Cancel en New chat. Nep-client, geen API."""
+"""Sunny in the app: the button and the panel, messages, Confirm/Cancel and New chat. Fake client, no API."""
 import datetime as dt
 
 import pytest
@@ -34,7 +34,7 @@ def card_id(html):
     return html.split('id="sunny-card-', 1)[1].split('"', 1)[0]
 
 
-# ---- Knop en paneel ----
+# ---- Button and panel ----
 
 def test_button_and_panel_live_in_the_shell_and_hide_on_settings(app_and_client):
     _, client = app_and_client
@@ -46,7 +46,7 @@ def test_button_and_panel_live_in_the_shell_and_hide_on_settings(app_and_client)
 
 
 def test_without_a_key_there_is_one_tidy_line(app_and_client):
-    _, client = app_and_client  # in de tests is er nooit een echte client
+    _, client = app_and_client  # in the tests there is never a real client
     body = client.get("/ui/assistant").text
     assert "Add ANTHROPIC_API_KEY to .env to summon Sunny from the shadows" in body and "<form" not in body
     reply = client.post("/ui/assistant/message", data={"message": "hi"})
@@ -56,18 +56,18 @@ def test_without_a_key_there_is_one_tidy_line(app_and_client):
 def test_make_client_only_with_a_key(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert make_client() is None
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")  # alleen aanmaken, nooit aanroepen
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")  # only create it, never call it
     assert make_client() is not None
 
 
-# ---- Berichten ----
+# ---- Messages ----
 
 def test_a_question_gets_a_bubble_and_the_chat_stays(app_and_client):
     app, client = app_and_client
     give_sunny(app, response(text("Chapter 119. You're welcome, Progen.")))
     reply = client.post("/ui/assistant/message", data={"message": "Where am I in Solo Leveling?"}).text
     assert "sunny-bubble" in reply and "Chapter 119" in reply
-    log = client.get("/ui/assistant").text  # bv. na een andere pagina: het gesprek staat er nog
+    log = client.get("/ui/assistant").text  # e.g. after another page: the conversation is still there
     assert "Where am I in Solo Leveling?" in log and "Chapter 119" in log and "<form" in log
 
 
@@ -84,7 +84,7 @@ def test_a_proposal_is_a_card_and_nothing_is_saved_before_confirm(app_and_client
     assert confirmed.headers["HX-Trigger"] == "reading-changed"
     assert "toast" in confirmed.text and "hx-swap-oob" in confirmed.text
     assert client.get("/reading/library").json()[0]["current_chapter"] == 120
-    again = client.post(f"/ui/assistant/confirm/{card_id(reply)}")  # niet twee keer
+    again = client.post(f"/ui/assistant/confirm/{card_id(reply)}")  # not twice
     assert "HX-Trigger" not in again.headers
 
 
@@ -127,7 +127,7 @@ def test_a_failed_action_is_reported_not_crashed(app_and_client):
     give_sunny(app, response(tool("set_reading_progress", {"series_id": solo_id(client), "chapter": 120})),
                response(text("ok")))
     reply = client.post("/ui/assistant/message", data={"message": "120"}).text
-    client.delete(f"/ui/reading/series/{solo_id(client)}")  # intussen weg
+    client.delete(f"/ui/reading/series/{solo_id(client)}")  # gone in the meantime
     failed = client.post(f"/ui/assistant/confirm/{card_id(reply)}")
     assert failed.status_code == 200 and "toast-error" in failed.text
 
@@ -149,5 +149,5 @@ def test_the_history_sent_along_is_text_only_and_mentions_confirms(app_and_clien
     client.post(f"/ui/assistant/confirm/{card_id(reply)}")
     client.post("/ui/assistant/message", data={"message": "and the next one too"})
     sent = fake.calls[-1]["messages"]
-    assert all(isinstance(m["content"], str) for m in sent[:-1])  # geen denkblokken of tool-uitvoer van vorige beurten
+    assert all(isinstance(m["content"], str) for m in sent[:-1])  # no thinking blocks or tool output from earlier turns
     assert any("Confirm" in m["content"] and "chapter 119 → 120" in m["content"] for m in sent)

@@ -1,5 +1,5 @@
 {% import "_macros.html" as ui %}
-{# hx-disinherit: de kaarten mogen hx-include (de filters) niet erven, anders stuurt het statusmenu status="" mee. #}
+{# hx-disinherit: the cards must not inherit hx-include (the filters), otherwise the status menu sends status="" along. #}
 <div id="watching-grid" hx-disinherit="*" hx-get="/ui/watching/library/grid" hx-include="#watching-filters" hx-trigger="watching-changed from:body" hx-swap="outerHTML">
   {% if entries %}
   <p class="result-count">{{ entries|length }} titles</p>

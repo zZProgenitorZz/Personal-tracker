@@ -1,5 +1,5 @@
 {% import "_macros.html" as ui %}
-{# Onderdelen van Planner: snel invoeren, een plan als blokje, en de velden voor een herhaling. #}
+{# Parts of Planner: quick entry, a plan as a block, and the fields for a repeat. #}
 
 {% macro weekday_picker(selected=(), days=("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")) -%}
 <div class="genre-picker weekday-picker" role="group" aria-label="Weekdays">
@@ -9,7 +9,7 @@
 </div>
 {%- endmacro %}
 
-{# Eén invoerveld bovenaan elke Planner-pagina. Enter slaat op; de preview toont wat de app ervan maakt. #}
+{# One input field at the top of every Planner page. Enter saves; the preview shows what the app makes of it. #}
 {% macro quick_add() -%}
 <form class="quick-add" hx-post="/ui/planner/plans" hx-swap="none" autocomplete="off">
   <div class="quick-add-row">
@@ -38,7 +38,7 @@
 </form>
 {%- endmacro %}
 
-{# Een plan in de week: tijd en titel; klik opent de dialog. #}
+{# A plan in the week: time and title; a click opens the dialog. #}
 {% macro chip(o) -%}
 <button class="plan-chip{% if o.done %} is-done{% endif %}{% if not o.time %} is-all-day{% endif %}" type="button"
         hx-get="/ui/planner/plans/{{ o.plan.plan_id }}?on={{ o.on }}" hx-target="#plan-slot" hx-swap="innerHTML"
@@ -49,7 +49,7 @@
 </button>
 {%- endmacro %}
 
-{# Vorige / vandaag / volgende, voor Week en Day. #}
+{# Previous / today / next, for Week and Day. #}
 {% macro pager(url, previous, current, following, today_value, label_prev, label_next) -%}
 <div class="planner-pager">
   <button class="btn-icon" type="button" hx-get="{{ url }}{{ previous }}" hx-target="closest .page" hx-swap="outerHTML"

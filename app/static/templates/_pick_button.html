@@ -1,5 +1,5 @@
 {% import "_macros.html" as ui %}
-{# Alleen zichtbaar als er iets op Plan to Read/Watch staat; ververst zich na elke wijziging. #}
+{# Only visible when something is on Plan to Read/Watch; refreshes itself after every change. #}
 <div id="pick-button" hx-get="/ui/{{ tracker }}/pick-button" hx-trigger="{{ tracker }}-changed from:body"
      hx-swap="outerHTML" hx-disinherit="*">
   {% if count %}

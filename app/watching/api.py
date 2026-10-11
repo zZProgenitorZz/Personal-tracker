@@ -9,7 +9,7 @@ from .events import WatchKind, WatchStatus
 from .projections import WatchActivityProjection, WatchlistProjection
 
 
-# ---- Wat de API binnen verwacht ----
+# ---- What the API expects to receive ----
 
 class AddShowBody(BaseModel):
     title: str = Field(min_length=1)
@@ -27,7 +27,7 @@ class GenresBody(BaseModel):
     genres: list[str]
 
 
-# ---- De endpoints ----
+# ---- The endpoints ----
 
 def create_watching_router(
     handler: WatchingCommandHandler,
@@ -43,7 +43,7 @@ def create_watching_router(
             raise HTTPException(status_code=404, detail="Title not found")
         return entry
 
-    # Lezen: vragen aan de read models
+    # Reading: questions for the read models
 
     @router.get("/list")
     def get_list(status: WatchStatus | None = None):
@@ -57,11 +57,11 @@ def create_watching_router(
     def get_activity():
         return {"finished_per_day": {str(day): n for day, n in activity.per_day().items()}}
 
-    # Schrijven: commands naar de handler
+    # Writing: commands to the handler
 
     @router.post("/shows", status_code=201)
     def add_show(body: AddShowBody):
-        # Een mislukte cover blokkeert het toevoegen niet; de reden staat in cover_error.
+        # A failed cover doesn't block adding; the reason is in cover_error.
         cover, cover_error = None, None
         if body.cover_url:
             try:

@@ -23,7 +23,7 @@ class LibraryProjection:
         self.reset()
 
     def reset(self) -> None:
-        """Leeg beginnen, bijvoorbeeld om opnieuw op te bouwen na het terugzetten van een back-up."""
+        """Starts empty, for example to rebuild after restoring a backup."""
         self._entries: dict[str, LibraryEntry] = {}
 
     def apply(self, event) -> None:
@@ -43,7 +43,7 @@ class LibraryProjection:
         elif isinstance(event, GenresChanged):
             self._entries[event.series_id].genres = list(event.genres)
         elif isinstance(event, SeriesRemoved):
-            del self._entries[event.series_id]  # de titel is daarmee weer vrij
+            del self._entries[event.series_id]  # which frees up the title again
 
     def all(self) -> list[LibraryEntry]:
         return sorted(self._entries.values(), key=lambda e: e.title.lower())
@@ -56,8 +56,8 @@ class LibraryProjection:
         return sorted(reading, key=lambda e: e.updated_at, reverse=True)
 
     def stale(self, now: datetime, days: int) -> list[LibraryEntry]:
-        """Gathering dust: op Reading, maar langer dan `days` dagen geen voortgang of statuswijziging.
-        Langst stil eerst."""
+        """Gathering dust: on Reading, but no progress or status change for longer than `days` days.
+        Quiet the longest first."""
         limit = now - timedelta(days=days)
         return sorted((e for e in self.by_status(Status.READING) if e.updated_at < limit), key=lambda e: e.updated_at)
 
@@ -89,8 +89,8 @@ class ReadingActivityProjection:
         return sum(self._per_day.values())
 
     def streak(self, today: date) -> int:
-        """Aantal dagen op rij met gelezen hoofdstukken. Vandaag telt pas mee
-        als er gelezen is, maar breekt de reeks ook niet zolang de dag nog loopt."""
+        """Number of days in a row with chapters read. Today only counts
+        once you have read, but it doesn't break the streak while the day is still running."""
         day = today if self._per_day.get(today) else today - timedelta(days=1)
         days = 0
         while self._per_day.get(day, 0) > 0:

@@ -12,16 +12,16 @@ from pathlib import Path
 
 
 def _to_json(value):
-    if isinstance(value, (datetime, date, time)):  # datetime eerst: het is ook een date
+    if isinstance(value, (datetime, date, time)):  # datetime first: it is also a date
         return value.isoformat()
     if isinstance(value, Enum):
         return value.value
-    raise TypeError(f"Kan {type(value)} niet opslaan")
+    raise TypeError(f"Can't store {type(value)}")
 
 
 def _from_json(kind, value):
-    """Een JSON-waarde terug naar het type uit de dataclass: datum, tijd, enum, geneste
-    dataclass, tuple, of optioneel (X | None). Al het andere komt terug zoals het was."""
+    """A JSON value back to the type from the dataclass: date, time, enum, nested
+    dataclass, tuple, or optional (X | None). Everything else comes back as it was."""
     if value is None:
         return None
     if typing.get_origin(kind) in (typing.Union, types.UnionType):
@@ -50,8 +50,8 @@ class EventStore:
         self._subscribers = []
         self._types = {t.__name__: t for t in event_types}
         self._conn = sqlite3.connect(path, check_same_thread=False)
-        self._lock = threading.RLock()  # schrijven, kopiëren en terugzetten nooit door elkaar
-        # De verbinding sluiten zodra de store opgeruimd wordt (of bij close()).
+        self._lock = threading.RLock()  # writing, copying and restoring never overlap
+        # Close the connection as soon as the store is cleaned up (or on close()).
         self._closer = weakref.finalize(self, self._conn.close)
         self._conn.execute(
             """CREATE TABLE IF NOT EXISTS events (
@@ -62,11 +62,11 @@ class EventStore:
                 at        TEXT NOT NULL
             )"""
         )
-        # load_stream zoekt op stream_id; zonder index wordt dat trager naarmate er meer events zijn.
-        # IF NOT EXISTS: ook veilig voor een bestaande database.
+        # load_stream looks up stream_id; without an index that gets slower as events grow.
+        # IF NOT EXISTS: also safe for an existing database.
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_events_stream ON events(stream_id)")
         self._conn.commit()
-        self._pending: list | None = None  # events van een lopende transaction(), nog niet gemeld
+        self._pending: list | None = None  # events of a running transaction(), not announced yet
 
     def close(self) -> None:
         self._closer()
@@ -78,7 +78,7 @@ class EventStore:
         with self._lock:
             rows = [(stream_id, type(event).__name__, json.dumps(asdict(event), default=_to_json), event.at.isoformat())
                     for event in events]
-            if self._pending is not None:  # binnen transaction(): opslaan gebeurt aan het eind
+            if self._pending is not None:  # inside transaction(): saving happens at the end
                 self._conn.executemany("INSERT INTO events (stream_id, type, data, at) VALUES (?, ?, ?, ?)", rows)
                 self._pending.extend(events)
                 return
@@ -88,12 +88,12 @@ class EventStore:
 
     @contextmanager
     def transaction(self):
-        """Veel appends in één keer opslaan (bijvoorbeeld een import). Elk command gaat nog steeds
-        langs zijn aggregate: load_stream ziet binnen de transactie wat er al bijgekomen is. Pas na
-        het opslaan horen de subscribers ervan; gaat er iets mis, dan wordt niets opgeslagen."""
+        """Saves many appends at once (an import, for example). Each command still goes
+        through its aggregate: load_stream sees what was added inside the transaction. Only after
+        saving do the subscribers hear about it; if anything goes wrong, nothing is saved."""
         with self._lock:
             if self._pending is not None:
-                raise RuntimeError("Er loopt al een transactie")
+                raise RuntimeError("A transaction is already running")
             self._pending = []
             try:
                 yield
@@ -114,9 +114,9 @@ class EventStore:
         with self._lock:
             return self._conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
 
-    # ---- Back-up ----
-    # Via de back-up-API van SQLite: altijd een complete, kloppende kopie,
-    # ook als er op hetzelfde moment iets wordt weggeschreven.
+    # ---- Backup ----
+    # Through SQLite's backup API: always a complete, consistent copy,
+    # even when something is being written at the same moment.
 
     def copy_to(self, path) -> None:
         target = sqlite3.connect(str(path))
@@ -127,7 +127,7 @@ class EventStore:
             target.close()
 
     def restore_from(self, path) -> None:
-        """Vervang alle events door die uit de kopie op `path`."""
+        """Replaces all events with those from the copy at `path`."""
         source = sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True)
         try:
             with self._lock:
@@ -143,7 +143,7 @@ class EventStore:
         return [self._rebuild(t, d) for t, d in rows]
 
     def load_type(self, event_type: type) -> list:
-        """Alleen de events van één soort, in volgorde (bijvoorbeeld alle TrackPlayed)."""
+        """Only the events of one type, in order (for example all TrackPlayed)."""
         rows = self._conn.execute("SELECT type, data FROM events WHERE type = ? ORDER BY id", (event_type.__name__,))
         return [self._rebuild(t, d) for t, d in rows]
 

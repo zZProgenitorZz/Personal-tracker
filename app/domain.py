@@ -1,5 +1,5 @@
-"""Wat alle domeinen (reading, watching, ...) delen."""
+"""What all domains (reading, watching, ...) share."""
 
 
 class DomainError(Exception):
-    """Een verzoek dat de regels van een domein overtreedt. De melding is voor de gebruiker."""
+    """A request that breaks a domain's rules. The message is for the user."""

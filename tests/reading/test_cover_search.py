@@ -1,5 +1,5 @@
-"""Zoeken over alle bronnen: normaliseren, fuzzy matching, combineren en cachen.
-Bronnen zijn hier nepfuncties of een nep-AniList; er gaat niets over het netwerk."""
+"""Searching across all sources: normalizing, fuzzy matching, combining and caching.
+The sources here are fake functions or a fake AniList; nothing goes over the network."""
 import json
 import time
 from io import BytesIO
@@ -24,7 +24,7 @@ def media(romaji, english=None, native=None, synonyms=(), image="https://img.ani
 
 
 def anilist(pages: dict[str, list] | None = None, status: int = 200):
-    """Nep-AniList als enige bron: geeft per zoekterm een vaste lijst terug en onthoudt de zoektermen."""
+    """A fake AniList as the only source: returns a fixed list per search term and remembers the search terms."""
     searched = []
 
     def handle(request: httpx.Request):
@@ -39,7 +39,7 @@ def anilist(pages: dict[str, list] | None = None, status: int = 200):
 
 
 def fake_source(name, results=(), *, error=None, delay=0.0, calls=None):
-    """Een bron die meteen (of na `delay` seconden) vaste resultaten of een fout geeft."""
+    """A source that returns fixed results or an error right away (or after `delay` seconds)."""
     def source(client, term):
         if calls is not None:
             calls.append((name, term))
@@ -61,7 +61,7 @@ def no_network():
     return httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(404)))
 
 
-# ---- Normaliseren ----
+# ---- Normalizing ----
 
 @pytest.mark.parametrize("raw, expected", [
     ("Solo Leveling", "solo leveling"),
@@ -82,7 +82,7 @@ def test_normalize(raw, expected):
     ("Beginning After the End", "The Beginning After the End"),
     ("Tower of Godd", "Tower of God"),
     ("Lord of the Mysteries ", "Lord of Mysteries"),
-    # achtervoegsels van bronnen tellen niet mee
+    # sources' suffixes don't count
     ("Shadow Slave", "Shadow Slave, Book 1"),
     ("Shadow Slave", "Shadow Slave (Novel)"),
     ("Lord of the Mysteries", "Lord of the Mysteries Vol. 2"),
@@ -94,7 +94,7 @@ def test_small_differences_match(mine, official):
 
 @pytest.mark.parametrize("mine, other", [
     ("Tower of God", "The God of High School"),
-    ("Frieren", "Frieden"),            # korte titels: één letter verschil is een andere serie
+    ("Frieren", "Frieden"),            # short titles: one letter of difference is another series
     ("Eleceed", "Elected"),
     ("Nano Machine", "Machine Heart"),
     ("Shadow Slave", "Slave of the Shadow Kingdom"),
@@ -132,7 +132,7 @@ def test_equally_good_titles_show_the_first_one_of_the_source():
 
 
 def test_title_that_only_matches_an_alternative_title_is_found():
-    # Je kent hem als "ISSTH"; de bron noemt hem "Wo Yu Feng Tian", met ISSTH als synoniem.
+    # You know it as "ISSTH"; the source calls it "Wo Yu Feng Tian", with ISSTH as a synonym.
     [result] = rank("I Shall Seal the Heavens", [
         SourceResult(("Wo Yu Feng Tian", "我欲封天", "I Shall Seal The Heavens"), "https://mal/issth.jpg", "MyAnimeList"),
         SourceResult(("Wo Yu Feng Tian 2",), "https://mal/other.jpg", "MyAnimeList"),
@@ -157,11 +157,11 @@ def test_rank_uses_every_title_and_sorts_best_first():
         SourceResult(("Na Honjaman Level Up", "Solo Levelling"), "https://a/3.jpg", "AniList"),
     ])
     assert [r.image_url for r in results] == ["https://a/1.jpg", "https://a/3.jpg"]
-    assert results[0].title == "Solo Leveling"  # de titel die het best past
+    assert results[0].title == "Solo Leveling"  # the title that fits best
     assert results[0].source == "AniList"
 
 
-# ---- Stappen per bron: getypt, genormaliseerd, losse woorden ----
+# ---- Steps per source: as typed, normalized, single words ----
 
 def test_search_returns_matching_covers():
     search, searched = anilist({"Solo Leveling": [media("Solo Leveling", image="https://a/sl.jpg")]})
@@ -206,7 +206,7 @@ def test_each_source_stops_as_soon_as_it_matches():
     assert [term for name, term in calls if name == "B"] == ["Shadow Slave", "shadow slave", "shadow", "slave"]
 
 
-# ---- Bronnen combineren ----
+# ---- Combining sources ----
 
 def test_results_of_all_sources_are_merged_and_sorted():
     search = CoverSearch(no_network(), sources=[
@@ -216,8 +216,8 @@ def test_results_of_all_sources_are_merged_and_sorted():
         fake_source("AniList", [(["Shadow Slave"], "https://al/1.jpg")]),
     ])
     results = search.search("Shadow Slave")
-    assert [r.source for r in results[:3]] == ["MangaUpdates", "Open Library", "AniList"]  # allemaal 100
-    assert results[-1].image_url == "https://ol/2.jpg"  # typfout scoort lager
+    assert [r.source for r in results[:3]] == ["MangaUpdates", "Open Library", "AniList"]  # all 100
+    assert results[-1].image_url == "https://ol/2.jpg"  # a typo scores lower
     assert [r.score for r in results] == sorted((r.score for r in results), reverse=True)
 
 
@@ -227,7 +227,7 @@ def test_same_cover_url_is_shown_once():
         fake_source("B", [(["Shadow Slave"], "https://x/same.jpg")]),
     ])
     [result] = search.search("Shadow Slave")
-    assert result.source == "B" and result.score == 100  # de beste match blijft over
+    assert result.source == "B" and result.score == 100  # the best match remains
 
 
 def test_failing_source_does_not_hide_the_others():
@@ -275,14 +275,14 @@ def test_only_source_failing_keeps_its_own_message():
 
 def test_network_error_gives_clear_error():
     def offline(request):
-        raise httpx.ConnectError("geen netwerk", request=request)
+        raise httpx.ConnectError("no network", request=request)
 
     search = CoverSearch(httpx.Client(transport=httpx.MockTransport(offline)), sources=[anilist_source])
     with pytest.raises(CoverError, match="reach AniList"):
         search.search("Solo Leveling")
 
 
-# ---- Te kleine covers (Google Books) ----
+# ---- Covers that are too small (Google Books) ----
 
 def test_covers_that_are_too_small_are_skipped():
     def images(request):
@@ -332,10 +332,10 @@ def test_results_with_a_failed_source_are_cached_only_briefly():
     ])
     search.search("Shadow Slave")
     clock[0] = 30
-    search.search("Shadow Slave")   # nog uit de cache: bladeren blijft stabiel
+    search.search("Shadow Slave")   # still from the cache: browsing stays stable
     first_round = len(calls)
     clock[0] = 90
-    search.search("Shadow Slave")   # daarna de mislukte bron opnieuw proberen
+    search.search("Shadow Slave")   # after that, try the failed source again
     assert len(calls) > first_round
 
 

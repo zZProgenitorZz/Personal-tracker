@@ -1,5 +1,5 @@
-"""Events van Watching. Klassenamen zijn uniek over alle domeinen heen, want de
-event store slaat alleen de klassenaam op (vandaar Show... in plaats van Series...)."""
+"""Events of Watching. Class names are unique across all domains, because the
+event store only stores the class name (hence Show... instead of Series...)."""
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -7,11 +7,11 @@ from enum import Enum
 
 class WatchStatus(str, Enum):
     WATCHING = "watching"
-    REWATCHING = "rewatching"  # iets wat je al zag, nog een keer
+    REWATCHING = "rewatching"  # something you have seen before, once more
     COMPLETED = "completed"
     ON_HOLD = "on_hold"
     DROPPED = "dropped"
-    PLAN_TO_WATCH = "plan_to_watch"  # backlog: nog niet begonnen
+    PLAN_TO_WATCH = "plan_to_watch"  # backlog: not started yet
 
 
 class WatchKind(str, Enum):
@@ -20,7 +20,7 @@ class WatchKind(str, Enum):
     ANIME = "anime"
 
 
-# Hoe statussen en soorten in de app heten (pagina's, toasts en Sunny's kaarten).
+# What statuses and kinds are called in the app (pages, toasts and Sunny's cards).
 WATCH_STATUS_LABELS = {
     WatchStatus.WATCHING: "Watching",
     WatchStatus.REWATCHING: "Rewatching",
@@ -41,7 +41,7 @@ class ShowAdded:
     show_id: str
     title: str
     kind: WatchKind
-    status: WatchStatus  # de beginstatus; toevoegen als Completed is geschiedenis, geen afronding
+    status: WatchStatus  # the starting status; adding as Completed is history, not finishing
     at: datetime = field(default_factory=now)
     cover: str | None = None
 
@@ -57,7 +57,7 @@ class ShowStatusChanged:
 @dataclass(frozen=True)
 class ShowGenresChanged:
     show_id: str
-    genres: list[str]  # de volledige nieuwe lijst
+    genres: list[str]  # the complete new list
     at: datetime = field(default_factory=now)
 
 

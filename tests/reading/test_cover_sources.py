@@ -1,5 +1,5 @@
-"""Elke coverbron apart: wat vraagt hij, en wat haalt hij uit het antwoord?
-Alle API's zijn nep (httpx.MockTransport)."""
+"""Each cover source on its own: what does it ask, and what does it take from the answer?
+All APIs are fake (httpx.MockTransport)."""
 import json
 
 import httpx
@@ -28,7 +28,7 @@ def test_anilist_reads_all_titles_and_largest_cover():
     client = client_answering({"data": {"Page": {"media": [
         {"title": {"romaji": "Ore dake Level Up na Ken", "english": "Solo Leveling", "native": "나 혼자만 레벨업"},
          "synonyms": ["Only I Level Up"], "coverImage": {"extraLarge": "https://a/xl.jpg", "large": "https://a/l.jpg"}},
-        {"title": {"romaji": "Zonder cover"}, "synonyms": [], "coverImage": {}},
+        {"title": {"romaji": "No cover"}, "synonyms": [], "coverImage": {}},
     ]}}}, seen)
 
     [result] = anilist(client, "Solo Leveling")
@@ -47,7 +47,7 @@ def test_mangaupdates_reads_novels_too():
     client = client_answering({"results": [
         {"hit_title": "Shadow Slave", "record": {"title": "Shadow Slave (Novel)", "type": "Novel",
                                                  "image": {"url": {"original": "https://mu/o.jpg", "thumb": "https://mu/t.jpg"}}}},
-        {"hit_title": "Zonder plaatje", "record": {"title": "Zonder plaatje", "type": "Manhwa", "image": {"url": {}}}},
+        {"hit_title": "No image", "record": {"title": "No image", "type": "Manhwa", "image": {"url": {}}}},
     ]}, seen)
 
     [result] = mangaupdates(client, "Shadow Slave")
@@ -57,7 +57,7 @@ def test_mangaupdates_reads_novels_too():
     assert set(result.titles) == {"Shadow Slave (Novel)", "Shadow Slave"}
     assert seen[0].method == "POST"
     assert json.loads(seen[0].content)["search"] == "Shadow Slave"
-    assert "type" not in json.loads(seen[0].content)  # geen typefilter: novels én manhwa
+    assert "type" not in json.loads(seen[0].content)  # no type filter: novels and manhwa
 
 
 # ---- Google Books ----
@@ -70,14 +70,14 @@ def test_google_books_asks_for_largest_version_over_https(monkeypatch):
             "smallThumbnail": "http://books.google.com/books/content?id=X&printsec=frontcover&img=1&zoom=5&edge=curl",
             "thumbnail": "http://books.google.com/books/content?id=X&printsec=frontcover&img=1&zoom=1&edge=curl",
         }}},
-        {"volumeInfo": {"title": "Zonder plaatje"}},
+        {"volumeInfo": {"title": "No image"}},
     ]}, seen)
 
     [result] = google_books(client, "Shadow Slave")
 
     assert result.source == "Google Books"
     assert result.image_url == "https://books.google.com/books/content?id=X&printsec=frontcover&img=1&zoom=0"
-    assert result.check_size  # Google-thumbnails kunnen te klein zijn
+    assert result.check_size  # Google thumbnails can be too small
     assert set(result.titles) == {"Shadow Slave", "Shadow Slave: Book 1"}
     assert seen[0].url.params["q"] == "intitle:Shadow Slave"
     assert "key" not in seen[0].url.params
@@ -109,7 +109,7 @@ def test_open_library_builds_large_cover_url():
     seen = []
     client = client_answering({"docs": [
         {"title": "Shadow Slave", "alternative_title": ["Shadow Slave Vol. 1"], "cover_i": 15100918},
-        {"title": "Zonder cover"},
+        {"title": "No cover"},
     ]}, seen)
 
     [result] = open_library(client, "Shadow Slave")
@@ -120,7 +120,7 @@ def test_open_library_builds_large_cover_url():
     assert seen[0].url.params["title"] == "Shadow Slave"
 
 
-# ---- Fouten zijn voor elke bron hetzelfde ----
+# ---- Errors are the same for every source ----
 
 SOURCES = [(anilist, "AniList"), (mangaupdates, "MangaUpdates"), (myanimelist, "MyAnimeList"),
            (google_books, "Google Books"), (open_library, "Open Library")]
@@ -150,7 +150,7 @@ def test_unreadable_answer_names_the_source(source, name):
         source(client_answering(httpx.Response(200, text="<html>")), "x")
 
 
-# ---- Genres die bronnen meegeven ----
+# ---- Genres that sources pass along ----
 
 def test_anilist_genres_and_strong_tags():
     seen = []
@@ -160,7 +160,7 @@ def test_anilist_genres_and_strong_tags():
         "tags": [{"name": "Isekai", "rank": 70}, {"name": "Martial Arts", "rank": 20}],
     }]}}}, seen)
     [result] = anilist(client, "Lord of Mysteries")
-    assert result.genres == ("Action", "Isekai", "Mystery")  # zwakke tag en onbekend genre vallen weg
+    assert result.genres == ("Action", "Isekai", "Mystery")  # a weak tag and an unknown genre drop out
     assert "genres" in json.loads(seen[0].content)["query"]
 
 
@@ -186,7 +186,7 @@ def test_open_library_subjects():
     assert "subject" in seen[0].url.params["fields"]
 
 
-# ---- Novels worden niet weggefilterd ----
+# ---- Novels aren't filtered out ----
 
 def test_anilist_keeps_novels():
     seen = []
@@ -198,18 +198,18 @@ def test_anilist_keeps_novels():
     ]}}}, seen)
     assert [r.image_url for r in anilist(client, "Lord of the Mysteries")] == ["https://a/novel.jpg", "https://a/manhua.jpg"]
     query = json.loads(seen[0].content)["query"]
-    assert "type: MANGA" in query and "format" not in query.split("media(", 1)[1].split(")", 1)[0]  # geen formatfilter
+    assert "type: MANGA" in query and "format" not in query.split("media(", 1)[1].split(")", 1)[0]  # no format filter
 
 
 def test_mangaupdates_matches_on_the_associated_name_it_found():
-    # Zoek je "Coiling Dragon", dan heet de serie zelf "Panlong"; hit_title is de naam die matchte.
+    # Search for "Coiling Dragon" and the series itself is called "Panlong"; hit_title is the name that matched.
     client = client_answering({"results": [{"hit_title": "Coiling Dragon", "record": {
         "title": "Panlong", "type": "Manhua", "image": {"url": {"original": "https://mu/p.jpg"}}}}]})
     [result] = mangaupdates(client, "Coiling Dragon")
     assert "Coiling Dragon" in result.titles and "Panlong" in result.titles
 
 
-# ---- MyAnimeList (via Jikan) ----
+# ---- MyAnimeList (through Jikan) ----
 
 def jikan_novel(mal_id, title, *, english=None, synonyms=(), image="https://mal/x.jpg", type_="Light Novel",
                 genres=(), themes=()):
@@ -228,7 +228,7 @@ def test_myanimelist_asks_for_novels_and_light_novels(no_jikan_wait):
     seen = []
     client = client_answering({"data": [jikan_novel(1, "Gu Zhen Ren", english="Reverend Insanity",
                                                     genres=["Action", "Fantasy"], themes=["Martial Arts", "Reincarnation"])]}, seen)
-    [result] = myanimelist(client, "Reverend Insanity")  # zelfde id in beide antwoorden: één keer
+    [result] = myanimelist(client, "Reverend Insanity")  # the same id in both answers: once
     assert [r.url.params["type"] for r in seen] == ["novel", "lightnovel"]
     assert all(r.url.host == "api.jikan.moe" and r.url.params["q"] == "Reverend Insanity" for r in seen)
     assert (result.source, result.image_url) == ("MyAnimeList", "https://mal/x.jpg")
@@ -260,7 +260,7 @@ def test_myanimelist_waits_between_requests(monkeypatch):
     started = time.monotonic()
     myanimelist(client_answering({"data": []}), "x")
     myanimelist(client_answering({"data": []}), "x")
-    assert time.monotonic() - started >= 0.55  # 3 pauzes tussen 4 verzoeken (Jikan: max 3 per seconde)
+    assert time.monotonic() - started >= 0.55  # 3 pauses between 4 requests (Jikan: at most 3 per second)
 
 
 def test_unreachable_myanimelist_is_skipped_for_a_while(no_jikan_wait, monkeypatch):
@@ -268,13 +268,13 @@ def test_unreachable_myanimelist_is_skipped_for_a_while(no_jikan_wait, monkeypat
     monkeypatch.setattr(cover_sources.time, "monotonic", lambda: clock[0])
     seen = []
     with pytest.raises(CoverError, match="MyAnimeList took too long"):
-        myanimelist(client_answering(httpx.ConnectTimeout("geen verbinding"), seen), "x")
+        myanimelist(client_answering(httpx.ConnectTimeout("no connection"), seen), "x")
     with pytest.raises(CoverError, match="unreachable"):
-        myanimelist(client_answering({"data": []}, seen), "x")  # meteen, zonder verzoek
+        myanimelist(client_answering({"data": []}, seen), "x")  # right away, without a request
     assert len(seen) == 1
 
     clock[0] += cover_sources.JIKAN_COOLDOWN + 1
-    assert myanimelist(client_answering({"data": []}, seen), "x") == []  # daarna weer gewoon proberen
+    assert myanimelist(client_answering({"data": []}, seen), "x") == []  # after that, just try again
     assert len(seen) == 3
 
 

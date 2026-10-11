@@ -1,4 +1,4 @@
-"""Back-ups maken, bewaren (de 10 nieuwste) en terugzetten. Alles in tmp_path."""
+"""Making, keeping (the 10 newest) and restoring backups. Everything in tmp_path."""
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -12,7 +12,7 @@ from app.reading.events import Kind, ProgressLogged, SeriesStarted
 
 
 class Clock:
-    """Nepklok: elke aanroep een minuut later, zodat back-ups verschillende namen krijgen."""
+    """Fake clock: each call a minute later, so backups get different names."""
     def __init__(self):
         self.now = datetime(2026, 10, 6, 21, 0, 0)
 
@@ -35,7 +35,7 @@ def setup(tmp_path):
     return store, covers, backups, rebuilt
 
 
-# ---- Maken ----
+# ---- Making ----
 
 def test_backup_is_named_after_date_and_time(setup):
     store, covers, backups, _ = setup
@@ -91,11 +91,11 @@ def test_failed_backup_leaves_nothing_behind(setup, monkeypatch):
 def test_unrelated_folders_are_ignored(setup):
     _, _, backups, _ = setup
     backups.create()
-    (backups.directory / "mijn foto's").mkdir()
+    (backups.directory / "my photos").mkdir()
     assert len(backups.list()) == 1
 
 
-# ---- Terugzetten ----
+# ---- Restoring ----
 
 def test_restore_brings_back_the_old_events(setup):
     store, _, backups, rebuilt = setup
@@ -106,7 +106,7 @@ def test_restore_brings_back_the_old_events(setup):
     backups.restore(old.name)
 
     assert [e.title for e in store.load_all()] == ["Shadow Slave"]
-    assert rebuilt == [1]  # de read models worden opnieuw opgebouwd
+    assert rebuilt == [1]  # the read models are rebuilt
 
 
 def test_restore_first_saves_the_current_state(setup):
@@ -119,7 +119,7 @@ def test_restore_first_saves_the_current_state(setup):
 
     [safety, _] = backups.list()
     assert safety.reason == "before-restore" and safety.events == 2
-    backups.restore(safety.name)  # de terugzetting zelf is ook terug te draaien
+    backups.restore(safety.name)  # the restore itself can be undone too
     assert store.count() == 2
 
 
@@ -137,12 +137,12 @@ def test_restoring_the_oldest_backup_keeps_it(setup):
     oldest = backups.create()
     for _ in range(KEEP_BACKUPS - 1):
         backups.create()
-    backups.restore(oldest.name)  # maakt een elfde (before-restore) aan
+    backups.restore(oldest.name)  # makes an eleventh (before-restore)
     names = [b.name for b in backups.list()]
     assert oldest.name in names and len(names) == KEEP_BACKUPS
 
 
-@pytest.mark.parametrize("name", ["bestaat-niet", "../covers", "2026-10-06_21-01-00/../../x"])
+@pytest.mark.parametrize("name", ["does-not-exist", "../covers", "2026-10-06_21-01-00/../../x"])
 def test_restore_unknown_backup_is_refused(setup, name):
     _, _, backups, _ = setup
     with pytest.raises(BackupError):
@@ -153,19 +153,19 @@ def test_damaged_backup_is_refused_and_nothing_changes(setup):
     store, _, backups, rebuilt = setup
     store.append("1", [started("1", "Shadow Slave")])
     old = backups.create()
-    (old.path / "tracker.db").write_bytes(b"geen database")
+    (old.path / "tracker.db").write_bytes(b"not a database")
 
     with pytest.raises(BackupError):
         backups.restore(old.name)
     assert store.count() == 1 and rebuilt == []
-    assert len(backups.list()) == 1  # ook geen before-restore aangemaakt
+    assert len(backups.list()) == 1  # no before-restore made either
 
 
-# ---- Waar staan de back-ups? ----
+# ---- Where are the backups? ----
 
 def test_backup_dir_from_setting(monkeypatch, tmp_path):
-    monkeypatch.setenv("PROGEN_BACKUP_DIR", str(tmp_path / "eigen"))
-    assert default_backup_dir() == tmp_path / "eigen"
+    monkeypatch.setenv("PROGEN_BACKUP_DIR", str(tmp_path / "custom"))
+    assert default_backup_dir() == tmp_path / "custom"
 
 
 def test_backup_dir_in_onedrive(monkeypatch, tmp_path):
@@ -180,7 +180,7 @@ def test_backup_dir_without_onedrive(monkeypatch):
     assert default_backup_dir().name == "backups" and default_backup_dir().parent.name == "data"
 
 
-# ---- Los script: python -m app.backup ----
+# ---- Standalone script: python -m app.backup ----
 
 def test_command_line_makes_and_lists_backups(tmp_path, capsys):
     store = EventStore(str(tmp_path / "tracker.db"), ALL_EVENT_TYPES)

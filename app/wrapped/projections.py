@@ -1,8 +1,8 @@
-"""Wrapped: een jaaroverzicht over Reading, Watching en Listening heen.
+"""Wrapped: a year in review across Reading, Watching and Listening.
 
-Alleen lezen. Deze projectie bouwt zich op uit de events die er al zijn, dus hij
-werkt meteen met alle oude data en heeft geen eigen events of commands. Dagen,
-maanden en jaren volgen de lokale tijdzone, net als de andere projecties.
+Read only. This projection builds itself from the events that already exist, so it
+works right away with all old data and has no events or commands of its own. Days,
+months and years follow the local time zone, like the other projections.
 """
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field, replace
@@ -16,15 +16,15 @@ from ..reading.events import (
 from ..watching.events import ShowAdded, ShowGenresChanged, ShowStatusChanged, WatchKind, WatchStatus
 
 TOP = 5
-# ReadingSeries.start legt een andere beginstatus vast als StatusChanged direct na SeriesStarted,
-# in hetzelfde command (dus binnen milliseconden). Een statuswijziging die zo vlak na het
-# toevoegen komt, is de beginstatus en geen echte wijziging (zie _is_start_status).
+# ReadingSeries.start records another starting status as StatusChanged right after SeriesStarted,
+# in the same command (so within milliseconds). A status change that comes this soon after
+# adding is the starting status and not a real change (see _is_start_status).
 START_STATUS_WINDOW = timedelta(seconds=5)
 MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
 def title_key(title: str) -> str:
-    """Dezelfde titel volgens Reading (find_by_title): hoofdletters en spaties eromheen tellen niet."""
+    """The same title as Reading sees it (find_by_title): case and surrounding spaces don't count."""
     return title.strip().lower()
 
 
@@ -53,7 +53,7 @@ class MonthRow:
     chapters: float
     finished: int
     minutes: float
-    activity: float  # hoofdstukken + afgeronde titels + gespeelde nummers
+    activity: float  # chapters + finished titles + tracks played
 
 
 @dataclass(frozen=True)
@@ -75,7 +75,7 @@ class YearReview:
     top_artists: list[tuple[str, int]]
     top_tracks: list[TrackTotal]
     busiest_listening_day: tuple[date, float] | None
-    # Alles samen
+    # Everything together
     months: list[MonthRow]
     busiest_month: MonthRow | None
     most_active_day: tuple[date, float] | None
@@ -97,9 +97,9 @@ class YearReview:
 class _Year:
     chapters_per_day: dict[date, float] = field(default_factory=lambda: defaultdict(float))
     chapters_per_series: Counter = field(default_factory=Counter)
-    # Begonnen en afgerond per titel-sleutel, zodat alle versies van een serie één serie zijn.
+    # Started and finished per title key, so all versions of a series are one series.
     started: set[str] = field(default_factory=set)
-    completed_series: dict[str, date] = field(default_factory=dict)   # eerste keer afgerond dit jaar
+    completed_series: dict[str, date] = field(default_factory=dict)   # finished for the first time this year
     finished_shows: dict[str, date] = field(default_factory=dict)
     listen_ms_per_day: dict[date, int] = field(default_factory=lambda: defaultdict(int))
     plays_per_day: dict[date, int] = field(default_factory=lambda: defaultdict(int))
@@ -108,13 +108,13 @@ class _Year:
 
 
 def _ranked(counter, limit=None) -> list:
-    """Hoogste eerst; bij gelijkspel op naam, zodat de volgorde vast is."""
+    """Highest first; on a tie by name, so the order is fixed."""
     ranked = sorted(((k, v) for k, v in counter.items() if v > 0), key=lambda kv: (-kv[1], str(kv[0]).lower()))
     return ranked[:limit] if limit else ranked
 
 
 def _busiest(per_day: dict) -> tuple[date, float] | None:
-    """De dag met het meeste; bij gelijkspel de eerste."""
+    """The day with the most; on a tie the first one."""
     return max(per_day.items(), key=lambda kv: (kv[1], -kv[0].toordinal()), default=None)
 
 
@@ -133,19 +133,19 @@ class WrappedProjection:
 
     def reset(self) -> None:
         self._years: dict[int, _Year] = defaultdict(_Year)
-        # Een verwijderde en opnieuw toegevoegde serie krijgt een nieuwe series_id (Reading regel 6).
-        # Wrapped telt alle versies met dezelfde titel als één serie: per sleutel de series_id's, oudste eerst.
-        self._series: dict[str, Title] = {}            # ook van verwijderde series
+        # A removed and re-added series gets a new series_id (Reading rule 6).
+        # Wrapped counts all versions with the same title as one series: per key the series_ids, oldest first.
+        self._series: dict[str, Title] = {}            # removed series too
         self._series_genres: dict[str, list[str]] = {}
-        self._key: dict[str, str] = {}                 # series_id -> titel-sleutel
+        self._key: dict[str, str] = {}                 # series_id -> title key
         self._versions: dict[str, list[str]] = defaultdict(list)
-        self._started_by: dict[str, str] = {}          # titel-sleutel -> de series_id die hem liet beginnen
-        self._just_added: SeriesStarted | None = None  # het vorige Reading-event, als dat SeriesStarted was
+        self._started_by: dict[str, str] = {}          # title key -> the series_id that started it
+        self._just_added: SeriesStarted | None = None  # the previous Reading event, if that was SeriesStarted
         self._shows: dict[str, Title] = {}
         self._show_genres: dict[str, list[str]] = {}
         self._tracks: dict[str, tuple[str, tuple[str, ...]]] = {}
 
-    # ---- Events verwerken ----
+    # ---- Handling events ----
 
     def apply(self, event) -> None:
         if isinstance(event, (SeriesStarted, ProgressLogged, StatusChanged, GenresChanged, SeriesRemoved)):
@@ -174,59 +174,59 @@ class WrappedProjection:
             self._series[event.series_id] = Title(event.title, event.kind, event.cover)
             key = self._key[event.series_id] = title_key(event.title)
             self._versions[key].append(event.series_id)
-            self._start(event.series_id, year)  # wordt teruggedraaid als de beginstatus backlog of Completed is
+            self._start(event.series_id, year)  # undone if the starting status is backlog or Completed
         elif isinstance(event, GenresChanged):
             self._series_genres[event.series_id] = list(event.genres)
         elif isinstance(event, ProgressLogged):
             chapters = event.chapter - event.previous_chapter
-            if chapters > 0:  # dezelfde regel als ReadingActivity
+            if chapters > 0:  # the same rule as ReadingActivity
                 year.chapters_per_day[day] += chapters
                 year.chapters_per_series[event.series_id] += chapters
         elif isinstance(event, StatusChanged):
             if self._is_start_status(event):
                 if event.to_status in (Status.PLAN_TO_READ, Status.COMPLETED):
-                    # Toegevoegd als backlog of als iets wat je al uit had: niet begonnen, niet afgerond.
-                    # Alleen terugdraaien als déze versie de serie liet beginnen, niet een eerdere.
+                    # Added as backlog or as something you had already finished: not started, not finished.
+                    # Only undo if this version started the series, not an earlier one.
                     key = self._key[event.series_id]
                     if self._started_by.get(key) == event.series_id:
                         del self._started_by[key]
                         self._years[_day(self._just_added.at).year].started.discard(key)
                 return
             if event.from_status is Status.PLAN_TO_READ:
-                self._start(event.series_id, year)  # uit de backlog: nu pas begonnen
+                self._start(event.series_id, year)  # out of the backlog: only started now
             if event.to_status is Status.COMPLETED and event.series_id in self._key:
                 year.completed_series.setdefault(self._key[event.series_id], day)
 
     def _is_start_status(self, event: StatusChanged) -> bool:
-        """De beginstatus uit ReadingSeries.start: volgt direct op de SeriesStarted van dezelfde serie
-        (geen ander Reading-event ertussen) en binnen een paar seconden. Listening-plays van de sync
-        mogen ertussen zitten; die tellen voor deze regel niet mee."""
+        """The starting status from ReadingSeries.start: follows right after the SeriesStarted of the same
+        series (no other Reading event in between) and within a few seconds. Listening plays from the sync
+        may come in between; they don't count for this rule."""
         added = self._just_added
         return (added is not None and added.series_id == event.series_id
                 and event.from_status is Status.READING
                 and abs(event.at - added.at) <= START_STATUS_WINDOW)
 
     def _start(self, series_id: str, year: _Year) -> None:
-        """Een serie begint één keer: in het jaar van de eerste versie, niet opnieuw na verwijderen."""
+        """A series starts once: in the year of the first version, not again after removing it."""
         key = self._key.get(series_id)
         if key is not None and key not in self._started_by:
             self._started_by[key] = series_id
             year.started.add(key)
 
     def _title(self, key: str) -> Title:
-        """De nieuwste versie; zonder cover de cover van de nieuwste oudere versie die er wel een heeft."""
+        """The newest version; without a cover, the cover of the newest older version that has one."""
         versions = [self._series[s] for s in reversed(self._versions[key])]
         cover = next((v.cover for v in versions if v.cover), None)
         return replace(versions[0], cover=cover)
 
     def _genres(self, key: str) -> list[str]:
-        """De genres van de nieuwste versie die genres heeft (ook voor hoofdstukken van oudere versies)."""
+        """The genres of the newest version that has genres (also for chapters of older versions)."""
         return next((g for s in reversed(self._versions[key]) if (g := self._series_genres.get(s))), [])
 
-    # ---- Lezen ----
+    # ---- Reading ----
 
     def years(self) -> list[int]:
-        """Jaren met data, nieuwste eerst."""
+        """Years with data, newest first."""
         return sorted((y for y in self._years if self.year(y).has_data), reverse=True)
 
     def year(self, number: int) -> YearReview:

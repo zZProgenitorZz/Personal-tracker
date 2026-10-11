@@ -1,4 +1,4 @@
-"""Gathering dust bij Watching: titels op Watching zonder statuswijziging sinds een tijd. Alleen lezen."""
+"""Gathering dust for Watching: titles on Watching without a status change for a while. Read only."""
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -31,12 +31,12 @@ def test_watching_titles_untouched_for_longer_than_the_limit_are_stale():
         ShowAdded("3", "New", WatchKind.ANIME, WatchStatus.WATCHING, at=days_ago(10)),
         ShowAdded("4", "Resumed", WatchKind.SERIES, WatchStatus.ON_HOLD, at=days_ago(90)),
         ShowStatusChanged("4", WatchStatus.ON_HOLD, WatchStatus.WATCHING, at=days_ago(5)),
-        ShowGenresChanged("1", ["Drama"], at=days_ago(1)),  # genres aanpassen is geen kijken
+        ShowGenresChanged("1", ["Drama"], at=days_ago(1)),  # changing genres isn't watching
     )
     assert [e.title for e in watchlist.stale(NOW, 30)] == ["Older", "Old"]
 
 
-@pytest.mark.parametrize("status", [s for s in WatchStatus if s not in (WatchStatus.WATCHING, WatchStatus.REWATCHING)])  # rewatching telt als kijken
+@pytest.mark.parametrize("status", [s for s in WatchStatus if s not in (WatchStatus.WATCHING, WatchStatus.REWATCHING)])  # rewatching counts as watching
 def test_other_statuses_are_never_stale(status):
     watchlist = given(ShowAdded("1", "A", WatchKind.MOVIE, status, at=days_ago(400)))
     assert watchlist.stale(NOW, 30) == []

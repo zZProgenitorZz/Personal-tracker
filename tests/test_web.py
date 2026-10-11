@@ -66,7 +66,7 @@ def test_library_grid_filters_by_status_and_kind():
 
 def test_unknown_series_gives_error_toast():
     client = make_client()
-    response = client.post("/ui/reading/series/bestaat-niet/progress", data={"chapter": "5"})
+    response = client.post("/ui/reading/series/does-not-exist/progress", data={"chapter": "5"})
     assert "toast-error" in response.text
 
 
@@ -76,7 +76,7 @@ def test_removing_series_via_web():
     response = client.delete(f"/ui/reading/series/{series_id(client)}")
     assert response.headers["HX-Trigger"] == "reading-changed"
     assert "Solo Leveling" not in client.get("/ui/reading/library/grid").text
-    assert "toast-error" not in add_series(client).text  # na verwijderen mag hij terug
+    assert "toast-error" not in add_series(client).text  # after removing it may come back
 
 
 def test_backup_and_restore_via_settings(tmp_path):
@@ -99,7 +99,7 @@ def test_backup_and_restore_via_settings(tmp_path):
 
 def test_restoring_unknown_backup_gives_error_toast(tmp_path):
     client = TestClient(create_app(":memory:", backup_dir=tmp_path / "backups"), headers={"HX-Request": "true"})
-    assert "toast-error" in client.post("/ui/backups/bestaat-niet/restore").text
+    assert "toast-error" in client.post("/ui/backups/does-not-exist/restore").text
 
 
 def test_add_series_with_status():
@@ -117,7 +117,7 @@ def test_add_series_without_status_is_reading():
 
 
 def test_cards_in_the_library_do_not_inherit_the_filters():
-    # Anders stuurt het statusmenu op een kaart het filter "All" (status="") mee.
+    # Otherwise the status menu on a card sends the filter "All" (status="") along.
     client = make_client()
     add_series(client)
     grid = client.get("/ui/reading/library/grid").text
@@ -125,7 +125,7 @@ def test_cards_in_the_library_do_not_inherit_the_filters():
 
 
 def test_browser_always_checks_for_a_newer_page_and_scripts():
-    # Anders blijft de browser na een update oude index.html/trackly.js gebruiken.
+    # Otherwise the browser keeps using an old index.html/trackly.js after an update.
     client = make_client()
     for path in ["/", "/static/trackly.js", "/static/trackly.css", "/ui/reading/dashboard"]:
         assert client.get(path).headers.get("cache-control") == "no-cache", path

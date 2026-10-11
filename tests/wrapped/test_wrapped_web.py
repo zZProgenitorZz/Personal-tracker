@@ -1,4 +1,4 @@
-"""Wrapped als pagina (#wrapped) en als kaart op het startscherm."""
+"""Wrapped as a page (#wrapped) and as a card on the home screen."""
 from datetime import date, datetime, timezone
 
 import pytest
@@ -74,7 +74,7 @@ def test_home_has_a_wrapped_teaser_but_it_is_no_tracker(client):
     home = client.get("/ui/home").text
     assert 'href="#wrapped"' in home and f"Wrapped {THIS_YEAR}" in home and "<b>7</b>" in home
     assert "Wrapped" not in client.get("/ui/settings").text
-    assert 'href="#wrapped"' not in client.get("/").text  # geen link in de navigatiebalk
+    assert 'href="#wrapped"' not in client.get("/").text  # no link in the navigation bar
     assert "wrapped" in client.get("/static/trackly.js").text
 
 

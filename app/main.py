@@ -52,7 +52,7 @@ from .web import STATIC, Tracker, create_home_router, render
 from .wrapped.projections import WrappedProjection
 from .wrapped.web import create_wrapped_web_router, wrapped_teaser
 
-# Instellingen zoals GOOGLE_BOOKS_API_KEY. Staat niet in git (.gitignore).
+# Settings such as GOOGLE_BOOKS_API_KEY. Not in git (.gitignore).
 ENV_FILE = Path(__file__).parent.parent / ".env"
 
 def create_app(
@@ -63,14 +63,14 @@ def create_app(
     backup_dir: str | Path | None = None,
     data_dir: str | Path | None = None,
 ) -> FastAPI:
-    """covers_dir staat standaard naast de database (data/covers). Tests geven
-    een eigen map en een nep-http_client mee, zodat er niets naar buiten gaat.
-    Instellingen uit env_file gelden alleen als ze niet al in de omgeving staan."""
+    """covers_dir sits next to the database by default (data/covers). Tests pass
+    their own folder and a fake http_client, so nothing goes out.
+    Settings from env_file only apply when they aren't already in the environment."""
     load_dotenv(env_file, override=False)
     store = EventStore(db_path, ALL_EVENT_TYPES)
     if db_path == ":memory:":
-        # Tests: covers en back-ups in een tijdelijke map, nooit in data/ of je OneDrive.
-        scratch = Path(tempfile.mkdtemp(prefix="progen-"))  # wordt opgeruimd zodra de app weg is
+        # Tests: covers and backups in a temporary folder, never in data/ or your OneDrive.
+        scratch = Path(tempfile.mkdtemp(prefix="progen-"))  # cleaned up as soon as the app is gone
         covers_dir = covers_dir or scratch / "covers"
         backup_dir = backup_dir or scratch / "backups"
         data_dir = data_dir or scratch
@@ -78,7 +78,7 @@ def create_app(
         scratch = None
         covers_dir = covers_dir or Path(db_path).parent / "covers"
         backup_dir = backup_dir or default_backup_dir()
-        data_dir = data_dir or Path(db_path).parent  # naast tracker.db, dus niet in git
+        data_dir = data_dir or Path(db_path).parent  # next to tracker.db, so not in git
     http = http_client or httpx.Client(headers={"User-Agent": "Progen personal tracker"})
     covers = CoverStore(Path(covers_dir), http)
     reading_search = CoverSearch(http, sources=READING_SOURCES)
@@ -92,14 +92,14 @@ def create_app(
     listen_activity = ListeningActivityProjection()
     top_artists = TopArtistsProjection()
     top_tracks = TopTracksProjection()
-    wrapped = WrappedProjection()  # jaaroverzicht over alle trackers heen, uit dezelfde events
+    wrapped = WrappedProjection()  # year in review across all trackers, from the same events
     agenda = AgendaProjection()
     planner_activity = PlannerActivityProjection()
     projections = [library, activity, watchlist, watch_activity, recent_plays, listen_activity, top_artists, top_tracks,
                    wrapped, agenda, planner_activity]
 
     def rebuild() -> None:
-        """Read models opnieuw opbouwen uit alle events (bij start en na terugzetten)."""
+        """Rebuilds the read models from all events (at startup and after a restore)."""
         for projection in projections:
             projection.reset()
         for event in store.load_all():
@@ -115,7 +115,7 @@ def create_app(
     watching = WatchingCommandHandler(store, watchlist)
     listening = ListeningCommandHandler(store)
     planner = PlannerCommandHandler(store)
-    # Spotify-tokens en de laatste sync in losse bestanden: niet in de event store en niet in een back-up.
+    # Spotify tokens and the last sync in separate files: not in the event store and not in a backup.
     spotify = Spotify.from_environment(http, TokenFile(Path(data_dir) / "spotify_token.json"))
     listening_sync = ListeningSync(spotify, listening, recent_plays, Path(data_dir) / "spotify_sync.json",
                                    interval_seconds=sync_interval_seconds(),
@@ -130,8 +130,8 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        """Achtergrondtaak: elke SYNC_INTERVAL_MINUTES een Spotify-sync (alleen als er een token is).
-        tick() vangt alle fouten zelf af, dus deze lus stopt alleen als de app stopt."""
+        """Background task: a Spotify sync every SYNC_INTERVAL_MINUTES (only when there is a token).
+        tick() catches all errors itself, so this loop only stops when the app stops."""
         async def sync_forever():
             while True:
                 wait = await asyncio.to_thread(listening_sync.tick)
@@ -146,8 +146,8 @@ def create_app(
     app = FastAPI(title="Personal Tracker", lifespan=lifespan)
     if scratch:
         weakref.finalize(app, shutil.rmtree, scratch, ignore_errors=True)
-    app.state.request_shutdown = stop_this_server  # tests vervangen dit door iets onschuldigs
-    # Tests (":memory:") raken het echte Windows-register nooit aan.
+    app.state.request_shutdown = stop_this_server  # tests replace this with something harmless
+    # Tests (":memory:") never touch the real Windows registry.
     app.state.autostart = Autostart(None, launcher_command()) if scratch else Autostart.for_this_computer()
     app.include_router(create_reading_router(handler, library, activity, covers))
     app.include_router(create_reading_web_router(handler, library, activity, covers, reading_search))
@@ -158,11 +158,11 @@ def create_app(
                                                    spotify_connected=lambda: spotify.connected,
                                                    spotify_profile=lambda: spotify.connected and listening_sync.profiles.load()))
     app.include_router(create_spotify_router(listening_sync))
-    # Je hele Spotify-geschiedenis importeren (Settings); de projecties lopen live mee.
+    # Importing your whole Spotify history (Settings); the projections follow along live.
     app.include_router(create_import_router(ImportJob(store, backups)))
     app.include_router(create_planner_router(planner, agenda))
-    # Sunny, de assistent: leest de projecties, schrijft alleen na Confirm via dezelfde handlers.
-    # In de tests (":memory:") nooit een echte client; die geven ze zelf een nep-client.
+    # Sunny, the assistant: reads the projections, only writes after Confirm through the same handlers.
+    # Never a real client in the tests (":memory:"); they give it a fake client themselves.
     sunny = Sunny(TrackerData(library=library, watchlist=watchlist, listening=listen_activity,
                               top_artists=top_artists, top_tracks=top_tracks, agenda=agenda, reading=handler,
                               watching=watching, planner=planner, now=lambda: clock.local_now()),
@@ -171,7 +171,7 @@ def create_app(
     app.include_router(create_assistant_router(sunny))
     app.include_router(create_planner_web_router(planner, agenda))
     app.include_router(create_wrapped_web_router(wrapped))
-    # Wrapped is geen tracker (niet in Settings of back-ups), alleen een kaart op het startscherm.
+    # Wrapped isn't a tracker (not in Settings or backups), only a card on the home screen.
     app.include_router(create_home_router(trackers, wrapped=lambda: wrapped_teaser(wrapped)))
     app.include_router(create_settings_router(db_path, trackers, backups))
     app.include_router(create_shutdown_router())
@@ -180,16 +180,16 @@ def create_app(
 
     @app.middleware("http")
     async def always_fresh(request: Request, call_next):
-        """Pagina, scripts en fragmenten: de browser vraagt altijd even na of ze nog
-        actueel zijn, zodat je na een update nooit een oude versie ziet. Covers
-        (vaste, unieke namen) mogen gewoon uit de cache komen."""
+        """Page, scripts and fragments: the browser always checks whether they are still
+        current, so you never see an old version after an update. Covers
+        (fixed, unique names) may simply come from the cache."""
         response = await call_next(request)
         if not request.url.path.startswith("/covers/"):
             response.headers.setdefault("Cache-Control", "no-cache")
         return response
 
-    # Alleen 127.0.0.1/localhost, en geen wijzigingen vanaf andere websites (zie app/security.py).
-    # Tests spreken de app aan als "testserver".
+    # Only 127.0.0.1/localhost, and no changes from other websites (see app/security.py).
+    # Tests talk to the app as "testserver".
     protect(app, ALLOWED_HOSTS + ["testserver"] if scratch else ALLOWED_HOSTS)
 
     @app.exception_handler(DomainError)

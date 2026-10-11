@@ -1,14 +1,14 @@
-"""Maakt de iconen uit app/static/icon.svg:
+"""Makes the icons from app/static/icon.svg:
 
-- app/static/icon.ico (16 t/m 256 px): de snelkoppeling en het icoon bij de klok;
-- app/static/icons/icon-<maat>.png: het favicon en manifest van de pagina. Het Progen-venster
-  (Edge --app) gebruikt die voor de taakbalk; met alleen een SVG kiest Edge een klein plaatje
-  en rekt het op, en dan is het icoon wazig. De favicons (32-96 px) komen uit icon-small.svg,
-  een vereenvoudigde versie: de fijne details van icon.svg vallen op die maat samen.
+- app/static/icon.ico (16 to 256 px): the shortcut and the tray icon;
+- app/static/icons/icon-<size>.png: the page's favicon and manifest. The Progen window
+  (Edge --app) uses those for the taskbar; with only an SVG, Edge picks a small image
+  and stretches it, and then the icon is blurry. The favicons (32-96 px) come from icon-small.svg,
+  a simplified version: the fine details of icon.svg merge together at that size.
 
-Pillow kan geen SVG lezen. Daarom rendert een headless Edge of Chrome het SVG
-eerst als transparante PNG van 512×512; Pillow maakt daar de rest van.
-Alleen nodig als het icoon verandert:
+Pillow can't read SVG. So a headless Edge or Chrome first renders the SVG
+as a transparent 512×512 PNG; Pillow makes the rest from that.
+Only needed when the icon changes:
 
     .venv\\Scripts\\python.exe scripts\\make_icon.py
 """
@@ -22,12 +22,12 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 SVG = ROOT / "app" / "static" / "icon.svg"
-SMALL_SVG = ROOT / "app" / "static" / "icon-small.svg"  # voor de favicons (taakbalk)
+SMALL_SVG = ROOT / "app" / "static" / "icon-small.svg"  # for the favicons (taskbar)
 ICO = ROOT / "app" / "static" / "icon.ico"
 PNG_DIR = ROOT / "app" / "static" / "icons"
 SIZES = [16, 20, 24, 32, 40, 48, 64, 128, 256]
-FAVICON_SIZES = [32, 48, 64, 96]  # uit icon-small.svg; zie index.html
-PNG_SIZES = [192, 256, 512]  # uit icon.svg; zie manifest.json
+FAVICON_SIZES = [32, 48, 64, 96]  # from icon-small.svg; see index.html
+PNG_SIZES = [192, 256, 512]  # from icon.svg; see manifest.json
 RENDER = 512
 
 BROWSERS = [

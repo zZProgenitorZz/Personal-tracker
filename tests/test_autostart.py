@@ -1,5 +1,5 @@
-"""Automatisch starten bij aanmelden in Windows, aan en uit te zetten in Settings.
-Met een nep-register: de echte Windows-instellingen worden niet aangeraakt."""
+"""Starting automatically when signing in to Windows, switched on and off in Settings.
+With a fake registry: the real Windows settings are never touched."""
 from pathlib import Path
 
 import pytest
@@ -45,12 +45,12 @@ def test_enable_and_disable(registry):
 
 
 def test_an_old_command_counts_as_off_until_enabled_again(registry):
-    # Na het verplaatsen van de projectmap wijst de oude waarde naar een pad dat niet meer bestaat.
-    registry.values[RUN_VALUE] = '"C:\\oud\\pythonw.exe" "C:\\oud\\launch.pyw" --background'
-    autostart = Autostart(registry, "nieuw")
+    # After moving the project folder, the old value points to a path that no longer exists.
+    registry.values[RUN_VALUE] = '"C:\\old\\pythonw.exe" "C:\\old\\launch.pyw" --background'
+    autostart = Autostart(registry, "new")
     assert not autostart.enabled
     autostart.enable()
-    assert registry.values[RUN_VALUE] == "nieuw"
+    assert registry.values[RUN_VALUE] == "new"
 
 
 def test_not_available_without_registry():
@@ -84,7 +84,7 @@ def test_switch_on_and_off(client, registry):
 
 
 def test_switch_only_from_the_app_itself(client, registry):
-    # Zonder HX-Request (een andere website) verandert er niets.
+    # Without HX-Request (another website) nothing changes.
     assert client.post("/ui/autostart", data={"enabled": "on"}).status_code == 403
     assert registry.values == {}
 

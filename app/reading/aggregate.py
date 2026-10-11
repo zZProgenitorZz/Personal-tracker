@@ -20,7 +20,7 @@ class ReadingSeries:
     def exists(self) -> bool:
         return self.series_id is not None
 
-    # ---- Toestand opbouwen uit events ----
+    # ---- Building the state from events ----
 
     def _apply(self, event) -> None:
         if isinstance(event, SeriesStarted):
@@ -37,14 +37,14 @@ class ReadingSeries:
         elif isinstance(event, GenresChanged):
             self.genres = list(event.genres)
 
-    # ---- Beslissingen: regels checken, nieuwe events teruggeven ----
+    # ---- Decisions: check the rules, return new events ----
 
     def start(self, series_id: str, title: str, kind: Kind, source: str, start_chapter: float,
               cover: str | None = None, status: Status = Status.READING, genres=()) -> list:
         if self.exists:
             raise DomainError("This series already exists")
         events = self._record(SeriesStarted(series_id, title, kind, source, start_chapter, cover=cover))
-        # Een serie begint altijd als Reading; een andere beginstatus is een gewone statuswijziging.
+        # A series always starts as Reading; another starting status is an ordinary status change.
         if status is not Status.READING:
             events += self._record(StatusChanged(series_id, Status.READING, status))
         events += self.set_genres(genres)
@@ -73,7 +73,7 @@ class ReadingSeries:
         except ValueError as exc:
             raise DomainError(f"Unknown genre: {exc}") from exc
         if chosen == self.genres:
-            return []  # niets veranderd, dus ook geen event
+            return []  # nothing changed, so no event either
         return self._record(GenresChanged(self.series_id, chosen))
 
     def remove(self) -> list:

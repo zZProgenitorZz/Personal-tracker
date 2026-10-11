@@ -1,4 +1,4 @@
-"""Listening: Spotify-luistergeschiedenis. Elke play is een eigen stream, op tijdstip."""
+"""Listening: Spotify listening history. Each play is its own stream, by moment."""
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -23,7 +23,7 @@ def make_handler():
     return ListeningCommandHandler(store), store
 
 
-# ---- Stream-id ----
+# ---- Stream id ----
 
 def test_stream_id_is_the_time_in_utc():
     assert stream_id(AT) == "play-2026-10-08T12:30:15.123000+00:00"
@@ -71,7 +71,7 @@ def test_handler_stores_a_play_in_its_own_stream():
 def test_handler_says_nothing_was_stored_for_a_duplicate():
     handler, store = make_handler()
     handler.handle(record())
-    assert handler.handle(record(track="Iets anders")) == []
+    assert handler.handle(record(track="Something else")) == []
     assert len(store.load_all()) == 1
 
 

@@ -1,6 +1,6 @@
 {% import "_macros.html" as ui %}
 {% import "_planner_macros.html" as pm %}
-{# Inhoud van het venster van één plan (#plan-slot in index.html). Eén primaire knop: Mark done. #}
+{# Contents of one plan's window (#plan-slot in index.html). One primary button: Mark done. #}
 {% set base = "/ui/planner/plans/" ~ plan.plan_id %}
 {% set on_vals = {"on": on.isoformat()}|tojson %}
 <div class="dialog-form plan-dialog">

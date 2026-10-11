@@ -1,5 +1,5 @@
-"""Covers van begin tot eind: zoeken, opslaan met en zonder cover, en tonen.
-AniList en downloads zijn nep; er gaat niets over het netwerk."""
+"""Covers from start to finish: searching, saving with and without a cover, and showing them.
+AniList and downloads are fake; nothing goes over the network."""
 import json
 from io import BytesIO
 
@@ -37,7 +37,7 @@ def fake_internet(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"docs": found})
     if request.url.path.endswith(".jpg") or request.url.path.endswith(".png"):
         return httpx.Response(200, content=png(), headers={"Content-Type": "image/png"})
-    return httpx.Response(200, text="<html>geen plaatje</html>", headers={"Content-Type": "text/html"})
+    return httpx.Response(200, text="<html>not an image</html>", headers={"Content-Type": "text/html"})
 
 
 @pytest.fixture
@@ -60,7 +60,7 @@ def library(client):
     return client.get("/reading/library").json()
 
 
-# ---- Zoeken (hulp-endpoint, geen command) ----
+# ---- Searching (a helper endpoint, no command) ----
 
 def test_search_shows_first_match(client):
     response = client.get("/ui/reading/covers/search", params={"title": "solo leveling"})
@@ -70,7 +70,7 @@ def test_search_shows_first_match(client):
 
 
 def test_search_finds_webnovel_in_another_source(client):
-    # Niet op AniList, wel op Open Library; de andere bronnen falen hier.
+    # Not on AniList, but on Open Library; the other sources fail here.
     response = client.get("/ui/reading/covers/search", params={"title": "Shadow Slave"})
     assert "https://covers.openlibrary.org/b/id/151-L.jpg" in response.text
     assert "Open Library · 1 of 1" in response.text
@@ -89,7 +89,7 @@ def test_search_cycles_through_results(client):
 
 
 def test_search_without_results_says_so(client):
-    response = client.get("/ui/reading/covers/search", params={"title": "Iets Onbekends"})
+    response = client.get("/ui/reading/covers/search", params={"title": "Something Unknown"})
     assert "No covers found" in response.text
     assert 'name="cover_url"' not in response.text
 
@@ -103,7 +103,7 @@ def test_search_does_not_store_anything(client):
     assert library(client) == []
 
 
-# ---- Opslaan ----
+# ---- Saving ----
 
 def test_save_without_cover(client, covers):
     add(client)
@@ -127,9 +127,9 @@ def test_save_with_pasted_url(client):
 
 
 def test_save_with_upload(client, covers):
-    add(client, files={"cover_file": ("mijn cover.png", png(), "image/png")})
+    add(client, files={"cover_file": ("my cover.png", png(), "image/png")})
     [entry] = library(client)
-    assert entry["cover"].endswith(".webp") and "mijn" not in entry["cover"]
+    assert entry["cover"].endswith(".webp") and "my" not in entry["cover"]
 
 
 def test_upload_wins_over_url_and_search(client, covers):
@@ -148,7 +148,7 @@ def test_broken_cover_does_not_block_saving(client):
 
 
 def test_invalid_upload_does_not_block_saving(client):
-    add(client, files={"cover_file": ("x.png", b"geen plaatje", "image/png")})
+    add(client, files={"cover_file": ("x.png", b"not an image", "image/png")})
     assert library(client)[0]["cover"] is None
 
 
@@ -177,6 +177,6 @@ def test_json_api_saves_series_when_cover_fails(client):
 
 
 def test_search_result_suggests_genres(client):
-    # trackly.js vinkt deze genres aan in het formulier; je kunt ze daarna zelf aanpassen.
+    # trackly.js checks these genres in the form; you can change them yourself afterwards.
     response = client.get("/ui/reading/covers/search", params={"title": "Solo Leveling"})
     assert 'data-genres="Action,Fantasy"' in response.text

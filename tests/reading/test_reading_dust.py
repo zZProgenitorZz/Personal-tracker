@@ -1,4 +1,4 @@
-"""Gathering dust: series op Reading die al een tijd niet zijn bijgewerkt. Alleen lezen."""
+"""Gathering dust: series on Reading that haven't been updated for a while. Read only."""
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -32,7 +32,7 @@ def test_reading_series_untouched_for_longer_than_the_limit_are_stale():
     library = given(start("1", "Fresh", days_ago(40)), ProgressLogged("1", 5, 1, at=days_ago(3)),
                     start("2", "Dusty", days_ago(40)), ProgressLogged("2", 5, 1, at=days_ago(30)),
                     start("3", "Never touched", days_ago(25)))
-    assert [e.title for e in library.stale(NOW, 21)] == ["Dusty", "Never touched"]  # langst stil eerst
+    assert [e.title for e in library.stale(NOW, 21)] == ["Dusty", "Never touched"]  # quiet the longest first
 
 
 def test_exactly_the_limit_is_not_stale_yet():
@@ -53,7 +53,7 @@ def test_a_status_change_back_to_reading_counts_as_activity():
     assert library.stale(NOW, 21) == []
 
 
-# ---- Dashboard en startscherm ----
+# ---- Dashboard and home screen ----
 
 @pytest.fixture
 def client():
@@ -67,7 +67,7 @@ def add(client, title, status="reading"):
 
 
 def later(monkeypatch, days):
-    """De klok van de webpagina vooruitzetten; de events blijven op hun echte tijd."""
+    """Moves the web page's clock forward; the events keep their real time."""
     real = clock.utc_now
     monkeypatch.setattr(clock, "utc_now", lambda: real() + timedelta(days=days))
 
@@ -89,7 +89,7 @@ def test_panel_with_actions(client, monkeypatch):
     base = f"/ui/reading/series/{sid}"
     assert f'hx-post="{base}/progress"' in panel and '{"chapter": 5}' in panel        # Log chapter
     assert f'hx-post="{base}/status"' in panel and '"on_hold"' in panel and '"dropped"' in panel
-    assert 'data-confirm-kind="drop"' in panel                                          # Drop vraagt eerst
+    assert 'data-confirm-kind="drop"' in panel                                          # Drop asks first
     assert "data-dust-dismiss" in panel                                                 # Not now
 
 

@@ -1,4 +1,4 @@
-"""Plan to Watch: titels die je nog wilt kijken. Een extra status, geen nieuw event."""
+"""Plan to Watch: titles you still want to watch. An extra status, no new event."""
 from datetime import date
 
 import pytest
@@ -32,7 +32,7 @@ def test_plan_to_watch_changes_to_and_from_every_status(other):
     assert (back[0].from_status, back[0].to_status) == (other, WatchStatus.PLAN_TO_WATCH)
 
 
-# ---- Projecties ----
+# ---- Projections ----
 
 def make_app():
     store = EventStore(":memory:", ALL_EVENT_TYPES)
@@ -48,7 +48,7 @@ def test_plan_to_watch_is_not_watching():
     handler.handle(AddShow("Dune", WatchKind.MOVIE, WatchStatus.PLAN_TO_WATCH))
     assert [e.title for e in watchlist.currently_watching()] == ["Frieren"]
     assert watching_summary(watchlist, activity)["stats"][0] == (1, "watching now")
-    assert sum(activity.per_day().values()) == 0  # toevoegen is nog geen afronding
+    assert sum(activity.per_day().values()) == 0  # adding isn't finishing yet
 
 
 def test_plan_to_watch_to_completed_counts_as_finished():
@@ -59,7 +59,7 @@ def test_plan_to_watch_to_completed_counts_as_finished():
     assert watching_summary(watchlist, activity)["stats"][1] == (1, "finished this month")
 
 
-# ---- Webpagina ----
+# ---- Web page ----
 
 @pytest.fixture
 def client():
@@ -75,7 +75,7 @@ def test_plan_to_watch_is_everywhere_a_status_can_be_chosen(client):
     add(client, "Frieren")
     form = client.get("/ui/watching/add-form").text
     assert 'value="plan_to_watch"' in form
-    assert form.index('value="watching" checked') < form.index('value="plan_to_watch"')  # standaard blijft Watching
+    assert form.index('value="watching" checked') < form.index('value="plan_to_watch"')  # Watching stays the default
     assert 'value="plan_to_watch"' in client.get("/ui/watching/library/grid").text
     assert 'value="plan_to_watch"' in client.get("/ui/watching/library").text
 

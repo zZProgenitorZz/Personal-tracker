@@ -1,14 +1,14 @@
-"""Live koppeling met Spotify: een automation-slice.
+"""Live connection with Spotify: an automation slice.
 
-Haalt periodiek je laatst geluisterde nummers op en stuurt voor elk precies
-hetzelfde command als de API (RecordPlay, source="api"). De domeinlogica weet
-niet dat Spotify bestaat.
+Periodically fetches the tracks you listened to last and sends exactly the same
+command for each as the API (RecordPlay, source="api"). The domain logic doesn't
+know Spotify exists.
 
-- Inloggen: Authorization Code flow met een `state` tegen CSRF.
-- Tokens staan in data/spotify_token.json, niet in de event store (en dus ook
-  niet in een back-up). De access token wordt automatisch ververst.
-- Spotify geeft maximaal de laatste 50 nummers terug; wat je daarvoor
-  luisterde en nog niet gesynchroniseerd was, is via deze weg niet meer op te halen.
+- Signing in: Authorization Code flow with a `state` against CSRF.
+- Tokens live in data/spotify_token.json, not in the event store (and so not
+  in a backup either). The access token is refreshed automatically.
+- Spotify returns at most the last 50 tracks; whatever you listened to before
+  that and wasn't synced yet can no longer be fetched this way.
 """
 import base64
 import json
@@ -36,21 +36,21 @@ AUTHORIZE_URL = "https://accounts.spotify.com/authorize"
 TOKEN_URL = "https://accounts.spotify.com/api/token"
 RECENTLY_PLAYED_URL = "https://api.spotify.com/v1/me/player/recently-played"
 PROFILE_URL = "https://api.spotify.com/v1/me"
-AVATAR_SIZE = 256                    # profielfoto: vierkant, in pixels
-PROFILE_REFRESH_SECONDS = 24 * 3600  # naam en foto hooguit één keer per dag opnieuw ophalen
+AVATAR_SIZE = 256                    # profile photo: square, in pixels
+PROFILE_REFRESH_SECONDS = 24 * 3600  # fetch the name and photo again at most once a day
 SCOPE = "user-read-recently-played"
 REDIRECT_URI = "http://127.0.0.1:8000/listening/spotify/callback"
 CLIENT_ID_ENV, CLIENT_SECRET_ENV, REDIRECT_URI_ENV = "SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET", "SPOTIFY_REDIRECT_URI"
 INTERVAL_ENV = "SYNC_INTERVAL_MINUTES"
 DEFAULT_INTERVAL_MINUTES = 30
-STATE_SECONDS = 10 * 60      # zo lang mag het inloggen bij Spotify duren
-REFRESH_MARGIN = 60          # ververs de access token als hij binnen een minuut verloopt
+STATE_SECONDS = 10 * 60      # signing in at Spotify may take this long
+REFRESH_MARGIN = 60          # refresh the access token if it expires within a minute
 TIMEOUT = 15.0
 DEFAULT_RETRY_AFTER = 60
 
 
 class SpotifyError(Exception):
-    """Iets met Spotify ging mis. De melding is bedoeld voor de gebruiker."""
+    """Something went wrong with Spotify. The message is meant for the user."""
 
 
 class NotConnected(SpotifyError):
@@ -76,7 +76,7 @@ def sync_interval_seconds() -> int:
 
 
 class TokenFile:
-    """De Spotify-tokens in een los JSON-bestand (niet in git, niet in de event store)."""
+    """The Spotify tokens in a separate JSON file (not in git, not in the event store)."""
 
     def __init__(self, path: Path):
         self.path = Path(path)
@@ -99,7 +99,7 @@ class TokenFile:
 
 
 class Spotify:
-    """Inloggen, tokens beheren en recently-played ophalen."""
+    """Signing in, managing tokens and fetching recently-played."""
 
     def __init__(self, http: httpx.Client, tokens: TokenFile, client_id: str, client_secret: str,
                  redirect_uri: str = REDIRECT_URI, clock=time.time):
@@ -109,7 +109,7 @@ class Spotify:
         self._client_secret = (client_secret or "").strip()
         self.redirect_uri = redirect_uri
         self._clock = clock
-        self._states: dict[str, float] = {}  # state -> verloopt om
+        self._states: dict[str, float] = {}  # state -> expires at
 
     @classmethod
     def from_environment(cls, http: httpx.Client, tokens: TokenFile) -> "Spotify":
@@ -124,7 +124,7 @@ class Spotify:
     def connected(self) -> bool:
         return self.tokens.load() is not None
 
-    # ---- Inloggen ----
+    # ---- Signing in ----
 
     def authorize_url(self) -> str:
         if not self.configured:
@@ -139,7 +139,7 @@ class Spotify:
         })
 
     def finish_authorization(self, code: str, state: str) -> None:
-        until = self._states.pop(state, None)  # een state werkt maar één keer
+        until = self._states.pop(state, None)  # a state only works once
         if until is None or until < self._clock():
             raise SpotifyError("The login came back with an unknown or expired state. Try connecting again.")
         answer = self._token_request({"grant_type": "authorization_code", "code": code,
@@ -159,7 +159,7 @@ class Spotify:
         except httpx.HTTPError as exc:
             raise SpotifyError("Couldn't reach Spotify.") from exc
         if response.status_code in (400, 401) and form["grant_type"] == "refresh_token":
-            self.tokens.clear()  # toegang ingetrokken of verlopen: opnieuw koppelen
+            self.tokens.clear()  # access revoked or expired: connect again
             raise SpotifyError("Spotify no longer accepts Progen's access; reconnect Spotify in Settings.")
         if response.status_code != 200:
             raise SpotifyError(f"Spotify refused the login (HTTP {response.status_code}).")
@@ -171,7 +171,7 @@ class Spotify:
     def _token_from(self, answer: dict, previous_refresh: str | None) -> dict:
         return {
             "access_token": answer["access_token"],
-            # Bij verversen stuurt Spotify niet altijd een nieuwe refresh token mee.
+            # When refreshing, Spotify doesn't always send a new refresh token along.
             "refresh_token": answer.get("refresh_token") or previous_refresh,
             "expires_at": self._clock() + int(answer.get("expires_in", 3600)),
         }
@@ -190,7 +190,7 @@ class Spotify:
             token = self._refresh(token)
         return token["access_token"]
 
-    # ---- Ophalen ----
+    # ---- Fetching ----
 
     def recently_played(self, after_ms: int | None) -> list[dict]:
         params = {"limit": 50}
@@ -208,7 +208,7 @@ class Spotify:
             raise SpotifyError("Spotify sent an answer Progen doesn't understand.") from exc
 
     def profile(self) -> dict:
-        """Je Spotify-profiel: o.a. display_name en images (je profielfoto)."""
+        """Your Spotify profile: display_name and images (your profile photo), among others."""
         response = self._authorized_get(PROFILE_URL, {})
         if response.status_code != 200:
             raise SpotifyError(f"Spotify didn't give the profile (HTTP {response.status_code}).")
@@ -219,7 +219,7 @@ class Spotify:
 
     def _authorized_get(self, url: str, params: dict) -> httpx.Response:
         response = self._get(url, params, self._access_token())
-        if response.status_code == 401:  # token net verlopen of ingetrokken: één keer verversen
+        if response.status_code == 401:  # token just expired or revoked: refresh once
             response = self._get(url, params, self._access_token(force_refresh=True))
         return response
 
@@ -232,7 +232,7 @@ class Spotify:
 
 
 def play_from_item(item: dict) -> RecordPlay | None:
-    """Eén item uit recently-played als command; None als er geen nummer in zit."""
+    """One item from recently-played as a command; None if there is no track in it."""
     track = (item or {}).get("track") or {}
     if not track.get("uri") or not item.get("played_at"):
         return None
@@ -250,7 +250,7 @@ def play_from_item(item: dict) -> RecordPlay | None:
 
 
 class ProfileStore:
-    """Je Spotify-naam en -profielfoto, naast de tokens (niet in de event store, niet in een back-up)."""
+    """Your Spotify name and profile photo, next to the tokens (not in the event store, not in a backup)."""
 
     def __init__(self, directory: Path):
         self.json_path = Path(directory) / "spotify_profile.json"
@@ -285,14 +285,14 @@ class SyncResult:
 
 
 class ListeningSync:
-    """Eén sync: vraag Spotify om plays na de laatste die we kennen en leg ze vast."""
+    """One sync: asks Spotify for plays after the last one we know and records them."""
 
     def __init__(self, spotify: Spotify, handler: ListeningCommandHandler, recent: RecentlyPlayedProjection,
                  status_file: Path, interval_seconds: int, clock=lambda: app_clock.utc_now(),
                  profiles: ProfileStore | None = None, download=None):
         self.spotify = spotify
         self.profiles = profiles
-        self._download = download  # url -> bytes, met dezelfde limieten als covers
+        self._download = download  # url -> bytes, with the same limits as covers
         self._handler = handler
         self._recent = recent
         self._status_file = Path(status_file)
@@ -328,11 +328,11 @@ class ListeningSync:
         self.refresh_profile()
         return result
 
-    # ---- Profiel (naam en foto) ----
+    # ---- Profile (name and photo) ----
 
     def refresh_profile(self, force: bool = False) -> None:
-        """Naam en foto ophalen, hooguit één keer per PROFILE_REFRESH_SECONDS (tenzij force).
-        Gooit nooit een fout: zonder profiel werkt alles gewoon."""
+        """Fetches the name and photo, at most once per PROFILE_REFRESH_SECONDS (unless force).
+        Never raises: without a profile everything simply works."""
         if self.profiles is None or not self.spotify.connected:
             return
         current = self.profiles.load()
@@ -360,8 +360,8 @@ class ListeningSync:
             self.profiles.clear()
 
     def tick(self) -> float:
-        """Eén ronde van de achtergrondtaak. Geeft terug hoeveel seconden tot de volgende.
-        Gooit nooit een fout: de app mag hier niet door crashen."""
+        """One round of the background task. Returns how many seconds until the next one.
+        Never raises: the app must not crash because of this."""
         try:
             if not self.spotify.connected:
                 return self.interval_seconds
@@ -376,7 +376,7 @@ class ListeningSync:
             log.exception("Spotify sync crashed")
         return self.interval_seconds
 
-    # ---- Wanneer was de laatste sync? (overleeft een herstart) ----
+    # ---- When was the last sync? (survives a restart) ----
 
     def _remember(self, stored: int, skipped: int, error: str | None) -> None:
         status = {"last_sync_at": self._clock().isoformat(), "stored": stored, "skipped": skipped, "error": error}

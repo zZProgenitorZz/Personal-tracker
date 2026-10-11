@@ -1,6 +1,6 @@
 {% import "_macros.html" as ui %}
 {% import "_planner_macros.html" as pm %}
-{# Planner · Upcoming: al je komende plannen in één rustige lijst. Alleen lezen. #}
+{# Planner · Upcoming: all your coming plans in one calm list. Read only. #}
 {% macro row(o, when, repeat_text=none) -%}
 <li>
   <button class="someday-item upcoming-item" type="button" hx-get="/ui/planner/plans/{{ o.plan.plan_id }}?on={{ o.on }}"

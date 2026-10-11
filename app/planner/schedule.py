@@ -1,5 +1,5 @@
-"""Wanneer valt een plan? Gedeeld door de aggregate (regels) en de projecties (agenda).
-Herhalingen worden hier uitgerekend, niet als losse events opgeslagen."""
+"""When does a plan fall? Shared by the aggregate (rules) and the projections (agenda).
+Repeats are worked out here, not stored as separate events."""
 import calendar
 import datetime as dt
 
@@ -7,7 +7,7 @@ from .events import Frequency, Repeat
 
 
 def occurs_on(start: dt.date | None, repeat: Repeat | None, day: dt.date) -> bool:
-    """Valt een plan dat begint op `start` (met eventueel een herhaling) op `day`?"""
+    """Does a plan that starts on `start` (with a repeat, if any) fall on `day`?"""
     if start is None or day < start:
         return False
     if repeat is None:
@@ -22,12 +22,12 @@ def occurs_on(start: dt.date | None, repeat: Repeat | None, day: dt.date) -> boo
     return day.day == min(start.day, last)  # MONTHLY
 
 
-LOOK_AHEAD_DAYS = 400  # ruim een jaar: genoeg voor elke herhaling (dagelijks, wekelijks, maandelijks)
+LOOK_AHEAD_DAYS = 400  # a little over a year: enough for any repeat (daily, weekly, monthly)
 
 
 def next_occurrence(plan, from_day: dt.date) -> dt.date | None:
-    """De eerste dag vanaf `from_day` waarop `plan` valt en die niet is overgeslagen of afgevinkt.
-    `plan` heeft day, repeat, done en skipped (een PlanEntry of Plan). None: niets meer, of Someday."""
+    """The first day from `from_day` on which `plan` falls and that isn't skipped or ticked off.
+    `plan` has day, repeat, done and skipped (a PlanEntry or Plan). None: nothing left, or Someday."""
     if plan.day is None:
         return None
     if plan.repeat is None:
@@ -43,7 +43,7 @@ def next_occurrence(plan, from_day: dt.date) -> dt.date | None:
 
 
 def with_weekdays(start: dt.date, repeat: Repeat | None) -> Repeat | None:
-    """Wekelijks zonder weekdagen = op de weekdag van de begindatum."""
+    """Weekly without weekdays = on the weekday of the start date."""
     if repeat is not None and repeat.every is Frequency.WEEKLY and not repeat.weekdays:
         return Repeat(repeat.every, (start.weekday(),), repeat.until)
     if repeat is not None and repeat.every is not Frequency.WEEKLY and repeat.weekdays:

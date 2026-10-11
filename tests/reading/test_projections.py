@@ -117,7 +117,7 @@ def test_removed_series_leaves_library_but_keeps_activity():
 
     assert library.all() == []
     assert library.get(series_id) is None
-    assert library.find_by_title("solo leveling") is None  # titel is weer vrij
+    assert library.find_by_title("solo leveling") is None  # the title is free again
     assert activity.total_chapters() == 10
 
 
@@ -142,7 +142,7 @@ def test_re_added_series_starts_fresh_but_history_still_counts():
 
 
 def test_old_series_started_without_cover_still_loads():
-    # Zo staan events in de database van vóór de cover-functie: zonder "cover".
+    # This is how events look in the database from before the cover feature: without "cover".
     store = EventStore(":memory:", EVENT_TYPES)
     old = {"series_id": "1", "title": "Solo Leveling", "kind": "manhwa", "source": "asura",
            "start_chapter": 1.0, "at": "2026-09-30T13:29:33+00:00"}

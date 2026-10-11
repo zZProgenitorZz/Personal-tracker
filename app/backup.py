@@ -1,20 +1,20 @@
-"""Back-ups van al je gegevens: maken, bewaren en terugzetten.
+"""Backups of all your data: making, keeping and restoring them.
 
-Een back-up is een map met datum en tijd als naam, bijvoorbeeld
-`2026-10-06_21-05-33`, met daarin:
+A backup is a folder named after the date and time, for example
+`2026-10-06_21-05-33`, containing:
 
-    tracker.db   een complete kopie van de event store
-    covers/      alle covers
-    info.json    wanneer, hoeveel events en covers, en waarom
+    tracker.db   a complete copy of the event store
+    covers/      all covers
+    info.json    when, how many events and covers, and why
 
-Alleen de KEEP_BACKUPS nieuwste blijven bewaard. Standaard staan ze in je
-OneDrive (map Progen-backups), zodat ze ook in de cloud staan. Een andere map
-kies je met PROGEN_BACKUP_DIR in .env.
+Only the KEEP_BACKUPS newest are kept. By default they live in your
+OneDrive (folder Progen-backups), so they are in the cloud too. Pick another
+folder with PROGEN_BACKUP_DIR in .env.
 
-Los te gebruiken, ook als de app niet draait:
-    python -m app.backup          maak een back-up
-    python -m app.backup --list   toon de back-ups
-Terugzetten gaat via Settings in de app.
+Usable on its own, even when the app isn't running:
+    python -m app.backup          make a backup
+    python -m app.backup --list   show the backups
+Restoring goes through Settings in the app.
 """
 import argparse
 import json
@@ -41,7 +41,7 @@ _NAME = re.compile(r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(-\d+)?")
 
 
 class BackupError(Exception):
-    """Een back-up die niet gemaakt of teruggezet kon worden. De melding is voor de gebruiker."""
+    """A backup that couldn't be made or restored. The message is for the user."""
 
 
 @dataclass(frozen=True)
@@ -51,11 +51,11 @@ class BackupInfo:
     created: datetime
     events: int | None
     covers: int | None
-    reason: str  # "manual" of "before-restore"
+    reason: str  # "manual" or "before-restore"
 
 
 def default_backup_dir() -> Path:
-    """1. PROGEN_BACKUP_DIR, 2. OneDrive\\Progen-backups, 3. data/backups (alleen op deze schijf)."""
+    """1. PROGEN_BACKUP_DIR, 2. OneDrive\\Progen-backups, 3. data/backups (only on this disk)."""
     if custom := os.environ.get(BACKUP_DIR_ENV, "").strip():
         return Path(custom)
     if onedrive := os.environ.get("OneDrive", "").strip():
@@ -69,7 +69,7 @@ def is_cloud_synced(directory: Path) -> bool:
 
 
 def _check_database(path: Path) -> int:
-    """Open de kopie alleen-lezen en tel de events. Gooit BackupError als hij niet deugt."""
+    """Opens the copy read-only and counts the events. Raises BackupError if it isn't sound."""
     try:
         connection = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
         try:
@@ -90,10 +90,10 @@ class Backups:
         self.directory = Path(directory)
         self._keep = keep
         self._clock = clock
-        self._on_restored = on_restored  # read models opnieuw opbouwen na terugzetten
+        self._on_restored = on_restored  # rebuild the read models after a restore
         self._lock = threading.Lock()
 
-    # ---- Maken ----
+    # ---- Making ----
 
     def create(self, reason: str = "manual") -> BackupInfo:
         with self._lock:
@@ -104,7 +104,7 @@ class Backups:
     def _create(self, reason: str) -> BackupInfo:
         created = self._clock().replace(microsecond=0)
         name = self._free_name(created)
-        # Eerst in een tijdelijke map; pas als alles klopt krijgt hij zijn echte naam.
+        # First in a temporary folder; only when everything checks out does it get its real name.
         partial = self.directory / f"{name}.partial"
         try:
             partial.mkdir(parents=True)
@@ -137,16 +137,16 @@ class Backups:
         return name
 
     def _prune(self, keep_also: set[str]) -> None:
-        """Hooguit KEEP_BACKUPS bewaren; de oudste gaan eerst, behalve die in keep_also."""
+        """Keeps at most KEEP_BACKUPS; the oldest go first, except those in keep_also."""
         backups = self.list()
-        removable = [b for b in reversed(backups) if b.name not in keep_also]  # oudste eerst
+        removable = [b for b in reversed(backups) if b.name not in keep_also]  # oldest first
         for old in removable[:max(0, len(backups) - self._keep)]:
             shutil.rmtree(old.path, ignore_errors=True)
 
-    # ---- Bekijken ----
+    # ---- Viewing ----
 
     def list(self) -> list[BackupInfo]:
-        """Nieuwste eerst. Andere mappen in de back-upmap worden genegeerd."""
+        """Newest first. Other folders in the backup folder are ignored."""
         if not self.directory.is_dir():
             return []
         found = []
@@ -167,16 +167,16 @@ class Backups:
         return BackupInfo(path.name, path, created, info.get("events"), info.get("covers"),
                           info.get("reason", "manual"))
 
-    # ---- Terugzetten ----
+    # ---- Restoring ----
 
     def restore(self, name: str) -> BackupInfo:
         with self._lock:
             chosen = next((b for b in self.list() if b.name == name), None)
             if chosen is None:
                 raise BackupError("That backup doesn't exist (anymore)")
-            _check_database(chosen.path / "tracker.db")  # eerst controleren, dan pas iets veranderen
+            _check_database(chosen.path / "tracker.db")  # check first, only then change anything
 
-            self._create("before-restore")  # de huidige stand bewaren, zodat je terug kunt
+            self._create("before-restore")  # keep the current state, so you can go back
             self._store.restore_from(chosen.path / "tracker.db")
             self._covers.mkdir(parents=True, exist_ok=True)
             for cover in (chosen.path / "covers").glob("*.webp"):
@@ -187,7 +187,7 @@ class Backups:
             return chosen
 
 
-# ---- Los script ----
+# ---- Standalone script ----
 
 def main(argv: list[str] | None = None) -> int:
     load_dotenv(PROJECT / ".env", override=False)

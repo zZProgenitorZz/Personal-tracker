@@ -1,4 +1,4 @@
-"""Watching via de JSON-API en de webpagina, plus het startscherm. Geen netwerk."""
+"""Watching through the JSON API and the web page, plus the home screen. No network."""
 import json
 from io import BytesIO
 
@@ -47,7 +47,7 @@ def watchlist(client):
     return client.get("/watching/list").json()
 
 
-# ---- JSON-API ----
+# ---- JSON API ----
 
 def test_api_add_change_genres_remove(client):
     response = client.post("/watching/shows", json={"title": "Dune", "kind": "movie", "status": "completed",
@@ -68,7 +68,7 @@ def test_api_rules_give_clear_errors(client):
     client.post("/watching/shows", json={"title": "Dune", "kind": "movie"})
     assert client.post("/watching/shows", json={"title": "dune", "kind": "movie"}).status_code == 400
     assert client.post("/watching/shows", json={"title": "X", "kind": "podcast"}).status_code == 422
-    assert client.post("/watching/shows/bestaat-niet/status", json={"status": "completed"}).status_code == 404
+    assert client.post("/watching/shows/does-not-exist/status", json={"status": "completed"}).status_code == 404
 
 
 def test_api_filter_by_status(client):
@@ -77,7 +77,7 @@ def test_api_filter_by_status(client):
     assert [s["title"] for s in client.get("/watching/list", params={"status": "completed"}).json()] == ["B"]
 
 
-# ---- Webpagina ----
+# ---- Web page ----
 
 def test_pages_render(client):
     add(client)
@@ -136,7 +136,7 @@ def test_add_forms_list_their_own_genres(client):
     assert all(f'value="{g}"' in reading_form for g in GENRES)
 
 
-# ---- Startscherm en opslag op één plek ----
+# ---- Home screen and storage in one place ----
 
 def test_home_shows_every_tracker(client):
     add(client)
@@ -152,7 +152,7 @@ def test_one_backup_contains_every_tracker(client, tmp_path):
     client.post("/ui/backups")
     settings = client.get("/ui/settings").text
     assert "Watching" in settings
-    # De back-up zit in de tijdelijke map van de test-app; via de lijst vinden we hem.
+    # The backup is in the test app's temporary folder; we find it through the list.
     name = client.get("/ui/backups").text.split("/ui/backups/")[1].split("/")[0]
     restore = client.post(f"/ui/backups/{name}/restore")
     assert "watching-changed" in restore.headers["HX-Trigger"] and "reading-changed" in restore.headers["HX-Trigger"]

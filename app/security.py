@@ -1,19 +1,19 @@
-"""Bescherming tegen andere websites: CSRF en DNS rebinding.
+"""Protection against other websites: CSRF and DNS rebinding.
 
-Progen draait alleen op je eigen computer, maar je browser kan ook verzoeken
-sturen namens een website die je open hebt. Daarom:
+Progen only runs on your own computer, but your browser can also send requests
+on behalf of a website you have open. So:
 
-1. Alleen de hostnamen 127.0.0.1 en localhost (TrustedHostMiddleware). Een
-   website kan zijn eigen naam naar 127.0.0.1 laten wijzen (DNS rebinding);
-   dan klopt de naam niet en weigert Progen alles, ook lezen.
-2. Elke wijziging (POST, PUT, PATCH, DELETE) moet bewijzen dat hij van Progen
-   zelf of een eigen script komt, met iets wat een andere website niet zonder
-   toestemming (CORS) kan meesturen, en die toestemming geeft Progen niet:
-     - HX-Request: true        (de webpagina, via htmx)
-     - Content-Type: application/json   (de JSON-API, scripts)
+1. Only the host names 127.0.0.1 and localhost (TrustedHostMiddleware). A
+   website can point its own name at 127.0.0.1 (DNS rebinding); then the
+   name doesn't match and Progen refuses everything, reading included.
+2. Every change (POST, PUT, PATCH, DELETE) has to prove that it comes from Progen
+   itself or your own script, with something another website can't send along
+   without permission (CORS), and Progen doesn't give that permission:
+     - HX-Request: true        (the web page, through htmx)
+     - Content-Type: application/json   (the JSON API, scripts)
      - X-Progen-Shutdown       (Stop Progen)
-3. Zegt de browser dat het verzoek van een andere site komt (Origin of
-   Sec-Fetch-Site), dan wordt het geweigerd, ook als 2 klopt.
+3. If the browser says the request comes from another site (Origin or
+   Sec-Fetch-Site), it is refused, even when 2 checks out.
 """
 from urllib.parse import urlsplit
 
@@ -40,11 +40,11 @@ def _from_another_site(headers: dict[str, str], allowed_hosts: list[str]) -> boo
     origin = headers.get("origin")
     if origin and origin != "null":
         return urlsplit(origin).hostname not in allowed_hosts
-    return origin == "null"  # sandbox of file://: nooit vertrouwen
+    return origin == "null"  # sandbox or file://: never trust
 
 
 class CsrfMiddleware:
-    """Weigert wijzigingen die niet aantoonbaar van Progen zelf komen (zie bovenaan)."""
+    """Refuses changes that don't provably come from Progen itself (see the top)."""
 
     def __init__(self, app: ASGIApp, allowed_hosts: list[str]):
         self.app = app
@@ -62,6 +62,6 @@ class CsrfMiddleware:
 
 
 def protect(app, allowed_hosts: list[str] = ALLOWED_HOSTS) -> None:
-    """Zet beide beschermingen op de app. Volgorde: eerst de hostnaam, dan CSRF."""
+    """Puts both protections on the app. Order: first the host name, then CSRF."""
     app.add_middleware(CsrfMiddleware, allowed_hosts=allowed_hosts)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)

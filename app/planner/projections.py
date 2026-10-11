@@ -26,7 +26,7 @@ class PlanEntry:
 
 @dataclass(frozen=True)
 class Occurrence:
-    """Eén keer dat een plan valt (bij een herhaling: één van de keren)."""
+    """One time a plan falls (for a repeat: one of the times)."""
     plan: PlanEntry
     on: dt.date
 
@@ -59,7 +59,7 @@ class Occurrence:
 
 @dataclass(frozen=True)
 class Reminder:
-    key: str            # plan/voorkomen/herinnering: zo meldt de launcher niets dubbel
+    key: str            # plan/occurrence/reminder: that way the launcher never reports anything twice
     plan_id: str
     on: dt.date
     fires_at: dt.datetime
@@ -67,7 +67,7 @@ class Reminder:
 
 
 def _sort_key(o: Occurrence):
-    return (o.time is not None, o.time or dt.time(0), o.title.lower())  # hele dag eerst, dan op tijd
+    return (o.time is not None, o.time or dt.time(0), o.title.lower())  # all day first, then by time
 
 
 def lead_text(minutes: int) -> str:
@@ -81,8 +81,8 @@ def lead_text(minutes: int) -> str:
 
 
 class AgendaProjection:
-    """Alle plannen. Herhalingen worden per dag uitgerekend; overgeslagen keren vallen weg.
-    Houdt ook de instelling voor herinneringen bij (ReminderSettingsChanged)."""
+    """All plans. Repeats are worked out per day; skipped occurrences drop out.
+    Also keeps the reminder setting (ReminderSettingsChanged)."""
 
     def __init__(self):
         self.reset()
@@ -113,7 +113,7 @@ class AgendaProjection:
             elif isinstance(event, PlanRemoved):
                 del self._plans[event.plan_id]
 
-    # ---- Lezen ----
+    # ---- Reading ----
 
     def get(self, plan_id: str) -> PlanEntry | None:
         return self._plans.get(plan_id)
@@ -134,8 +134,8 @@ class AgendaProjection:
         return [p for p in self.all() if p.day is None and not p.done]
 
     def between(self, start: dt.date, end: dt.date) -> list[Occurrence]:
-        """Alle keren van `start` tot en met `end`, per dag zoals day() (herhalingen uitgeklapt,
-        overgeslagen weg, hele dag eerst). Hooguit ruim een jaar."""
+        """All occurrences from `start` up to and including `end`, per day like day() (repeats expanded,
+        skipped ones gone, all day first). At most a little over a year."""
         if end < start:
             raise ValueError("end lies before start")
         end = min(end, start + dt.timedelta(days=400))
@@ -146,8 +146,8 @@ class AgendaProjection:
         return found
 
     def upcoming(self, today: dt.date) -> tuple[list[Occurrence], list[tuple[PlanEntry, dt.date]]]:
-        """Wat er komt: eenmalige plannen vanaf vandaag die nog niet af zijn (op datum en tijd, hele dag
-        eerst), en elke herhaling één keer met haar eerstvolgende keer. Someday staat er niet in."""
+        """What is coming: one-off plans from today on that aren't done yet (by date and time, all day
+        first), and each repeat once with its next occurrence. Someday isn't in it."""
         one_offs, repeating = [], []
         for plan in self._plans.values():
             upcoming = next_occurrence(plan, today)
@@ -162,12 +162,12 @@ class AgendaProjection:
         return one_offs, repeating
 
     def someday_done(self, limit: int = 10) -> list[tuple[PlanEntry, dt.date]]:
-        """Afgevinkte plannen zonder datum, met de dag waarop ze af waren; de nieuwste eerst."""
+        """Ticked-off plans without a date, with the day they were done; newest first."""
         done = [(p, max(p.done)) for p in self._plans.values() if p.day is None and p.done]
         return sorted(done, key=lambda item: (item[1], item[0].added_at), reverse=True)[:limit]
 
     def due(self, now: dt.datetime, window: dt.timedelta) -> list[Reminder]:
-        """Herinneringen die vielen in (now - window, now]. `now` is lokale tijd zonder tijdzone."""
+        """Reminders that fell in (now - window, now]. `now` is local time without a time zone."""
         first_on, first_min, second_on, second_min, all_day_time = self.reminder_settings
         leads = [(n, minutes) for n, (on, minutes) in enumerate([(first_on, first_min), (second_on, second_min)], 1)
                  if on]
@@ -194,7 +194,7 @@ class AgendaProjection:
     @staticmethod
     def _reminder(o: Occurrence, minutes: int, all_day_time: dt.time) -> tuple[dt.datetime, str]:
         if o.time is None:
-            # Hele dag: een dag of meer van tevoren = op die dag om all_day_time; korter = die dag zelf.
+            # All day: a day or more before = on that day at all_day_time; shorter = that day itself.
             days = minutes // (24 * 60)
             fires_on = o.on - dt.timedelta(days=days)
             lead = "Today" if days == 0 else ("Tomorrow" if days == 1 else f"In {days} days")
@@ -204,7 +204,7 @@ class AgendaProjection:
 
 
 class PlannerActivityProjection:
-    """Hoe vaak een plan is verzet. Nu alleen bewaard; later bruikbaar voor inzichten."""
+    """How often a plan was moved. Only kept for now; useful for insights later."""
 
     def __init__(self):
         self.reset()

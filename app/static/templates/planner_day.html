@@ -1,6 +1,6 @@
 {% import "_macros.html" as ui %}
 {% import "_planner_macros.html" as pm %}
-{# Planner · Day: één dag als rustige lijst met een tijdlijn. #}
+{# Planner · Day: one day as a calm list with a timeline. #}
 <div class="page planner" hx-disinherit="*" hx-get="/ui/planner/day?d={{ day }}"
      hx-trigger="planner-changed from:body" hx-swap="outerHTML">
   {{ ui.tracker_tabs('planner', 'day', tabs) }}

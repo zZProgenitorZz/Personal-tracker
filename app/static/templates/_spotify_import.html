@@ -1,5 +1,5 @@
 {% import "_macros.html" as ui %}
-{# Settings > Spotify: je hele geschiedenis importeren. Peilt elke seconde zolang de import loopt. #}
+{# Settings > Spotify: importing your whole history. Polls every second while the import runs. #}
 <div id="spotify-import" class="spotify-import" hx-disinherit="*"
      {%- if job.busy %} hx-get="/ui/listening/import" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
   <div class="import-head">

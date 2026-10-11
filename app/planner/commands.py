@@ -7,7 +7,7 @@ from .aggregate import Plan, ReminderSettings
 from .events import Repeat
 
 
-# ---- Commands: wat je wílt dat er gebeurt ----
+# ---- Commands: what you want to happen ----
 
 @dataclass(frozen=True)
 class AddPlan:
@@ -67,7 +67,7 @@ class ChangeReminderSettings:
     all_day_time: dt.time
 
 
-# ---- De handler: laden, beslissen, opslaan ----
+# ---- The handler: load, decide, save ----
 
 class PlannerCommandHandler:
     def __init__(self, store: EventStore):

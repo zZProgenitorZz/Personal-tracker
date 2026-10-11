@@ -9,7 +9,7 @@ from .events import Kind, Status
 from .projections import LibraryProjection, ReadingActivityProjection
 
 
-# ---- Wat de API binnen verwacht ----
+# ---- What the API expects to receive ----
 
 class StartSeriesBody(BaseModel):
     title: str = Field(min_length=1)
@@ -33,7 +33,7 @@ class StatusBody(BaseModel):
     status: Status
 
 
-# ---- De endpoints ----
+# ---- The endpoints ----
 
 def create_reading_router(
     handler: ReadingCommandHandler,
@@ -49,7 +49,7 @@ def create_reading_router(
             raise HTTPException(status_code=404, detail="Series not found")
         return entry
 
-    # Lezen: vragen aan de read models
+    # Reading: questions for the read models
 
     @router.get("/current")
     def currently_reading():
@@ -68,11 +68,11 @@ def create_reading_router(
             "per_week": activity.per_week(),
         }
 
-    # Schrijven: commands naar de handler
+    # Writing: commands to the handler
 
     @router.post("/series", status_code=201)
     def start_series(body: StartSeriesBody):
-        # Een mislukte cover blokkeert het opslaan niet; de reden staat in cover_error.
+        # A failed cover doesn't block saving; the reason is in cover_error.
         cover, cover_error = None, None
         if body.cover_url:
             try:

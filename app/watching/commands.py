@@ -8,7 +8,7 @@ from .events import WatchKind, WatchStatus
 from .projections import WatchlistProjection
 
 
-# ---- Commands: wat je wílt dat er gebeurt ----
+# ---- Commands: what you want to happen ----
 
 @dataclass(frozen=True)
 class AddShow:
@@ -36,7 +36,7 @@ class RemoveShow:
     show_id: str
 
 
-# ---- De handler: laden, beslissen, opslaan ----
+# ---- The handler: load, decide, save ----
 
 class WatchingCommandHandler:
     def __init__(self, store: EventStore, watchlist: WatchlistProjection):
@@ -46,7 +46,7 @@ class WatchingCommandHandler:
     def handle(self, command) -> list:
         if isinstance(command, AddShow):
             title = command.title.strip()
-            # Uniek per soort: Dune de film en Dune de serie mogen allebei.
+            # Unique per kind: Dune the film and Dune the series can both exist.
             if self._watchlist.find(title, command.kind):
                 raise DomainError(f"'{title}' is already in your list")
             item = WatchItem([])

@@ -1,4 +1,4 @@
-"""Planner: afspraken en plannen. Regels als given/when/then, zonder netwerk of klok."""
+"""Planner: appointments and plans. Rules as given/when/then, without network or clock."""
 import datetime as dt
 
 import pytest
@@ -16,13 +16,13 @@ from app.planner.events import (
 )
 from app.planner.schedule import occurs_on
 
-MON = dt.date(2026, 10, 12)          # maandag
+MON = dt.date(2026, 10, 12)          # Monday
 DENTIST = PlanAdded("1", "Dentist", MON, dt.time(14), None, "", None)
 SOMEDAY = PlanAdded("2", "Paint the hall", None, None, None, "", None)
-GYM = PlanAdded("3", "Gym", MON, dt.time(7), 60, "", Repeat(Frequency.WEEKLY, (0, 3)))  # ma en do
+GYM = PlanAdded("3", "Gym", MON, dt.time(7), 60, "", Repeat(Frequency.WEEKLY, (0, 3)))  # Mon and Thu
 
 
-# ---- Toevoegen ----
+# ---- Adding ----
 
 def test_add_a_plan():
     events = Plan([]).add("1", "  Dentist ", MON, dt.time(14), 30, "Bring card", None)
@@ -60,7 +60,7 @@ def test_repeat_may_not_end_before_it_starts():
         Plan([]).add("1", "Gym", MON, None, None, "", Repeat(Frequency.DAILY, until=MON - dt.timedelta(days=1)))
 
 
-# ---- Herhaling ----
+# ---- Repeat ----
 
 def test_daily_weekly_and_until():
     daily = Repeat(Frequency.DAILY, until=MON + dt.timedelta(days=2))
@@ -82,7 +82,7 @@ def test_without_repeat_only_its_own_day():
     assert occurs_on(MON, None, MON) and not occurs_on(MON, None, MON + dt.timedelta(days=7))
 
 
-# ---- Afvinken, heropenen en overslaan ----
+# ---- Ticking off, reopening and skipping ----
 
 def test_mark_done_and_reopen():
     plan = Plan([DENTIST])
@@ -104,7 +104,7 @@ def test_reopening_what_is_not_done_is_refused():
 
 def test_each_occurrence_of_a_repeat_is_done_separately():
     plan = Plan([GYM, PlanDone("3", MON)])
-    assert plan.mark_done(MON + dt.timedelta(days=3))  # donderdag: los afvinken
+    assert plan.mark_done(MON + dt.timedelta(days=3))  # Thursday: ticked off on its own
     with pytest.raises(DomainError):
         plan.mark_done(MON)
 
@@ -112,7 +112,7 @@ def test_each_occurrence_of_a_repeat_is_done_separately():
 @pytest.mark.parametrize("action", ["mark_done", "skip"])
 def test_done_or_skipped_on_a_day_the_plan_does_not_fall_is_refused(action):
     with pytest.raises(DomainError):
-        getattr(Plan([GYM]), action)(MON + dt.timedelta(days=1))  # dinsdag
+        getattr(Plan([GYM]), action)(MON + dt.timedelta(days=1))  # Tuesday
 
 
 def test_a_single_plan_is_done_on_its_own_day_only():
@@ -132,7 +132,7 @@ def test_skip_one_occurrence():
     [skipped] = plan.skip(MON + dt.timedelta(days=3))
     assert isinstance(skipped, PlanSkipped)
     with pytest.raises(DomainError):
-        plan.skip(MON + dt.timedelta(days=3))  # al overgeslagen
+        plan.skip(MON + dt.timedelta(days=3))  # already skipped
 
 
 def test_only_a_repeat_can_be_skipped():
@@ -140,7 +140,7 @@ def test_only_a_repeat_can_be_skipped():
         Plan([DENTIST]).skip(MON)
 
 
-# ---- Verzetten en bewerken ----
+# ---- Moving and editing ----
 
 def test_reschedule_plan_it_and_back_to_someday():
     plan = Plan([SOMEDAY])
@@ -167,11 +167,11 @@ def test_a_repeat_cannot_go_to_someday():
 def test_edit_title_note_duration_and_repeat():
     [edited] = Plan([DENTIST]).edit("Dentist (check-up)", "Floss first", 45, Repeat(Frequency.MONTHLY))
     assert isinstance(edited, PlanEdited) and edited.repeat.every is Frequency.MONTHLY
-    assert Plan([DENTIST]).edit("Dentist", "", None, None) == []  # niets veranderd
+    assert Plan([DENTIST]).edit("Dentist", "", None, None) == []  # nothing changed
     with pytest.raises(DomainError):
         Plan([DENTIST]).edit(" ", "", None, None)
     with pytest.raises(DomainError):
-        Plan([SOMEDAY]).edit("Paint", "", None, Repeat(Frequency.DAILY))  # herhaling zonder datum
+        Plan([SOMEDAY]).edit("Paint", "", None, Repeat(Frequency.DAILY))  # a repeat without a date
 
 
 @pytest.mark.parametrize("action", [
@@ -188,14 +188,14 @@ def test_unknown_plan_is_refused():
         Plan([]).mark_done(MON)
 
 
-# ---- Herinneringen ----
+# ---- Reminders ----
 
 def test_same_reminder_settings_give_no_event():
     settings = ReminderSettings([])
     [changed] = settings.change(True, 60, False, 180, dt.time(8))
     assert isinstance(changed, ReminderSettingsChanged)
     assert ReminderSettings([changed]).change(True, 60, False, 180, dt.time(8)) == []
-    assert ReminderSettings([]).change(*ReminderSettings.DEFAULT) == []  # de standaard is al zo
+    assert ReminderSettings([]).change(*ReminderSettings.DEFAULT) == []  # the default is already like this
 
 
 def test_reminder_lead_must_be_positive():
@@ -203,7 +203,7 @@ def test_reminder_lead_must_be_positive():
         ReminderSettings([]).change(True, 0, True, 180, dt.time(9))
 
 
-# ---- Commands via de event store ----
+# ---- Commands through the event store ----
 
 def make_handler():
     store = EventStore(":memory:", EVENT_TYPES)

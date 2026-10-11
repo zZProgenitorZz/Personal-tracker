@@ -1,9 +1,8 @@
-"""Progen automatisch starten bij aanmelden in Windows (aan/uit in Settings).
+"""Starts Progen automatically when you sign in to Windows (on/off in Settings).
 
-Gebruikt de Run-sleutel van je eigen gebruiker (HKCU), dus geen beheerdersrechten
-nodig. De waarde start launch.pyw met --background: de server en het icoon in het
-systeemvak, zonder venster. Het register zit achter een klein object, zodat tests
-een nep-register kunnen gebruiken.
+Uses the Run key of your own user (HKCU), so no admin rights are needed. The value
+starts launch.pyw with --background: the server and the tray icon, without a window.
+The registry sits behind a small object, so tests can use a fake registry.
 """
 import sys
 from pathlib import Path
@@ -67,7 +66,7 @@ class Autostart:
 
     @property
     def enabled(self) -> bool:
-        # Een oude waarde (bv. na het verplaatsen van de projectmap) telt als uit.
+        # An old value (e.g. after moving the project folder) counts as off.
         return self.available and self._registry.get(RUN_VALUE) == self.command
 
     def enable(self) -> None:

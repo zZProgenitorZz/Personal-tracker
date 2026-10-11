@@ -1,4 +1,4 @@
-{# Gaat in #cover-preview van het formulier; het onderschrift wordt via hx-swap-oob bijgewerkt. #}
+{# Goes into the form's #cover-preview; the caption is updated through hx-swap-oob. #}
 {% if pick %}
 <img class="cover-img" src="{{ pick.image_url }}" alt="Cover of {{ pick.title }}"
      data-cover-total="{{ total }}" data-genres="{{ pick.genres|join(',') }}"

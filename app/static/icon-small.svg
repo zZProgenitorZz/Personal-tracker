@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Progen">
-  <!-- Vereenvoudigde versie van icon.svg voor kleine maten (taakbalk, systeemvak, 16-48 px):
-       dezelfde kleuren en hetzelfde idee (ring + open boek), zonder fijne details die op
-       een paar pixels samenvallen. scripts/make_icon.py gebruikt hem voor de kleine maten. -->
+  <!-- Simplified version of icon.svg for small sizes (taskbar, system tray, 16-48 px):
+       the same colors and the same idea (ring + open book), without fine details that
+       merge together at a few pixels. scripts/make_icon.py uses it for the small sizes. -->
   <defs>
     <radialGradient id="bg" cx="50%" cy="45%" r="75%">
       <stop offset="0" stop-color="#3b1d66"/><stop offset="1" stop-color="#140a26"/>
@@ -17,12 +17,12 @@
     </linearGradient>
   </defs>
   <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <!-- de ring (de slang), dik genoeg om op 20 px nog een ring te zijn -->
+  <!-- the ring (the snake), thick enough to still be a ring at 20 px -->
   <circle cx="256" cy="256" r="168" fill="none" stroke="url(#gold)" stroke-width="64"/>
   <circle cx="256" cy="256" r="168" fill="none" stroke="url(#ring)" stroke-width="44"/>
-  <!-- de kop van de slang: een gouden accent bovenaan rechts -->
+  <!-- the snake's head: a golden accent at the top right -->
   <circle cx="375" cy="137" r="30" fill="url(#gold)"/>
-  <!-- het open boek, groot in het midden -->
+  <!-- the open book, large in the middle -->
   <path fill="url(#gold)" d="M136,318 C180,304 222,309 256,330 C290,309 332,304 376,318 L376,334 C332,320 290,326 256,348 C222,326 180,320 136,334 Z"/>
   <path fill="url(#page)" d="M248,208 C214,190 174,188 140,198 L140,312 C176,302 214,306 248,324 Z"/>
   <path fill="url(#page)" d="M264,208 C298,190 338,188 372,198 L372,312 C336,302 298,306 264,324 Z"/>

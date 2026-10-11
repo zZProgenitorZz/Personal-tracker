@@ -1,5 +1,5 @@
 {% import "_macros.html" as ui %}
-{# Settings › Sunny: welk model Sunny gebruikt. Elke keuze slaat meteen op (event in een eigen stream). #}
+{# Settings › Sunny: which model Sunny uses. Every choice saves right away (an event in its own stream). #}
 <div id="sunny-settings" hx-disinherit="*" hx-get="/ui/assistant/settings" hx-trigger="assistant-changed from:body" hx-swap="outerHTML">
   <form class="model-choice" hx-post="/ui/assistant/model" hx-trigger="change" hx-swap="none" role="radiogroup" aria-label="Sunny's model">
     {% for model in models %}

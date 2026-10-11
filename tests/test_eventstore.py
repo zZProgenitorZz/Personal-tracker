@@ -62,7 +62,7 @@ def test_restore_replaces_all_events(tmp_path):
     assert store.count() == 2
 
 
-# ---- Datums, tijden, optionele velden en geneste dataclasses (voor Planner) ----
+# ---- Dates, times, optional fields and nested dataclasses (for Planner) ----
 
 import datetime as dt  # noqa: E402
 from dataclasses import dataclass, field  # noqa: E402
@@ -102,12 +102,12 @@ def test_dates_times_optionals_and_nested_dataclasses_survive_storage():
     assert type(back.rule.every) is Every and type(back.rule.weekdays) is tuple and type(back.day) is dt.date
 
 
-# ---- Snel genoeg voor een grote import ----
+# ---- Fast enough for a big import ----
 
 def test_streams_are_indexed_also_in_an_existing_database(tmp_path):
     import sqlite3
     path = tmp_path / "old.db"
-    old = sqlite3.connect(path)  # een database van vóór de index
+    old = sqlite3.connect(path)  # a database from before the index
     old.execute("CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, stream_id TEXT NOT NULL, "
                 "type TEXT NOT NULL, data TEXT NOT NULL, at TEXT NOT NULL)")
     old.commit()
@@ -125,9 +125,9 @@ def test_a_transaction_stores_many_streams_at_once_and_notifies_after_commit():
     store.subscribe(seen.append)
     with store.transaction():
         store.append("1", [SeriesStarted("1", "A", Kind.MANHWA, "x", 1)])
-        assert store.load_stream("1")  # binnen de transactie al te lezen (regels blijven werken)
+        assert store.load_stream("1")  # already readable inside the transaction (the rules keep working)
         store.append("2", [SeriesStarted("2", "B", Kind.MANHWA, "x", 1)])
-        assert seen == []              # pas na het opslaan
+        assert seen == []              # only after saving
     assert store.count() == 2 and [e.series_id for e in seen] == ["1", "2"]
 
 

@@ -1,12 +1,12 @@
-"""Bronnen voor covers. Elke bron is een functie met dezelfde vorm:
+"""Sources for covers. Each source is a function with the same shape:
 
-    bron(client, zoekterm) -> list[SourceResult]
+    source(client, search_term) -> list[SourceResult]
 
-Een bron zoekt alleen en leest het antwoord uit; vergelijken, sorteren en
-combineren gebeurt in app/cover_search.py. Bij een fout gooit een bron een
-CoverError met zijn eigen naam erin. Een bron toevoegen of weghalen: schrijf
-een functie zoals hieronder, met @cover_source("Naam") erboven, en zet hem
-in SOURCES (of haal hem eruit).
+A source only searches and reads the answer; comparing, sorting and
+combining happens in app/cover_search.py. On an error a source raises a
+CoverError with its own name in it. To add or remove a source: write
+a function like the ones below, with @cover_source("Name") above it, and put it
+in SOURCES (or take it out).
 """
 import os
 import threading
@@ -19,10 +19,10 @@ from ..cover_search import SOURCE_TIMEOUT, SourceBusy, SourceResult, ask, cover_
 from ..covers import CoverError
 from .genres import from_source
 
-ANILIST_MIN_TAG_RANK = 60  # alleen tags waar AniList zeker van is
+ANILIST_MIN_TAG_RANK = 60  # only tags AniList is sure about
 
 
-# ---- AniList: manga, manhwa en light novels ----
+# ---- AniList: manga, manhwa and light novels ----
 
 ANILIST_URL = "https://graphql.anilist.co"
 ANILIST_QUERY = """
@@ -56,7 +56,7 @@ def anilist(client: httpx.Client, term: str) -> list[SourceResult]:
     return results
 
 
-# ---- MangaUpdates: ook webnovels (type "Novel") ----
+# ---- MangaUpdates: web novels too (type "Novel") ----
 
 MANGAUPDATES_URL = "https://api.mangaupdates.com/v1/series/search"
 
@@ -75,22 +75,22 @@ def mangaupdates(client: httpx.Client, term: str) -> list[SourceResult]:
     return results
 
 
-# ---- MyAnimeList via Jikan: (light) novels, ook Chinese en Koreaanse webnovels ----
+# ---- MyAnimeList through Jikan: (light) novels, Chinese and Korean web novels too ----
 
 JIKAN_URL = "https://api.jikan.moe/v4/manga"
 JIKAN_TYPES = ("novel", "lightnovel")
-JIKAN_MIN_INTERVAL = 0.4  # seconden tussen verzoeken; Jikan staat er maximaal 3 per seconde toe
-JIKAN_CONNECT_TIMEOUT = 3.0  # neemt Jikan niet op, dan snel opgeven
-JIKAN_COOLDOWN = 5 * 60   # na een netwerkfout Jikan zo lang overslaan, zodat zoeken niet steeds wacht
+JIKAN_MIN_INTERVAL = 0.4  # seconds between requests; Jikan allows at most 3 per second
+JIKAN_CONNECT_TIMEOUT = 3.0  # if Jikan doesn't pick up, give up quickly
+JIKAN_COOLDOWN = 5 * 60   # after a network error skip Jikan this long, so searching doesn't keep waiting
 _jikan_lock = threading.Lock()
 _jikan_last = [0.0]
 _jikan_down_until = [0.0]
 
 
 def _jikan_pause() -> None:
-    """Wacht tot er JIKAN_MIN_INTERVAL voorbij is sinds het vorige Jikan-verzoek."""
+    """Waits until JIKAN_MIN_INTERVAL has passed since the previous Jikan request."""
     with _jikan_lock:
-        # Nooit langer dan JIKAN_MIN_INTERVAL, ook niet als de klok terugspringt.
+        # Never longer than JIKAN_MIN_INTERVAL, even if the clock jumps back.
         wait = min(JIKAN_MIN_INTERVAL, _jikan_last[0] + JIKAN_MIN_INTERVAL - time.monotonic())
         if wait > 0:
             time.sleep(wait)
@@ -99,8 +99,8 @@ def _jikan_pause() -> None:
 
 @cover_source("MyAnimeList")
 def myanimelist(client: httpx.Client, term: str) -> list[SourceResult]:
-    """Zoekt los naar novels en light novels. Bij een 429 stopt deze bron: wat al gevonden is
-    telt mee, en zonder resultaten valt alleen deze bron af (niet de hele zoekopdracht)."""
+    """Searches novels and light novels separately. On a 429 this source stops: what was already
+    found counts, and without results only this source drops out (not the whole search)."""
     if _jikan_down_until[0] > time.monotonic():
         raise CoverError("MyAnimeList is unreachable; Progen tries it again in a few minutes.")
     found: dict[int, SourceResult] = {}
@@ -114,7 +114,7 @@ def myanimelist(client: httpx.Client, term: str) -> list[SourceResult]:
                 break
             raise
         except CoverError as exc:
-            if isinstance(exc.__cause__, httpx.HTTPError):  # niet bereikbaar of te traag
+            if isinstance(exc.__cause__, httpx.HTTPError):  # unreachable or too slow
                 _jikan_down_until[0] = time.monotonic() + JIKAN_COOLDOWN
             raise
         for item in (data or {}).get("data") or []:
@@ -133,10 +133,10 @@ def myanimelist(client: httpx.Client, term: str) -> list[SourceResult]:
     return list(found.values())
 
 
-# ---- Google Books: gepubliceerde boeken, vaak kleine thumbnails ----
+# ---- Google Books: published books, often small thumbnails ----
 
 GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes"
-GOOGLE_BOOKS_KEY_ENV = "GOOGLE_BOOKS_API_KEY"  # optioneel; zonder sleutel geldt een krap gedeeld quotum
+GOOGLE_BOOKS_KEY_ENV = "GOOGLE_BOOKS_API_KEY"  # optional; without a key a tight shared quota applies
 _GOOGLE_SIZES = ("extraLarge", "large", "medium", "small", "thumbnail", "smallThumbnail")
 
 
@@ -148,9 +148,9 @@ def _largest_google_image(links: dict) -> str | None:
     else:
         return None
     parts = urlsplit(url)
-    query = [(k, v) for k, v in parse_qsl(parts.query) if k != "edge"]  # geen omgekrulde hoek
+    query = [(k, v) for k, v in parse_qsl(parts.query) if k != "edge"]  # no curled corner
     if size in ("thumbnail", "smallThumbnail"):
-        query = [(k, "0" if k == "zoom" else v) for k, v in query]  # zoom=0: grootste versie
+        query = [(k, "0" if k == "zoom" else v) for k, v in query]  # zoom=0: largest version
     return urlunsplit(("https", parts.netloc, parts.path, urlencode(query), ""))
 
 
@@ -172,7 +172,7 @@ def google_books(client: httpx.Client, term: str) -> list[SourceResult]:
     return results
 
 
-# ---- Open Library: boeken, ook veel webnovels in print ----
+# ---- Open Library: books, also many web novels in print ----
 
 OPEN_LIBRARY_URL = "https://openlibrary.org/search.json"
 OPEN_LIBRARY_COVER = "https://covers.openlibrary.org/b/id/{}-L.jpg"
@@ -194,5 +194,5 @@ def open_library(client: httpx.Client, term: str) -> list[SourceResult]:
     return results
 
 
-# Volgorde = volgorde bij gelijke score.
+# Order = the order on a tie.
 SOURCES = [anilist, mangaupdates, myanimelist, open_library, google_books]

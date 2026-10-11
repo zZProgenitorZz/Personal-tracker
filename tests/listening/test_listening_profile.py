@@ -1,4 +1,4 @@
-"""Je Spotify-profiel (naam en foto) op het dashboard van Listening. Nep-Spotify, geen netwerk."""
+"""Your Spotify profile (name and photo) on Listening's dashboard. Fake Spotify, no network."""
 import logging
 from datetime import timedelta
 from io import BytesIO
@@ -66,9 +66,9 @@ def connect(client):
 def test_profile_and_photo_are_fetched_when_connecting(setup, fake):
     client, data = setup
     connect(client)
-    assert "/v1/me" in fake.paths and "/image/large" in fake.paths  # de grootste foto
+    assert "/v1/me" in fake.paths and "/image/large" in fake.paths  # the largest photo
     with Image.open(data / "spotify_avatar.webp") as avatar:
-        assert avatar.format == "WEBP" and avatar.size == (AVATAR_SIZE, AVATAR_SIZE)  # vierkant bijgesneden
+        assert avatar.format == "WEBP" and avatar.size == (AVATAR_SIZE, AVATAR_SIZE)  # cropped square
 
 
 def test_dashboard_shows_name_and_photo(setup):
@@ -101,7 +101,7 @@ def test_profile_error_never_blocks_connecting_or_syncing(setup, fake, caplog):
     client, data = setup
     with caplog.at_level(logging.WARNING, logger="progen.listening"):
         connect(client)
-    assert (data / "spotify_token.json").exists()  # wel gekoppeld
+    assert (data / "spotify_token.json").exists()  # connected all the same
     assert "profile" in caplog.text.lower()
     assert "toast-error" not in client.post("/ui/listening/spotify/sync").text
     assert "Listening as" not in client.get("/ui/listening/dashboard").text

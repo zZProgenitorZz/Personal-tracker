@@ -1,7 +1,7 @@
-"""Sunny in de app: het chatpaneel (htmx), Confirm/Cancel en Settings › Sunny.
+"""Sunny in the app: the chat panel (htmx), Confirm/Cancel and Settings › Sunny.
 
-Dunne routes: input lezen, Sunny (session.py) laten werken, renderen. Zonder ANTHROPIC_API_KEY
-toont het paneel één nette regel in plaats van een fout.
+Thin routes: read the input, let Sunny (session.py) do the work, render. Without ANTHROPIC_API_KEY
+the panel shows one tidy line instead of an error.
 """
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import PlainTextResponse
@@ -36,7 +36,7 @@ def create_assistant_router(sunny: Sunny) -> APIRouter:
 
     @router.post("/message")
     def message(request: Request, message: str = Form(""), retry: str = Form("")):
-        """Een bericht van Progen. Met retry (de knop Try again) staat het bericht al in het gesprek."""
+        """A message from Progen. With retry (the Try again button) the message is already in the conversation."""
         text = message.strip()
         if sunny.client is None:
             return render(request, "_sunny_entries.html", entries=[{"kind": "unavailable"}])
@@ -56,12 +56,12 @@ def create_assistant_router(sunny: Sunny) -> APIRouter:
         sunny.reset()
         return body(request)
 
-    # ---- Settings › Sunny: welk model ----
+    # ---- Settings › Sunny: which model ----
 
     @router.get("/settings")
     def settings_panel(request: Request):
         return render(request, "_sunny_settings.html", models=MODELS, current=sunny.settings.settings().model,
-                      key_found=bool(api_key()))  # de key zelf nooit tonen
+                      key_found=bool(api_key()))  # never show the key itself
 
     @router.post("/model")
     def choose_model(request: Request, model: str = Form("")):
@@ -73,7 +73,7 @@ def create_assistant_router(sunny: Sunny) -> APIRouter:
 
     @router.get("/model-label")
     def model_label():
-        """De korte naam onder de kop van het chatpaneel, bv. "Haiku 5.5"."""
+        """The short name below the chat panel's heading, e.g. "Haiku 5.5"."""
         return PlainTextResponse(model_by_id(sunny.settings.settings().model).short)
 
     return router

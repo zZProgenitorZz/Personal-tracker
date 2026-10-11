@@ -1,4 +1,4 @@
-"""Wrapped: het jaaroverzicht, opgebouwd uit de bestaande events van alle trackers."""
+"""Wrapped: the year in review, built from the existing events of all trackers."""
 from datetime import date, datetime, timedelta
 
 from app.eventstore import EventStore
@@ -10,7 +10,7 @@ from app.wrapped.projections import WrappedProjection
 
 
 def at(y, m, d, hour=12, minute=0) -> datetime:
-    """Een moment in de lokale tijdzone, zoals de projecties dagen tellen."""
+    """A moment in the local time zone, the way the projections count days."""
     return datetime(y, m, d, hour, minute).astimezone()
 
 
@@ -27,7 +27,7 @@ def status(sid, frm, to, when):
 
 
 def added_as(sid, title, start_status, when):
-    """Zoals ReadingSeries.start: SeriesStarted en direct daarna de beginstatus."""
+    """Like ReadingSeries.start: SeriesStarted and right after it the starting status."""
     return [started(sid, title, when), status(sid, Status.READING, start_status, when + timedelta(milliseconds=3))]
 
 
@@ -52,8 +52,8 @@ def given(*events) -> WrappedProjection:
 def test_chapters_count_only_forward_progress():
     w = given(started("1", "A", at(2025, 1, 1)),
               read("1", 0, 10, at(2025, 1, 2)),
-              read("1", 10, 4, at(2025, 1, 3)),   # correctie omlaag telt niet
-              read("1", 4, 9, at(2025, 1, 4)))    # 4 → 9 wel
+              read("1", 10, 4, at(2025, 1, 3)),   # a correction downwards doesn't count
+              read("1", 4, 9, at(2025, 1, 4)))    # 4 → 9 does
     assert w.year(2025).chapters == 15
 
 
@@ -80,7 +80,7 @@ def test_reading_genres_split_chapters_using_the_latest_genres():
     w = given(started("1", "A", at(2025, 1, 1)),
               GenresChanged("1", ["Romance"], at=at(2025, 1, 1)),
               read("1", 0, 10, at(2025, 2, 1)),
-              GenresChanged("1", ["Action", "Fantasy"], at=at(2025, 6, 1)))  # de laatste telt
+              GenresChanged("1", ["Action", "Fantasy"], at=at(2025, 6, 1)))  # the last one counts
     assert w.year(2025).reading_genres == [("Action", 5), ("Fantasy", 5)]
 
 
@@ -92,12 +92,12 @@ def test_adding_as_completed_is_not_finishing():
 
 def test_real_completions_count_even_right_after_adding():
     w = given(
-        # Toegevoegd als Reading en een uur later afgerond: echt.
+        # Added as Reading and finished an hour later: real.
         started("1", "A", at(2025, 3, 1, 10)), status("1", Status.READING, Status.COMPLETED, at(2025, 3, 1, 11)),
-        # Van Plan to Read naar Completed: een echte wijziging.
+        # From Plan to Read to Completed: a real change.
         added_as("2", "B", Status.PLAN_TO_READ, at(2025, 3, 2)),
         status("2", Status.PLAN_TO_READ, Status.COMPLETED, at(2025, 4, 1)),
-        # Serie 4 wordt afgerond direct na de SeriesStarted van serie 3: geen beginstatus, want andere serie.
+        # Series 4 is finished right after series 3's SeriesStarted: not a starting status, because it's another series.
         started("4", "D", at(2025, 3, 2, 9)),
         started("3", "C", at(2025, 3, 3)),
         status("4", Status.READING, Status.COMPLETED, at(2025, 3, 3)),
@@ -118,7 +118,7 @@ def test_plan_to_read_is_not_started_until_it_leaves_the_backlog():
               started("2", "Now", at(2025, 1, 5)),
               status("1", Status.PLAN_TO_READ, Status.READING, at(2025, 2, 1)),
               status("1", Status.READING, Status.PLAN_TO_READ, at(2025, 3, 1)),
-              status("1", Status.PLAN_TO_READ, Status.READING, at(2025, 4, 1)))  # telt maar één keer
+              status("1", Status.PLAN_TO_READ, Status.READING, at(2025, 4, 1)))  # counts only once
     assert (w.year(2024).series_started, w.year(2025).series_started) == (0, 2)
     assert w.year(2024).series_completed == 0 and w.year(2024).chapters == 0
 
@@ -146,9 +146,9 @@ def test_watching_counts_only_marking_completed():
               finish("1", WatchStatus.WATCHING, at(2025, 2, 1)),
               show("2", "Dune", WatchKind.MOVIE, WatchStatus.PLAN_TO_WATCH, at(2025, 1, 1)),
               ShowGenresChanged("2", ["Sci-Fi", "Adventure"], at=at(2025, 1, 1)),
-              finish("2", WatchStatus.PLAN_TO_WATCH, at(2025, 3, 1)),     # uit de backlog afgerond: telt
-              show("3", "Seen before", WatchKind.SERIES, WatchStatus.COMPLETED, at(2025, 1, 1)),  # telt niet
-              show("4", "Backlog", WatchKind.SERIES, WatchStatus.PLAN_TO_WATCH, at(2025, 1, 1)))  # telt niet
+              finish("2", WatchStatus.PLAN_TO_WATCH, at(2025, 3, 1)),     # finished out of the backlog: counts
+              show("3", "Seen before", WatchKind.SERIES, WatchStatus.COMPLETED, at(2025, 1, 1)),  # doesn't count
+              show("4", "Backlog", WatchKind.SERIES, WatchStatus.PLAN_TO_WATCH, at(2025, 1, 1)))  # doesn't count
     review = w.year(2025)
     assert review.watched_by_kind == {WatchKind.SERIES: 0, WatchKind.ANIME: 1, WatchKind.MOVIE: 1}
     assert review.watched_total == 2
@@ -161,7 +161,7 @@ def test_watching_counts_only_marking_completed():
 def test_listening_minutes_tops_and_busiest_day():
     w = given(play(at(2025, 1, 1), "One", ["A", "B"]),
               play(at(2025, 1, 1, 13), "One", ["A", "B"]),
-              play(at(2025, 1, 2), "Two", ["A"], ms_played=60_000),  # echt geluisterd telt
+              play(at(2025, 1, 2), "Two", ["A"], ms_played=60_000),  # really listened counts
               play(at(2026, 1, 1), "Three", ["C"]))
     review = w.year(2025)
     assert review.listen_minutes == 7
@@ -170,7 +170,7 @@ def test_listening_minutes_tops_and_busiest_day():
     assert review.busiest_listening_day == (date(2025, 1, 1), 6)
 
 
-# ---- Alles samen ----
+# ---- Everything together ----
 
 def test_months_busiest_month_and_most_active_day():
     w = given(started("1", "A", at(2025, 1, 1)),
@@ -182,7 +182,7 @@ def test_months_busiest_month_and_most_active_day():
     march, july = review.months[2], review.months[6]
     assert (march.chapters, march.finished, march.minutes) == (10, 1, 0)
     assert (july.chapters, july.finished, july.minutes) == (0, 0, 6)
-    assert review.busiest_month.month == 3            # 10 hoofdstukken + 1 afgerond > 2 nummers
+    assert review.busiest_month.month == 3            # 10 chapters + 1 finished > 2 tracks
     assert review.most_active_day == (date(2025, 3, 5), 10)
 
 
@@ -205,7 +205,7 @@ def test_rebuilt_projection_equals_the_live_one():
     store.subscribe(live.apply)
     store.append("s1", added_as("s1", "Done", Status.COMPLETED, at(2025, 1, 1)))
     store.append("s2", [started("s2", "B", at(2025, 1, 2)), GenresChanged("s2", ["Action"], at=at(2025, 1, 2))])
-    store.append("play-1", [play(at(2025, 1, 3))])  # een sync tussendoor
+    store.append("play-1", [play(at(2025, 1, 3))])  # a sync in between
     store.append("s2", [read("s2", 0, 12, at(2025, 2, 1)), status("s2", Status.READING, Status.COMPLETED, at(2025, 2, 2))])
     store.append("w1", [show("w1", "Dune", WatchKind.MOVIE, WatchStatus.WATCHING, at(2025, 1, 1)),
                         finish("w1", WatchStatus.WATCHING, at(2025, 5, 1))])
@@ -218,13 +218,13 @@ def test_rebuilt_projection_equals_the_live_one():
     assert live.year(2025).series_completed == 1 and live.year(2025).finished == 2
 
 
-# ---- Verwijderd en opnieuw toegevoegd: in Wrapped één serie ----
-# Zo kregen oude series een cover: verwijderen en opnieuw toevoegen (nieuwe series_id, Reading regel 6).
+# ---- Removed and re-added: one series in Wrapped ----
+# This is how old series got a cover: remove and add again (new series_id, Reading rule 6).
 
 def test_re_added_series_shows_once_with_the_new_cover_and_all_chapters():
     w = given(started("old", "Shadow Slave", at(2025, 1, 1)), read("old", 0, 80, at(2025, 2, 1)),
               SeriesRemoved("old", "Shadow Slave", at=at(2025, 3, 1)),
-              started("new", "shadow slave", at(2025, 3, 1), cover="ss.webp", chapter=80))  # hoofdletters tellen niet
+              started("new", "shadow slave", at(2025, 3, 1), cover="ss.webp", chapter=80))  # case doesn't count
     [(title, chapters)] = w.year(2025).top_series
     assert (title.title, title.cover, chapters) == ("shadow slave", "ss.webp", 80)
 
@@ -258,7 +258,7 @@ def test_adding_again_is_not_starting_again():
     w = given(started("old", "A", at(2024, 6, 1)), read("old", 0, 10, at(2024, 7, 1)),
               SeriesRemoved("old", "A", at=at(2025, 3, 1)),
               started("new", "A", at(2025, 3, 1), chapter=10),
-              # ook niet als de nieuwe versie als Completed wordt toegevoegd en daarna weer Reading wordt
+              # not even when the new version is added as Completed and then goes back to Reading
               SeriesRemoved("new", "A", at=at(2025, 4, 1)),
               added_as("newer", "A", Status.PLAN_TO_READ, at(2025, 4, 1)),
               status("newer", Status.PLAN_TO_READ, Status.READING, at(2025, 5, 1)))

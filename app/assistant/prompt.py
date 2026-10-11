@@ -1,9 +1,9 @@
-"""Sunny's systeemprompt: IDENTITY.md, SOUL.md en USER.md (in die volgorde) als één vast blok,
-en de datum van vandaag als apart blok erna.
+"""Sunny's system prompt: IDENTITY.md, SOUL.md and USER.md (in that order) as one fixed block,
+and today's date as a separate block after it.
 
-Het vaste blok draagt cache_control: het verandert niet tussen berichten (en niet tussen dagen),
-dus het wordt één keer verwerkt en daarna uit de cache gelezen. De datum staat bewust erna,
-anders zou elke nieuwe dag de cache breken.
+The fixed block carries cache_control: it doesn't change between messages (or between days),
+so it is processed once and then read from the cache. The date comes after it on purpose,
+otherwise every new day would break the cache.
 """
 import datetime as dt
 from functools import lru_cache

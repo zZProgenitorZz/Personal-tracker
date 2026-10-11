@@ -1,7 +1,7 @@
-"""Een nep-Anthropic-client voor de tests: praat nooit met de echte API.
+"""A fake Anthropic client for the tests: never talks to the real API.
 
-Je geeft een lijst antwoorden mee; elke messages.create geeft de volgende terug en onthoudt wat
-er gevraagd werd (model, system, tools, messages), zodat de tests dat kunnen controleren.
+You pass a list of responses; each messages.create returns the next one and remembers what
+was asked (model, system, tools, messages), so the tests can check that.
 """
 import copy
 from types import SimpleNamespace

@@ -1,7 +1,7 @@
-"""Sunny bij problemen met de API van Anthropic: een duidelijke ballon, geen crash.
+"""Sunny when there are problems with Anthropic's API: a clear balloon, no crash.
 
-De fouten worden gemaakt met de exception-klassen van de anthropic-SDK en een nep-HTTP-antwoord;
-er wordt nooit met de echte API gepraat.
+The errors are made with the anthropic SDK's exception classes and a fake HTTP response;
+the real API is never called.
 """
 import datetime as dt
 import logging
@@ -61,7 +61,7 @@ CASES = [
 
 
 class Raises:
-    """Een nep-client die bij elke aanroep dezelfde fout gooit."""
+    """A fake client that raises the same error on every call."""
 
     def __init__(self, error):
         self.error = error
@@ -71,11 +71,11 @@ class Raises:
         raise self.error
 
 
-# De agent leest bij een fout alleen de datum (voor de systeemprompt); meer is niet nodig.
+# On an error the agent only reads the date (for the system prompt); nothing more is needed.
 NO_DATA = SimpleNamespace(now=lambda: dt.datetime(2026, 10, 11, 10, 0))
 
 
-# ---- Elke rij uit de tabel ----
+# ---- Every row from the table ----
 
 @pytest.mark.parametrize("kind, error, message", CASES, ids=[f"{c[0]}-{type(c[1]).__name__}" for c in CASES])
 def test_every_problem_gets_its_own_kind_and_words(kind, error, message):
@@ -115,10 +115,10 @@ def test_an_unknown_error_names_the_status_and_is_logged(caplog):
     with caplog.at_level(logging.ERROR, logger="progen.assistant"):
         reply = Agent(Raises(error), NO_DATA).ask("hi", [])
     assert reply.text == "Something went wrong talking to Anthropic (status 404)."
-    assert "claude-nope" in caplog.text  # de volledige fout staat in de console
+    assert "claude-nope" in caplog.text  # the full error is in the console
 
 
-# ---- In de app ----
+# ---- In the app ----
 
 @pytest.fixture
 def app_and_client(monkeypatch):
@@ -132,14 +132,14 @@ def app_and_client(monkeypatch):
 
 def test_a_problem_is_a_warning_bubble_with_console_and_try_again(app_and_client):
     app, client = app_and_client
-    app.state.sunny.client = Raises(CASES[2][1])  # tegoed op
+    app.state.sunny.client = Raises(CASES[2][1])  # out of credit
     reply = client.post("/ui/assistant/message", data={"message": "how many chapters?"})
     assert reply.status_code == 200
     html = reply.text
     assert "sunny-problem" in html and "I&#39;m out of credits" in html
     assert 'href="https://console.anthropic.com"' in html and 'target="_blank"' in html and "Open console" in html
     assert "Try again" in html and '"message": "how many chapters?"' in html and '"retry": "1"' in html
-    assert "how many chapters?" in client.get("/ui/assistant").text  # het bericht blijft in het gesprek
+    assert "how many chapters?" in client.get("/ui/assistant").text  # the message stays in the conversation
 
 
 def test_rate_and_offline_have_no_console_link(app_and_client):
@@ -161,7 +161,7 @@ def test_try_again_does_not_repeat_the_message_in_the_chat(app_and_client):
 
 def test_key_or_credit_problem_shows_when_opening_until_a_call_works(app_and_client):
     app, client = app_and_client
-    app.state.sunny.client = Raises(CASES[0][1])  # key verlopen
+    app.state.sunny.client = Raises(CASES[0][1])  # key expired
     client.post("/ui/assistant/message", data={"message": "hi"})
     opened = client.get("/ui/assistant").text
     assert "sunny-banner" in opened and "My key expired" in opened.split("sunny-banner", 1)[1]
@@ -184,8 +184,8 @@ def test_confirm_still_works_after_a_problem(app_and_client):
                                         response(text("Confirm it.")))
     card = client.post("/ui/assistant/message", data={"message": "120"}).text
     proposal = card.split('id="sunny-card-', 1)[1].split('"', 1)[0]
-    app.state.sunny.client = Raises(CASES[2][1])  # nu is het tegoed op
+    app.state.sunny.client = Raises(CASES[2][1])  # now the credit has run out
     client.post("/ui/assistant/message", data={"message": "and 121?"})
-    confirmed = client.post(f"/ui/assistant/confirm/{proposal}")  # lokaal: geen API nodig
+    confirmed = client.post(f"/ui/assistant/confirm/{proposal}")  # local: no API needed
     assert confirmed.headers["HX-Trigger"] == "reading-changed"
     assert client.get("/reading/library").json()[0]["current_chapter"] == 120

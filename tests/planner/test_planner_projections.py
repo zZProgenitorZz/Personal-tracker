@@ -1,4 +1,4 @@
-"""Agenda, herinneringen en activiteit: given events, then wat de projecties tonen. Met een vaste klok."""
+"""Agenda, reminders and activity: given events, then what the projections show. With a fixed clock."""
 import datetime as dt
 
 from app.eventstore import EventStore
@@ -27,7 +27,7 @@ def titles(occurrences):
     return [o.title for o in occurrences]
 
 
-# ---- Dagen en weken ----
+# ---- Days and weeks ----
 
 def test_a_day_lists_all_day_first_then_by_time():
     agenda = given(plan("1", "Dentist", time=dt.time(14)), plan("2", "Birthday Sam"),
@@ -72,7 +72,7 @@ def test_someday_lists_plans_without_a_date_that_are_not_done():
     assert [p.title for p in agenda.someday()] == ["Paint the hall", "Learn Korean"]
 
 
-# ---- Herinneringen ----
+# ---- Reminders ----
 
 def due(agenda, *at, minutes=1):
     return agenda.due(dt.datetime(*at), dt.timedelta(minutes=minutes))
@@ -84,7 +84,7 @@ def test_timed_plan_reminds_a_day_and_three_hours_before():
     assert first.text == "Tomorrow: Dentist at 14:00" and first.key == "1/2026-10-12/1"
     [second] = due(agenda, 2026, 10, 12, 11, 0, 30)
     assert second.text == "In 3 hours: Dentist at 14:00"
-    assert due(agenda, 2026, 10, 12, 11, 2) == []  # buiten het venster van een minuut
+    assert due(agenda, 2026, 10, 12, 11, 2) == []  # outside the one-minute window
 
 
 def test_all_day_plan_reminds_the_day_before_and_that_day_at_nine():
@@ -96,7 +96,7 @@ def test_all_day_plan_reminds_the_day_before_and_that_day_at_nine():
 def test_reminder_settings_are_used():
     agenda = given(plan("1", "Dentist", time=dt.time(14)),
                    ReminderSettingsChanged(False, 1440, True, 15, dt.time(8)))
-    assert due(agenda, 2026, 10, 11, 14, 0) == []  # eerste herinnering staat uit
+    assert due(agenda, 2026, 10, 11, 14, 0) == []  # the first reminder is off
     assert [r.text for r in due(agenda, 2026, 10, 12, 13, 45)] == ["In 15 minutes: Dentist at 14:00"]
 
 
@@ -112,7 +112,7 @@ def test_each_occurrence_of_a_repeat_reminds():
     assert [r.key for r in due(agenda, 2026, 10, 15, 4, 0)] == ["1/2026-10-15/2"]
 
 
-# ---- Activiteit en herbouwen ----
+# ---- Activity and rebuilding ----
 
 def test_activity_counts_reschedules_per_plan():
     activity = PlannerActivityProjection()
@@ -141,11 +141,11 @@ def test_rebuilt_agenda_equals_the_live_one():
 def test_someday_done_lists_the_latest_first_and_at_most_ten():
     events = [plan(str(i), f"Plan {i}", day=None) for i in range(12)]
     events += [PlanDone(str(i), MON + dt.timedelta(days=i)) for i in range(12)]
-    events += [plan("x", "Dentist"), PlanDone("x", MON)]                     # met datum: niet in Someday
+    events += [plan("x", "Dentist"), PlanDone("x", MON)]                     # with a date: not in Someday
     agenda = given(*events)
     done = agenda.someday_done()
     assert [p.title for p, _ in done] == [f"Plan {i}" for i in range(11, 1, -1)]
-    assert done[0][1] == MON + dt.timedelta(days=11)                         # wanneer het af was
+    assert done[0][1] == MON + dt.timedelta(days=11)                         # when it was done
 
 
 def test_reopened_someday_plan_goes_back_to_someday():

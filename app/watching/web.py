@@ -1,8 +1,8 @@
-"""htmx-routes voor Watching: films, series en anime.
+"""htmx routes for Watching: films, series and anime.
 
-GET-routes geven HTML-fragmenten uit de read models. POST-routes sturen
-commands en antwoorden met een toast plus het event `watching-changed`,
-waarop de zichtbare onderdelen zichzelf opnieuw ophalen.
+GET routes return HTML fragments from the read models. POST routes send
+commands and answer with a toast plus the event `watching-changed`,
+on which the visible parts fetch themselves again.
 """
 from datetime import date
 
@@ -20,10 +20,10 @@ from .genres import WATCH_GENRES
 from .projections import WatchActivityProjection, WatchEntry, WatchlistProjection
 
 CHANGED = "watching-changed"
-# Gathering dust: een titel op Watching die zoveel dagen niet is toegevoegd of van status gewisseld.
-# Ruimer dan bij Reading, want Watching houdt geen afleveringen bij: een zwakker signaal.
+# Gathering dust: a title on Watching that hasn't been added or changed status in this many days.
+# Looser than for Reading, because Watching doesn't track episodes: a weaker signal.
 STALE_WATCHING_DAYS = 30
-DUST_SHOWN = 5  # daarna "+N more"
+DUST_SHOWN = 5  # after that "+N more"
 
 templates.env.globals.update(
     WATCH_STATUS_LABELS=WATCH_STATUS_LABELS, WATCH_KIND_LABELS=WATCH_KIND_LABELS, WATCH_GENRES=WATCH_GENRES.names,
@@ -31,7 +31,7 @@ templates.env.globals.update(
 
 
 def finished_per_month(per_day: dict[date, int], today: date, months: int) -> list[dict]:
-    """Afgerond per kalendermaand, de laatste `months` maanden (de huidige als laatste)."""
+    """Finished per calendar month, the last `months` months (the current one last)."""
     result = []
     year, month = today.year, today.month
     for _ in range(months):
@@ -46,7 +46,7 @@ def finished_per_month(per_day: dict[date, int], today: date, months: int) -> li
 
 
 def watching_summary(watchlist: WatchlistProjection, activity: WatchActivityProjection) -> dict:
-    """Voor het startscherm en Settings."""
+    """For the home screen and Settings."""
     today = clock.today()
     current = watchlist.currently_watching()
     dusty = len(watchlist.stale(clock.utc_now(), STALE_WATCHING_DAYS))
@@ -96,7 +96,7 @@ def create_watching_web_router(
         return Backlog("watching", watchlist.by_status(WatchStatus.PLAN_TO_WATCH), lambda e: e.show_id,
                        "/ui/watching/shows/{}/status", WatchStatus.WATCHING.value, "Start watching", WATCH_GENRES.names)
 
-    # Lezen
+    # Reading
 
     @router.get("/dashboard")
     def dashboard(request: Request):
@@ -119,7 +119,7 @@ def create_watching_web_router(
 
     @router.get("/pick")
     def pick(request: Request, exclude: str = "", genre: str = ""):
-        """"Wat nu?": een willekeurige titel uit Plan to Watch. Alleen lezen; Start stuurt ChangeShowStatus."""
+        """"What next?": a random title from Plan to Watch. Only reads; Start sends ChangeShowStatus."""
         return pick_from_backlog(request, backlog(), exclude, genre)
 
     @router.get("/library/grid")
@@ -155,7 +155,7 @@ def create_watching_web_router(
         return render(request, "_genre_editor.html", title=entry.title, options=WATCH_GENRES.names,
                       selected=entry.genres, action=f"/ui/watching/shows/{show_id}/genres")
 
-    # Schrijven
+    # Writing
 
     @router.post("/shows")
     def add_show(

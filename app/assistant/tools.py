@@ -1,12 +1,12 @@
-"""Sunny's tools (zie identity/TOOLS.md): JSON-schema's met strict: true, en wat ze doen.
+"""Sunny's tools (see identity/TOOLS.md): JSON schemas with strict: true, and what they do.
 
-Leestools roepen de bestaande projecties direct aan (geen HTTP) en geven compacte JSON terug:
-alleen de velden die nodig zijn. Schrijftools voeren niets uit: ze geven een PendingAction
-terug (het command plus een leesbare regel voor de kaart). Pas na Confirm gaat het command naar
-de gewone command handler, en wordt het een gewoon event.
+Read tools call the existing projections directly (no HTTP) and return compact JSON:
+only the fields that are needed. Write tools don't run anything: they return a PendingAction
+(the command plus a readable line for the card). Only after Confirm does the command go to
+the ordinary command handler and become an ordinary event.
 
-Een ongeldige aanroep (onbekend id, verkeerde datum) wordt een ToolError: die gaat als
-is_error terug naar het model, zodat Sunny het zelf kan rechtzetten of het kan vragen.
+An invalid call (unknown id, wrong date) becomes a ToolError: it goes back to the model as
+is_error, so Sunny can fix it itself or ask.
 """
 import datetime as dt
 from dataclasses import dataclass
@@ -27,26 +27,26 @@ from ..watching.events import WATCH_KIND_LABELS, WATCH_STATUS_LABELS, WatchKind,
 from ..watching.projections import WatchlistProjection
 
 PROPOSED = "proposed, waiting for Progen's confirmation"
-MAX_ROWS = 40  # nooit de hele bibliotheek in één antwoord
-MAX_PLANS = 100  # plans_between: hooguit zoveel keren (herhalingen uitgeklapt)
+MAX_ROWS = 40  # never the whole library in one answer
+MAX_PLANS = 100  # plans_between: at most this many occurrences (repeats expanded)
 
 
 class ToolError(ValueError):
-    """Een aanroep die niet kan; de melding is voor het model."""
+    """A call that can't be done; the message is for the model."""
 
 
 @dataclass
 class PendingAction:
     domain: str                 # reading / watching / planner
-    command: Any                # het command voor de handler, na Confirm
+    command: Any                # the command for the handler, after Confirm
     label: str                  # "Solo Leveling · chapter 119 → 120"
-    changed: str                # htmx-event na Confirm, bv. "reading-changed"
-    delete_name: str | None = None  # bij verwijderen: de naam, voor de extra bevestiging
+    changed: str                # htmx event after Confirm, e.g. "reading-changed"
+    delete_name: str | None = None  # when removing: the name, for the extra confirmation
 
 
 @dataclass
 class TrackerData:
-    """Alles waar Sunny bij mag: de projecties om te lezen, de handlers om (na Confirm) te schrijven."""
+    """Everything Sunny may access: the projections to read, the handlers to write (after Confirm)."""
     library: LibraryProjection
     watchlist: WatchlistProjection
     listening: ListeningActivityProjection
@@ -56,13 +56,13 @@ class TrackerData:
     reading: ReadingCommandHandler
     watching: WatchingCommandHandler
     planner: PlannerCommandHandler
-    now: Callable[[], dt.datetime]   # lokale tijd, net als de planner
+    now: Callable[[], dt.datetime]   # local time, like the planner
 
     def handler(self, domain: str):
         return {"reading": self.reading, "watching": self.watching, "planner": self.planner}[domain]
 
 
-# ---- De schema's ----
+# ---- The schemas ----
 
 def _nullable(schema: dict) -> dict:
     return {"anyOf": [schema, {"type": "null"}]}
@@ -122,10 +122,10 @@ TOOL_DEFINITIONS = [
     _tool("delete_item", "Delete a series, show or plan. Progen gets an extra confirmation with the name." + WRITE_NOTE,
           {"domain": {"type": "string", "enum": ["reading", "watching", "plan"]}, "id": {"type": "string"}}),
 ]
-TOOL_DEFINITIONS[-1]["cache_control"] = {"type": "ephemeral"}  # cachet de hele toollijst
+TOOL_DEFINITIONS[-1]["cache_control"] = {"type": "ephemeral"}  # caches the whole tool list
 
 
-# ---- Uitvoeren ----
+# ---- Running ----
 
 def _date(value: str | None, name: str) -> dt.date:
     try:
@@ -146,7 +146,7 @@ def _limit(args: dict) -> int:
 
 
 def _lookup(found, noun: str, item_id: str):
-    """Het gevonden item, of een ToolError die het model naar find_item stuurt."""
+    """The item found, or a ToolError that sends the model to find_item."""
     if found is None:
         raise ToolError(f"No {noun} with id {item_id!r}. Use find_item to get the id.")
     return found
@@ -231,7 +231,7 @@ def plans_between(args: dict, data: TrackerData) -> list[dict]:
             for o in data.agenda.between(*_period(args))][:MAX_PLANS]
 
 
-# ---- Schrijftools: alleen voorstellen ----
+# ---- Write tools: proposals only ----
 
 def set_reading_progress(args: dict, data: TrackerData) -> PendingAction:
     entry = _series(data, args["series_id"])
@@ -353,7 +353,7 @@ WRITE_TOOLS = {f.__name__: f for f in (set_reading_progress, set_reading_status,
 
 
 def run_tool(name: str, args: dict, data: TrackerData) -> tuple[Any, PendingAction | None]:
-    """(resultaat, None) voor een leestool; (PROPOSED, PendingAction) voor een schrijftool."""
+    """(result, None) for a read tool; (PROPOSED, PendingAction) for a write tool."""
     try:
         if name in READ_TOOLS:
             return READ_TOOLS[name](args, data), None

@@ -1,4 +1,4 @@
-"""De modellen waaruit je in Settings › Sunny kiest. Dit is de enige plek in de app met model-ID's."""
+"""The models you choose from in Settings › Sunny. This is the only place in the app with model IDs."""
 from dataclasses import dataclass
 
 
@@ -6,7 +6,7 @@ from dataclasses import dataclass
 class Model:
     id: str
     name: str          # "Claude Haiku 5.5"
-    short: str         # "Haiku 5.5", klein onder de kop van het chatpaneel
+    short: str         # "Haiku 5.5", small below the chat panel's heading
     description: str
     price: str         # per 1M tokens, input / output
 

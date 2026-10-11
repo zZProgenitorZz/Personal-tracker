@@ -2,7 +2,7 @@
 <svg class="icon" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ ICONS[name]|safe }}</svg>
 {%- endmacro %}
 
-{# Tabbladen binnen een tracker; standaard Dashboard, Library, Progress. Het eerste tabblad is #<tracker>. #}
+{# Tabs within a tracker; Dashboard, Library, Progress by default. The first tab is #<tracker>. #}
 {% macro tracker_tabs(tracker, active, tabs=[('dashboard', 'Dashboard'), ('library', 'Library'), ('progress', 'Progress')]) -%}
 <nav class="tracker-tabs" aria-label="{{ tracker|capitalize }}">
   {%- for key, label in tabs %}
@@ -11,7 +11,7 @@
 </nav>
 {%- endmacro %}
 
-{# Vinkjes voor de vaste genrelijst van een tracker; gedeeld door "Add ..." en "Edit genres". #}
+{# Checkboxes for a tracker's fixed genre list; shared by "Add ..." and "Edit genres". #}
 {% macro genre_picker(options, selected=()) -%}
 <div class="genre-picker" role="group" aria-label="Genres">
   {%- for g in options %}
@@ -20,7 +20,7 @@
 </div>
 {%- endmacro %}
 
-{# Keuze uit statussen of soorten als knoppenrij. options: {enum: label}; zonder `checked` de eerste. #}
+{# A choice of statuses or kinds as a row of buttons. options: {enum: label}; without `checked` the first. #}
 {% macro segmented(name, options, checked=none, dots=false) -%}
 {% set checked = checked if checked is not none else (options|list)[0] %}
 <div class="segmented segmented-{{ options|length }}" role="radiogroup">
@@ -31,7 +31,7 @@
 </div>
 {%- endmacro %}
 
-{# Coverkiezer in een "Add ..."-formulier. De ids zijn uniek, want er staat altijd maar één formulier open. #}
+{# Cover picker in an "Add ..." form. The ids are unique, because only one form is ever open. #}
 {% macro cover_picker(search_url) -%}
 <div class="field">
   <span>Cover <small>optional</small></span>
@@ -63,7 +63,7 @@
 <span class="pill pill-{{ status.value }}"><i></i>{{ labels[status] }}</span>
 {%- endmacro %}
 
-{# Zonder cover, of als de afbeelding niet laadt, blijft de gekleurde placeholder met initialen zichtbaar. #}
+{# Without a cover, or if the image doesn't load, the colored placeholder with initials stays visible. #}
 {% macro cover(title, kind, file=None) -%}
 <div class="cover" style="--hue: {{ title|hue }}">
   <span class="cover-initials" aria-hidden="true">{{ title|initials }}</span>
@@ -80,7 +80,7 @@
 </div>
 {%- endmacro %}
 
-{# Het ⋯-menu op een kaart: genres aanpassen en verwijderen. #}
+{# The ⋯ menu on a card: change genres and remove. #}
 {% macro card_menu(base, title, confirm_kind='remove') -%}
 <details class="card-menu">
   <summary aria-label="More options for {{ title }}" title="More options">{{ icon('more', 16) }}</summary>
@@ -89,7 +89,7 @@
             hx-get="{{ base }}/genres" hx-target="#genre-editor" hx-swap="innerHTML">
       {{ icon('tag', 15) }}Edit genres
     </button>
-    {# hx-confirm opent het bevestigingsvenster uit index.html (zie trackly.js) #}
+    {# hx-confirm opens the confirmation window from index.html (see trackly.js) #}
     <button class="menu-item danger" type="button" role="menuitem"
             hx-delete="{{ base }}" hx-swap="none" hx-confirm="{{ title }}" data-confirm-kind="{{ confirm_kind }}">
       {{ icon('trash', 15) }}Remove
@@ -142,7 +142,7 @@
 </article>
 {%- endmacro %}
 
-{# Een film, serie of anime. Alleen status en genres; geen afleveringen. #}
+{# A film, series or anime. Only status and genres; no episodes. #}
 {% macro show_card(e) -%}
 {% set base = "/ui/watching/shows/" ~ e.show_id %}
 <article class="series-card">
@@ -179,8 +179,8 @@
 </div>
 {%- endmacro %}
 
-{# Gathering dust: titels op Reading/Watching die al een tijd stil liggen. Alleen lezen; de knoppen
-   sturen de gewone endpoints, waarna het dashboard zichzelf ververst. "Not now" verbergt alleen hier. #}
+{# Gathering dust: titles on Reading/Watching that have been quiet for a while. Read only; the buttons
+   call the ordinary endpoints, after which the dashboard refreshes itself. "Not now" only hides it here. #}
 {% macro dust_row(e, now, reading) -%}
 {% set base = ("/ui/reading/series/" ~ e.series_id) if reading else ("/ui/watching/shows/" ~ e.show_id) %}
 <li class="dust-row" data-dust-id="{{ e.series_id if reading else e.show_id }}">

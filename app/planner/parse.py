@@ -1,13 +1,13 @@
-"""Snel invoeren in gewone taal, Nederlands en Engels door elkaar: "Tandarts vr 14u",
-"elke ma en do 7:00 sporten", "12 okt verjaardag Sam". Een kleine eigen parser, geen library.
+"""Quick entry in plain words, Dutch and English mixed: "Tandarts vr 14u",
+"elke ma en do 7:00 sporten", "12 okt verjaardag Sam". A small parser of our own, no library.
 
-De parser haalt datum, tijd en herhaling uit de tekst; wat overblijft is de titel. Niets
-herkend = een plan voor Someday. Alles is "de eerstvolgende": een weekdag of datum zonder
-jaar die al voorbij is, schuift door. Vandaag telt mee zolang de tijd nog niet voorbij is.
+The parser takes the date, time and repeat out of the text; what remains is the title. Nothing
+recognized = a plan for Someday. Everything means "the next one": a weekday or a date without
+a year that has already passed moves ahead. Today counts as long as the time hasn't passed yet.
 
-Korte weekdagen die ook gewone woorden zijn ("do the dishes", "zo snel mogelijk", "bellen met
-ma") tellen alleen naast een tijd, of na "op", "on", "volgende", "next", "elke" of "every".
-Een tijdvak ("14:00-15:30", "12u-13u") wordt een begintijd met een duur.
+Short weekdays that are also ordinary words ("do the dishes", "zo snel mogelijk", "bellen met
+ma") only count next to a time, or after "op", "on", "volgende", "next", "elke" or "every".
+A time range ("14:00-15:30", "12u-13u") becomes a start time with a duration.
 """
 import datetime as dt
 import re
@@ -43,10 +43,10 @@ WD = _words(WEEKDAYS)
 MONTH = _words(MONTHS)
 EVERY = r"(?:elke|iedere|every|each)"
 NEXT_WEEK = r"(?:volgende\s+week|next\s+week)"
-B, E = r"(?<![\w])", r"(?![\w])"  # woordgrenzen (ook rond ":" en ".")
+B, E = r"(?<![\w])", r"(?![\w])"  # word boundaries (also around ":" and ".")
 CONNECTORS = {"om", "at", "op", "on", "en", "and", "@", "-", "–", "&"}
-COMING = r"(?:volgende|komende|aanstaande|deze|next|this|coming)"  # "volgende maandag" = de eerstvolgende
-# Een tijd met een herkenbaar teken: 14:00, 14.30, 14u, 20u30, 14 uur.
+COMING = r"(?:volgende|komende|aanstaande|deze|next|this|coming)"  # "volgende maandag" = the next one
+# A time with a recognizable sign: 14:00, 14.30, 14u, 20u30, 14 uur.
 CLOCK = r"(\d{1,2})(?:[:.](\d{2})|u(\d{2})?(?!\w)|\s*uur(?!\w))"
 
 
@@ -56,11 +56,11 @@ class Parsed:
     day: dt.date | None = None
     time: dt.time | None = None
     repeat: Repeat | None = None
-    duration_min: int | None = None  # uit een tijdvak, zoals "14:00-15:30"
+    duration_min: int | None = None  # from a time range, like "14:00-15:30"
 
 
 class _Text:
-    """De invoer, met bij te houden welke stukken al herkend zijn."""
+    """The input, keeping track of which pieces have been recognized."""
 
     def __init__(self, text: str):
         self.original = text
@@ -90,7 +90,7 @@ class _Text:
 
 
 def parse(text: str, now: dt.datetime) -> Parsed:
-    """`now` is lokale tijd zonder tijdzone (de klok van deze pc)."""
+    """`now` is local time without a time zone (this PC's clock)."""
     t = _Text(text)
     today = now.date()
     repeat = _repeat(t)
@@ -110,12 +110,12 @@ def parse(text: str, now: dt.datetime) -> Parsed:
     if repeat is not None and repeat.every is Frequency.WEEKLY and not repeat.weekdays:
         repeat = Repeat(Frequency.WEEKLY, (day.weekday(),))
     if time is not None and day is None:
-        # Alleen een tijd: vandaag als die nog komt, anders morgen.
+        # Only a time: today if it is still coming, otherwise tomorrow.
         day = today if time > now.time() else today + dt.timedelta(days=1)
     return Parsed(t.rest(), day, time, repeat, duration)
 
 
-# ---- De onderdelen ----
+# ---- The parts ----
 
 def _repeat(t: _Text) -> Repeat | None:
     for pattern, every in [(rf"{B}{EVERY}\s+(?:dag|day){E}", Frequency.DAILY),
@@ -156,7 +156,7 @@ def _date(t: _Text, today: dt.date) -> dt.date | None:
     patterns = [
         (rf"{B}(?:op\s+|on\s+)?(\d{{1,2}})\s*({MONTH})\.?{E}(?:\s+(\d{{4}}){E})?", lambda m: (m[1], MONTHS[m[2]], m[3])),
         (rf"{B}(?:op\s+|on\s+)?({MONTH})\.?\s+(\d{{1,2}}){E}(?:,?\s+(\d{{4}}){E})?", lambda m: (m[2], MONTHS[m[1]], m[3])),
-        # Niet vast aan een tijd: in "10:30-12:15" is "30-12" geen datum.
+        # Not attached to a time: in "10:30-12:15", "30-12" isn't a date.
         (rf"(?<![\w:.])(?:op\s+|on\s+)?(\d{{1,2}})[/-](\d{{1,2}})(?:[/-](\d{{4}}|\d{{2}}))?{E}(?![:.]\d)",
          lambda m: (m[1], m[2], m[3])),
     ]
@@ -181,7 +181,7 @@ def _valid_date(day: int, month: int, year: str | None, today: dt.date) -> dt.da
 
 
 def _time_range(t: _Text):
-    """ "14:00-15:30", "van 9.00 tot 10.15", "12u-13u": begintijd en duur."""
+    """ "14:00-15:30", "van 9.00 tot 10.15", "12u-13u": start time and duration."""
     end = r"(\d{1,2})(?:[:.](\d{2})|u(\d{2})?(?!\w)|\s*uur(?!\w))?"
     pattern = rf"{B}(?:om\s+|at\s+|van\s+|from\s+)?{CLOCK}\s*(?:-|–|tot|to|until)\s*{end}{E}"
     for match in t.find(pattern):
@@ -245,14 +245,14 @@ def _weekday(t: _Text, time_span, has_repeat: bool) -> int | None:
 
 
 def _upcoming(weekday: int, today: dt.date, now: dt.datetime, time: dt.time | None) -> dt.date:
-    """De eerstvolgende `weekday`; vandaag telt mee als de tijd nog niet voorbij is."""
+    """The next `weekday`; today counts if the time hasn't passed yet."""
     ahead = (weekday - today.weekday()) % 7
     if ahead == 0 and time is not None and time <= now.time():
         ahead = 7
     return today + dt.timedelta(days=ahead)
 
 
-# ---- Terug naar tekst, voor de preview onder het invoerveld ----
+# ---- Back to text, for the preview below the input field ----
 
 def nice_day(day: dt.date, today: dt.date) -> str:
     text = f"{SHORT_DAYS[day.weekday()]} {day.day} {day:%b}"
@@ -266,7 +266,7 @@ def ordinal(n: int) -> str:
 
 
 def describe_repeat(repeat: Repeat, start: dt.date | None = None) -> str:
-    """'every Mon, Thu', 'every day', 'every month on the 12th' (met `start`), eventueel 'until ...'."""
+    """'every Mon, Thu', 'every day', 'every month on the 12th' (with `start`), possibly 'until ...'."""
     if repeat.every is Frequency.DAILY:
         text = "every day"
     elif repeat.every is Frequency.MONTHLY:

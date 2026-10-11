@@ -1,4 +1,4 @@
-"""De vaste genrelijst: genres uit bronnen vertalen, en genres die je zelf kiest controleren."""
+"""The fixed genre list: mapping genres from sources, and checking genres you pick yourself."""
 import pytest
 
 from app.reading.genres import GENRES, from_source, validated

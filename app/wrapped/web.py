@@ -1,7 +1,7 @@
-"""htmx-route voor Wrapped (#wrapped): het jaaroverzicht. Alleen lezen.
+"""htmx route for Wrapped (#wrapped): the year in review. Read only.
 
-Wrapped is geen tracker: hij staat niet in de trackers-lijst (dus niet in
-Settings of de navigatiebalk), alleen als kaart op het startscherm.
+Wrapped isn't a tracker: it isn't in the trackers list (so not in
+Settings or the navigation bar), only a card on the home screen.
 """
 
 from fastapi import APIRouter, Request
@@ -17,7 +17,7 @@ def hours(minutes: float) -> float:
 
 
 def headline(review: YearReview) -> dict:
-    """De grote getallen bovenaan en op het startscherm."""
+    """The big numbers at the top and on the home screen."""
     return {"chapters": review.chapters, "finished": review.finished, "hours": hours(review.listen_minutes)}
 
 
@@ -46,7 +46,7 @@ def create_wrapped_web_router(wrapped: WrappedProjection) -> APIRouter:
         review = wrapped.year(number)
         years = wrapped.years()
         if this_year not in years:
-            years = sorted({*years, this_year}, reverse=True)  # dit jaar staat er altijd, ook leeg
+            years = sorted({*years, this_year}, reverse=True)  # this year is always there, even when empty
         big = headline(review)
         before = headline(wrapped.year(number - 1))
         months = review.months

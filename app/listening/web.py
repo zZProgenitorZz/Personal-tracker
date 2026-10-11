@@ -1,7 +1,7 @@
-"""htmx-routes voor Listening: wat je op Spotify luistert.
+"""htmx routes for Listening: what you listen to on Spotify.
 
-Alleen lezen: plays komen binnen via de Spotify-sync (of POST /listening/plays),
-niet via een formulier. Na een sync stuurt de server `listening-changed`.
+Read only: plays come in through the Spotify sync (or POST /listening/plays),
+not through a form. After a sync the server sends `listening-changed`.
 """
 from datetime import date
 
@@ -22,7 +22,7 @@ TABS = [("dashboard", "Dashboard"), ("history", "History"), ("progress", "Progre
 
 def listening_summary(recent: RecentlyPlayedProjection, activity: ListeningActivityProjection,
                       top_artists: TopArtistsProjection) -> dict:
-    """Voor het startscherm en Settings. "Deze week" = de laatste 7 dagen, zoals bij Reading."""
+    """For the home screen and Settings. "This week" = the last 7 days, as with Reading."""
     today = clock.today()
     minutes = round(sum(b["value"] for b in last_days(activity.minutes_per_day(), today, 7)))
     plays = sum(b["value"] for b in last_days(activity.plays_per_day(), today, 7))
@@ -30,7 +30,7 @@ def listening_summary(recent: RecentlyPlayedProjection, activity: ListeningActiv
     return {
         "stats": [(minutes, "min this week"), (plays, "plays this week"),
                   (top_artists.count(today.year, today.month), "artists this month")],
-        "current": [],  # geen covers in deze versie
+        "current": [],  # no covers in this version
         "note": "Last played: " + " · ".join(filter(None, [last[0].track, ", ".join(last[0].artists)])) if last else None,
         "count": sum(activity.plays_per_day().values()),
         "unit": "plays",
@@ -83,7 +83,7 @@ def create_listening_web_router(
     return router
 
 
-# ---- Spotify koppelen en synchroniseren (Settings) ----
+# ---- Connecting and syncing Spotify (Settings) ----
 
 SPOTIFY_CHANGED = "spotify-changed"
 
@@ -99,7 +99,7 @@ def create_spotify_router(sync: ListeningSync) -> APIRouter:
 
     @router.get("/listening/spotify/connect")
     def connect(request: Request):
-        """Stuurt je naar Spotify om Progen toegang te geven tot je luistergeschiedenis."""
+        """Sends you to Spotify to give Progen access to your listening history."""
         try:
             return RedirectResponse(spotify.authorize_url(), status_code=307)
         except SpotifyError as exc:
@@ -107,15 +107,15 @@ def create_spotify_router(sync: ListeningSync) -> APIRouter:
 
     @router.get("/listening/spotify/callback")
     def callback(request: Request, code: str = "", state: str = "", error: str = ""):
-        """Hier stuurt Spotify je terug na het inloggen."""
+        """Spotify sends you back here after signing in."""
         if error:
             return message(request, "Spotify wasn't connected", f"Spotify said: {error}")
         try:
             spotify.finish_authorization(code, state)
         except SpotifyError as exc:
             return message(request, "Spotify wasn't connected", str(exc))
-        sync.refresh_profile(force=True)  # naam en foto voor het dashboard
-        sync.tick()  # meteen een eerste sync; fouten worden gelogd, niet getoond
+        sync.refresh_profile(force=True)  # name and photo for the dashboard
+        sync.tick()  # a first sync right away; errors are logged, not shown
         return RedirectResponse("/#settings", status_code=303)
 
     @router.get("/ui/listening/spotify")
@@ -145,7 +145,7 @@ def create_spotify_router(sync: ListeningSync) -> APIRouter:
 
     @router.get("/listening/spotify/avatar")
     def avatar():
-        """Je Spotify-profielfoto, lokaal bewaard."""
+        """Your Spotify profile photo, stored locally."""
         if sync.profiles is None or not sync.profiles.avatar_path.exists():
             return Response(status_code=404)
         return FileResponse(sync.profiles.avatar_path, media_type="image/webp")

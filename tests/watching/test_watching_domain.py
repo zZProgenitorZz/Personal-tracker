@@ -1,4 +1,4 @@
-"""Watching: films, series en anime. Alleen status en genres, geen afleveringen."""
+"""Watching: films, series and anime. Only status and genres, no episodes."""
 from datetime import date, datetime, time, timedelta
 
 import pytest
@@ -60,7 +60,7 @@ def test_removed_show_cannot_change():
             action()
 
 
-# ---- Commands en projecties ----
+# ---- Commands and projections ----
 
 def test_same_title_and_kind_cannot_be_added_twice():
     handler, *_ = make_app()
@@ -101,7 +101,7 @@ def test_watchlist_follows_the_events_and_can_be_rebuilt():
 
 def test_only_marking_completed_counts_as_finished():
     handler, _, activity, _ = make_app()
-    handler.handle(AddShow("Already seen", WatchKind.MOVIE, WatchStatus.COMPLETED))  # geschiedenis
+    handler.handle(AddShow("Already seen", WatchKind.MOVIE, WatchStatus.COMPLETED))  # history
     [added] = handler.handle(AddShow("Frieren", WatchKind.ANIME))
     handler.handle(ChangeShowStatus(added.show_id, WatchStatus.COMPLETED))
     assert sum(activity.per_day().values()) == 1

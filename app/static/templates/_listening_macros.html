@@ -1,5 +1,5 @@
 {% import "_macros.html" as ui %}
-{# Een lijst met plays (nieuwste eerst), gedeeld door Dashboard en History. #}
+{# A list of plays (newest first), shared by Dashboard and History. #}
 {% macro play_list(plays) -%}
 <ol class="play-list">
   {%- for p in plays %}
@@ -15,7 +15,7 @@
 </ol>
 {%- endmacro %}
 
-{# Nog niets: vertel waar je Spotify koppelt. #}
+{# Nothing yet: say where you connect Spotify. #}
 {% macro no_plays(connected) -%}
 {% if connected %}
 {{ ui.empty('music', 'No plays yet', 'Spotify is connected. Play something, then use “Sync now” in Settings or wait for the next automatic sync.', cta=false) }}

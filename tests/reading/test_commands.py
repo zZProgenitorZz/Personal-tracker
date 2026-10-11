@@ -51,7 +51,7 @@ def test_rejected_command_stores_nothing():
 def test_unknown_series_is_rejected():
     handler, store = make_handler()
     with pytest.raises(DomainError):
-        handler.handle(LogProgress("bestaat-niet", 5))
+        handler.handle(LogProgress("does-not-exist", 5))
     assert store.load_all() == []
 
 def test_removed_title_can_be_added_again_as_new_series():
@@ -63,7 +63,7 @@ def test_removed_title_can_be_added_again_as_new_series():
 
     assert started.series_id != old_id
     assert [type(e) for e in store.load_all()] == [SeriesStarted, SeriesRemoved, SeriesStarted]
-    assert ReadingSeries(store.load_stream(old_id)).removed  # de oude blijft verwijderd
+    assert ReadingSeries(store.load_stream(old_id)).removed  # the old one stays removed
 
 
 def test_title_in_library_still_cannot_be_added_twice():

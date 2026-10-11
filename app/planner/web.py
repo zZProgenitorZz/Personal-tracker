@@ -1,8 +1,8 @@
-"""htmx-routes voor Planner (#planner): Week, Day en Someday, snel invoeren, de dialog van
-een plan, .ics voor je iPhone en de herinneringen in Settings.
+"""htmx routes for Planner (#planner): Week, Day and Someday, quick entry, a plan's
+dialog, .ics for your iPhone and the reminders in Settings.
 
-GET-routes lezen uit de projecties. POST-routes sturen commands en antwoorden met een
-toast plus het event `planner-changed`, waarop de zichtbare onderdelen zichzelf verversen.
+GET routes read from the projections. POST routes send commands and answer with a
+toast plus the event `planner-changed`, on which the visible parts refresh themselves.
 """
 import datetime as dt
 import re
@@ -28,7 +28,7 @@ TABS = [("week", "Week"), ("upcoming", "Upcoming"), ("day", "Day"), ("someday", 
 REMINDER_CHOICES = [(15, "15 minutes before"), (30, "30 minutes before"), (60, "1 hour before"),
                     (180, "3 hours before"), (24 * 60, "1 day before"), (2 * 24 * 60, "2 days before"),
                     (7 * 24 * 60, "1 week before")]
-HOME_PLANS = 3  # het startscherm toont hooguit zoveel plannen
+HOME_PLANS = 3  # the home screen shows at most this many plans
 
 
 def monday_of(day: dt.date) -> dt.date:
@@ -50,14 +50,14 @@ def parse_time(value: str | None) -> dt.time | None:
 
 
 def when_text(o: Occurrence) -> str:
-    """'14:00', '14:00–15:00' of 'All day'."""
+    """'14:00', '14:00–15:00' or 'All day'."""
     if o.time is None:
         return "All day"
     return f"{o.time:%H:%M}–{o.ends_at:%H:%M}" if o.ends_at else f"{o.time:%H:%M}"
 
 
 def upcoming_group(day: dt.date, today: dt.date) -> str:
-    """Today, Tomorrow, This week, Next week, en daarna per maand ("November", "January 2027")."""
+    """Today, Tomorrow, This week, Next week, and after that per month ("November", "January 2027")."""
     if day == today:
         return "Today"
     if day == today + dt.timedelta(days=1):
@@ -82,7 +82,7 @@ def week_label(monday: dt.date) -> str:
 
 
 def planner_summary(agenda: AgendaProjection) -> dict:
-    """Voor het startscherm en Settings: vandaag, het eerstvolgende plan, en hooguit twee andere."""
+    """For the home screen and Settings: today, the next plan, and at most two others."""
     now = clock.local_now()
     plans = agenda.day(now.date())
     open_ = [o for o in plans if not o.done]
@@ -108,7 +108,7 @@ def planner_summary(agenda: AgendaProjection) -> dict:
 
 
 def _repeat_from_form(mode: str, weekdays: list[str], until: str, parsed: Repeat | None) -> Repeat | None:
-    """'auto' = wat uit de tekst kwam; anders wat er in "More" is gekozen."""
+    """'auto' = what came from the text; otherwise what was chosen under "More"."""
     until_day = parse_day(until, None)
     if mode == "none":
         return None
@@ -140,7 +140,7 @@ def create_planner_web_router(handler: PlannerCommandHandler, agenda: AgendaProj
         plan = agenda.get(plan_id)
         return plan.title if plan else "Plan"
 
-    # ---- Lezen ----
+    # ---- Reading ----
 
     @router.get("/week")
     def week(request: Request, start: str = ""):
@@ -184,7 +184,7 @@ def create_planner_web_router(handler: PlannerCommandHandler, agenda: AgendaProj
 
     @router.get("/preview")
     def preview(request: Request, text: str = ""):
-        """Wat de app van de invoer maakt, onder het invoerveld. Slaat niets op."""
+        """What the app makes of the input, below the input field. Saves nothing."""
         if not text.strip():
             return Response("")
         return render(request, "_planner_preview.html", text=describe(parse(text, clock.local_now()), clock.today()))
@@ -213,14 +213,14 @@ def create_planner_web_router(handler: PlannerCommandHandler, agenda: AgendaProj
         return Response(body, media_type="text/calendar; charset=utf-8",
                         headers={"Content-Disposition": f'attachment; filename="{name}.ics"'})
 
-    # ---- Schrijven ----
+    # ---- Writing ----
 
     @router.post("/plans")
     def add(request: Request, text: str = Form(""), note: str = Form(""), duration_min: str = Form(""),
             repeat: str = Form("auto"), weekdays: list[str] = Form([]), until: str = Form("")):
         parsed = parse(text, clock.local_now())
         chosen = _repeat_from_form(repeat, weekdays, until, parsed.repeat)
-        day = parsed.day if parsed.day or chosen is None else clock.today()  # een herhaling begint op zijn vroegst vandaag
+        day = parsed.day if parsed.day or chosen is None else clock.today()  # a repeat starts today at the earliest
         try:
             handler.handle(AddPlan(parsed.title, day, parsed.time, _minutes(duration_min) or parsed.duration_min,
                                    note, chosen))
@@ -262,7 +262,7 @@ def create_planner_web_router(handler: PlannerCommandHandler, agenda: AgendaProj
     def remove(request: Request, plan_id: str):
         return act(request, RemovePlan(plan_id), f"Removed {title_of(plan_id)}")
 
-    # ---- Herinneringen (in Settings) ----
+    # ---- Reminders (in Settings) ----
 
     @router.get("/reminders")
     def reminders(request: Request):

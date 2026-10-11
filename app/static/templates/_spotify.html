@@ -1,5 +1,5 @@
 {% import "_macros.html" as ui %}
-{# Het Spotify-blok in Settings. Ververst zichzelf na koppelen, ontkoppelen of een sync. #}
+{# The Spotify block in Settings. Refreshes itself after connecting, disconnecting or a sync. #}
 <div id="spotify" hx-disinherit="*" hx-get="/ui/listening/spotify" hx-trigger="spotify-changed from:body" hx-swap="outerHTML">
   {% if not configured %}
   <p class="muted">

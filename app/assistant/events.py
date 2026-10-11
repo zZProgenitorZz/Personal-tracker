@@ -1,4 +1,4 @@
-"""Events van Sunny. Alleen de instelling: het gesprek zelf staat niet in de event store."""
+"""Events of Sunny. Only the setting: the conversation itself isn't in the event store."""
 import datetime as dt
 from dataclasses import dataclass, field
 
@@ -9,7 +9,7 @@ def now() -> dt.datetime:
 
 @dataclass(frozen=True)
 class AssistantSettingsChanged:
-    """Het model dat Sunny gebruikt (een ID uit models.MODELS), in de stream "assistant-settings"."""
+    """The model Sunny uses (an ID from models.MODELS), in the stream "assistant-settings"."""
     model: str
     at: dt.datetime = field(default_factory=now)
 

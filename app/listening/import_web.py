@@ -1,9 +1,9 @@
-"""Import streaming history in Settings: bestanden kiezen, voorbeeld, en de import in de achtergrond.
+"""Import streaming history in Settings: choosing files, a preview, and the import in the background.
 
-Er loopt hooguit één import tegelijk (ImportJob). De bestanden worden alleen in het geheugen
-gelezen; Starlette houdt een upload hooguit in een tijdelijk bestand dat na het verzoek weg is.
-Omdat de import via de server gaat, horen de projecties elke portie live (store.subscribe):
-een herstart is niet nodig. Het paneel peilt de voortgang elke seconde (htmx).
+At most one import runs at a time (ImportJob). The files are only read in memory;
+Starlette keeps an upload at most in a temporary file that is gone after the request.
+Because the import goes through the server, the projections hear each portion live (store.subscribe):
+no restart is needed. The panel polls the progress every second (htmx).
 """
 import logging
 import threading
@@ -20,7 +20,7 @@ CHANGED = "listening-changed"
 
 
 class ImportJob:
-    """De toestand van de import: idle → preview → backup → running → done (of failed)."""
+    """The state of the import: idle → preview → backup → running → done (or failed)."""
 
     def __init__(self, store: EventStore, backups: Backups):
         self._store = store
@@ -31,9 +31,9 @@ class ImportJob:
     def _reset(self) -> None:
         self.state = "idle"
         self.preview: Preview | None = None
-        self.problem: str | None = None   # bv. een bestand dat geen export is
+        self.problem: str | None = None   # e.g. a file that isn't an export
         self.done = self.total = self.stored = 0
-        self.unreported = False           # het resultaat is nog niet als toast getoond
+        self.unreported = False           # the result hasn't been shown as a toast yet
 
     @property
     def busy(self) -> bool:
@@ -65,7 +65,7 @@ class ImportJob:
         try:
             self._backups.create(reason="before-import")
             self.state = "running"
-            # Opnieuw kijken wat er nu al is: de sync kan sinds het voorbeeld plays hebben toegevoegd.
+            # Look again at what is already there: the sync may have added plays since the preview.
             known = KnownPlays.from_store(self._store)
             commands = [c for c in self.preview.commands if not known.has(c.track_id, c.played_at)]
             self.total = len(commands)
@@ -73,7 +73,7 @@ class ImportJob:
             self.state = "done"
         except BackupError as exc:
             self.problem, self.state = f"The backup failed, so nothing was imported: {exc}", "failed"
-        except Exception as exc:  # nooit de server laten vallen; wel loggen
+        except Exception as exc:  # never let the server fall over; do log it
             log.exception("Import of streaming history failed")
             self.problem, self.state = f"The import stopped: {exc}", "failed"
         self.unreported = True
@@ -114,13 +114,13 @@ def create_import_router(job: ImportJob) -> APIRouter:
 
     @router.post("/preview")
     def preview(request: Request, files: list[UploadFile] = File(...)):
-        """Alleen lezen en tellen; er wordt nog niets opgeslagen."""
+        """Only reads and counts; nothing is stored yet."""
         contents = []
         for upload in files:
             try:
                 contents.append((upload.filename or "file", upload.file.read()))
             finally:
-                upload.file.close()  # een eventueel tijdelijk bestand is dan meteen weg
+                upload.file.close()  # any temporary file is gone right away then
         try:
             job.make_preview(contents)
         except RuntimeError as exc:

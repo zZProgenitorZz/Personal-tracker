@@ -1,7 +1,8 @@
-"""Bescherming tegen andere websites (CSRF) en DNS rebinding.
+"""Protection against other websites (CSRF) and DNS rebinding.
 
-Progen draait op je eigen computer, maar je browser kan ook verzoeken sturen
-namens een website die je open hebt. Die mogen nooit iets veranderen."""
+Progen runs on your own computer, but your browser can also send requests
+on behalf of a website you have open. Those may never change anything.
+"""
 import pytest
 from fastapi.testclient import TestClient
 
@@ -16,7 +17,7 @@ def app():
 
 
 def browser(app, **headers):
-    """Een browser zonder de header van de app, zoals een andere website hem stuurt."""
+    """A browser without the app's header, the way another website sends it."""
     return TestClient(app, headers=headers)
 
 
@@ -24,7 +25,7 @@ def library(app):
     return TestClient(app).get("/reading/library").json()
 
 
-# ---- Wijzigingen zonder bewijs dat ze van Progen komen ----
+# ---- Changes without proof that they come from Progen ----
 
 @pytest.mark.parametrize("method, path, data", [
     ("post", "/ui/reading/series", FORM),
@@ -39,7 +40,7 @@ def test_form_post_from_another_site_is_refused(app, method, path, data):
 
 
 def test_text_plain_post_pretending_to_be_json_is_refused(app):
-    # Een formulier op een andere site kan enctype=text/plain sturen met JSON-achtige inhoud.
+    # A form on another site can send enctype=text/plain with JSON-like content.
     body = '{"title": "Hacked", "kind": "manhwa", "source": "x"}'
     response = browser(app).post("/reading/series", content=body, headers={"Content-Type": "text/plain"})
     assert response.status_code == 403 and library(app) == []
@@ -57,7 +58,7 @@ def test_reading_is_always_allowed(app):
     assert browser(app).get("/reading/library").status_code == 200
 
 
-# ---- Wat wél mag ----
+# ---- What is allowed ----
 
 def test_the_app_itself_may_change_things(app):
     response = browser(app, **{"HX-Request": "true"}).post("/ui/reading/series", data=FORM)
@@ -69,7 +70,7 @@ def test_json_api_may_change_things(app):
     assert response.status_code == 201
 
 
-# ---- Andere websites, ook als ze de header proberen ----
+# ---- Other websites, even when they try the header ----
 
 def test_request_from_another_origin_is_refused_even_with_header(app):
     client = browser(app, **{"HX-Request": "true", "Origin": "https://evil.example"})
@@ -90,7 +91,7 @@ def test_own_origin_is_fine(origin):
     assert client.post("/ui/reading/series", data=FORM).status_code == 200
 
 
-# ---- DNS rebinding: een vreemde naam die naar 127.0.0.1 wijst ----
+# ---- DNS rebinding: a strange name that points to 127.0.0.1 ----
 
 def test_unknown_host_name_is_refused(app):
     client = TestClient(app, base_url="http://evil.example:8000")

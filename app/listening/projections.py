@@ -10,12 +10,12 @@ RECENT_LIMIT = 50
 
 
 def listened_ms(event: TrackPlayed) -> int:
-    """Echt geluisterd als dat bekend is (export), anders de lengte van het nummer (API)."""
+    """Really listened if that is known (export), otherwise the length of the track (API)."""
     return event.ms_played if event.ms_played is not None else event.duration_ms
 
 
 def _local(moment: datetime) -> datetime:
-    return moment.astimezone()  # dagen en maanden volgen jouw tijdzone, niet UTC
+    return moment.astimezone()  # days and months follow your time zone, not UTC
 
 
 @dataclass(frozen=True)
@@ -29,13 +29,13 @@ class RecentPlay:
 
 
 class RecentlyPlayedProjection:
-    """De laatste RECENT_LIMIT plays, nieuwste eerst."""
+    """The last RECENT_LIMIT plays, newest first."""
 
     def __init__(self):
         self.reset()
 
     def reset(self) -> None:
-        self._plays: list[tuple[datetime, RecentPlay]] = []  # oplopend op tijd
+        self._plays: list[tuple[datetime, RecentPlay]] = []  # ascending by time
 
     def apply(self, event) -> None:
         if isinstance(event, TrackPlayed):
@@ -48,12 +48,12 @@ class RecentlyPlayedProjection:
         return [play for _, play in reversed(self._plays)]
 
     def latest_played_at(self) -> datetime | None:
-        """Het nieuwste moment; de sync vraagt Spotify alleen om plays daarna."""
+        """The newest moment; the sync only asks Spotify for plays after it."""
         return self._plays[-1][0] if self._plays else None
 
 
 class ListeningActivityProjection:
-    """Minuten per dag en per week (ISO-week)."""
+    """Minutes per day and per week (ISO week)."""
 
     def __init__(self):
         self.reset()
@@ -83,7 +83,7 @@ class ListeningActivityProjection:
 
 
 def _ranked(counter: Counter, name) -> list:
-    """Meeste plays eerst; bij gelijkspel op naam."""
+    """Most plays first; on a tie by name."""
     return sorted(counter.items(), key=lambda item: (-item[1], name(item[0]).lower()))
 
 
@@ -92,8 +92,8 @@ def _month_range(year: int, month: int) -> tuple[date, date]:
 
 
 class TopArtistsProjection:
-    """Plays per artiest, per dag bijgehouden: zo kan elke periode (een maand, of 1 sep - 15 okt).
-    Een nummer met twee artiesten telt voor allebei."""
+    """Plays per artist, kept per day: that way any period works (a month, or 1 Sep - 15 Oct).
+    A track with two artists counts for both."""
 
     def __init__(self):
         self.reset()
@@ -106,7 +106,7 @@ class TopArtistsProjection:
             self._days[_local(event.played_at).date()].update(set(event.artists))
 
     def between(self, start: date, end: date, limit: int = 10) -> list[tuple[str, int]]:
-        """Van `start` tot en met `end` (lokale dagen)."""
+        """From `start` up to and including `end` (local days)."""
         return _ranked(self._total(start, end), name=str)[:limit]
 
     def top(self, year: int, month: int, limit: int = 10) -> list[tuple[str, int]]:
@@ -134,13 +134,13 @@ class TrackCount:
 
 
 class TopTracksProjection:
-    """Plays per nummer (op track_id), per dag bijgehouden: zo kan elke periode."""
+    """Plays per track (by track_id), kept per day: that way any period works."""
 
     def __init__(self):
         self.reset()
 
     def reset(self) -> None:
-        self._days: dict[date, dict[str, list]] = defaultdict(dict)  # dag -> track_id -> [plays, minuten]
+        self._days: dict[date, dict[str, list]] = defaultdict(dict)  # day -> track_id -> [plays, minutes]
         self._names: dict[str, tuple[str, list[str]]] = {}
 
     def apply(self, event) -> None:
@@ -151,7 +151,7 @@ class TopTracksProjection:
             self._names.setdefault(event.track_id, (event.track, list(event.artists)))
 
     def between(self, start: date, end: date, limit: int = 10) -> list[TrackCount]:
-        """Van `start` tot en met `end` (lokale dagen); meeste plays eerst."""
+        """From `start` up to and including `end` (local days); most plays first."""
         totals: dict[str, TrackCount] = {}
         for day in sorted(d for d in self._days if start <= d <= end):
             for track_id, (plays, minutes) in self._days[day].items():

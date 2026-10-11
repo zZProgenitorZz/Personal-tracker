@@ -1,8 +1,8 @@
-"""htmx-routes voor het leesdomein.
+"""htmx routes for the reading domain.
 
-GET-routes geven HTML-fragmenten terug uit de read models. POST-routes sturen
-dezelfde commands als de JSON-API en antwoorden met een toast plus het event
-`reading-changed`, waarop de zichtbare onderdelen zichzelf opnieuw ophalen.
+GET routes return HTML fragments from the read models. POST routes send
+the same commands as the JSON API and answer with a toast plus the event
+`reading-changed`, on which the visible parts fetch themselves again.
 """
 from datetime import date, timedelta
 
@@ -20,17 +20,17 @@ from .genres import GENRES
 from .projections import LibraryEntry, LibraryProjection, ReadingActivityProjection
 
 CHANGED = "reading-changed"
-# Gathering dust: een serie op Reading zonder voortgang of statuswijziging in zoveel dagen.
+# Gathering dust: a series on Reading without progress or a status change in this many days.
 STALE_READING_DAYS = 21
-DUST_SHOWN = 5  # daarna "+N more"
+DUST_SHOWN = 5  # after that "+N more"
 
 templates.env.globals.update(STATUS_LABELS=STATUS_LABELS, KIND_LABELS=KIND_LABELS, GENRES=GENRES)
 
 
-# ---- Gegevens voor de grafieken, afgeleid uit ReadingActivity ----
+# ---- Data for the charts, derived from ReadingActivity ----
 
 def heatmap(per_day: dict[date, float], today: date, weeks: int) -> list[list[dict]]:
-    """Kolommen van maandag t/m zondag, de laatste kolom is de huidige week."""
+    """Columns from Monday to Sunday, the last column is the current week."""
     first = today - timedelta(days=today.weekday(), weeks=weeks - 1)
     top = max(per_day.values(), default=0)
     columns = []
@@ -46,7 +46,7 @@ def heatmap(per_day: dict[date, float], today: date, weeks: int) -> list[list[di
 
 
 def reading_summary(library: LibraryProjection, activity: ReadingActivityProjection) -> dict:
-    """Voor het startscherm en Settings."""
+    """For the home screen and Settings."""
     today = clock.today()
     current = library.currently_reading()
     this_week = sum(b["value"] for b in last_days(activity.per_day(), today, 7))
@@ -105,7 +105,7 @@ def create_reading_web_router(
         return Backlog("reading", library.by_status(Status.PLAN_TO_READ), lambda e: e.series_id,
                        "/ui/reading/series/{}/status", Status.READING.value, "Start reading", GENRES)
 
-    # Lezen
+    # Reading
 
     @router.get("/dashboard")
     def dashboard(request: Request):
@@ -132,7 +132,7 @@ def create_reading_web_router(
 
     @router.get("/pick")
     def pick(request: Request, exclude: str = "", genre: str = ""):
-        """"Wat nu?": een willekeurige serie uit Plan to Read. Alleen lezen; Start stuurt ChangeStatus."""
+        """"What next?": a random series from Plan to Read. Only reads; Start sends ChangeStatus."""
         return pick_from_backlog(request, backlog(), exclude, genre)
 
     @router.get("/library/grid")
@@ -166,7 +166,7 @@ def create_reading_web_router(
             library_size=len(library.all()),
         )
 
-    # Schrijven
+    # Writing
 
     @router.get("/covers/search")
     def find_cover(request: Request, title: str = "", index: int = 0):
@@ -185,7 +185,7 @@ def create_reading_web_router(
         cover_link: str = Form(""),
         cover_url: str = Form(""),
     ):
-        # Eerst de cover. Mislukt die, dan wordt de serie toch opgeslagen.
+        # The cover first. If that fails, the series is saved anyway.
         cover, cover_problem = None, None
         try:
             cover = save_cover(covers, cover_file, cover_link, cover_url)
@@ -229,7 +229,7 @@ def create_reading_web_router(
 
     @router.get("/series/{series_id}/genres")
     def edit_genres(request: Request, series_id: str):
-        """Inhoud van het venster "Edit genres", met de huidige genres aangevinkt."""
+        """Contents of the "Edit genres" window, with the current genres checked."""
         entry = library.get(series_id)
         if entry is None:
             return toast(request, "Unknown series", error=True)
@@ -238,7 +238,7 @@ def create_reading_web_router(
 
     @router.get("/add-form")
     def add_form(request: Request):
-        """Inhoud van het venster "Add series"."""
+        """Contents of the "Add series" window."""
         return render(request, "_reading_add_form.html")
 
     @router.post("/series/{series_id}/genres")

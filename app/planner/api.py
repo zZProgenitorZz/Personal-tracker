@@ -1,4 +1,4 @@
-"""JSON-API van Planner: voor scripts, en /planner/due voor de meldingen van het icoon bij de klok."""
+"""Planner's JSON API: for scripts, and /planner/due for the notifications of the tray icon."""
 import datetime as dt
 
 from fastapi import APIRouter, Query
@@ -11,7 +11,7 @@ from .projections import AgendaProjection, PlanEntry
 
 
 class AddPlanBody(BaseModel):
-    text: str = Field(min_length=1, description='In gewone taal, bv. "Tandarts vr 14u" of "elke ma gym 7:00"')
+    text: str = Field(min_length=1, description='In plain words, e.g. "Tandarts vr 14u" or "elke ma gym 7:00"')
     note: str = ""
     duration_min: int | None = None
 
@@ -41,9 +41,9 @@ def create_planner_router(handler: PlannerCommandHandler, agenda: AgendaProjecti
 
     @router.get("/due")
     def due(minutes: int = Query(1, ge=1, le=60), since: dt.datetime | None = None):
-        """Herinneringen die in de afgelopen `minutes` minuten vielen, of sinds `since` (lokale tijd,
-        hooguit een uur terug). Alleen lezen: geen command, geen event. Het icoon bij de klok vraagt
-        dit elke minuut op, steeds sinds zijn vorige vraag, en meldt elke `key` maar één keer."""
+        """Reminders that fell in the past `minutes` minutes, or since `since` (local time,
+        at most an hour back). Read only: no command, no event. The tray icon asks for
+        this every minute, each time since its previous question, and reports each `key` only once."""
         now = clock.local_now()
         window = dt.timedelta(minutes=minutes)
         if since is not None:

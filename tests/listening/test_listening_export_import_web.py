@@ -1,4 +1,4 @@
-"""Import streaming history in Settings, en vanaf de opdrachtregel. Nep-exportbestanden, geen netwerk."""
+"""Import streaming history in Settings, and from the command line. Fake export files, no network."""
 import json
 import time
 from datetime import datetime, timezone
@@ -75,17 +75,17 @@ def test_an_unknown_file_is_named(client):
 def test_import_runs_in_the_background_with_a_backup_first(client):
     preview(client, upload("Streaming_History_Audio_2021.json", AUDIO))
     started = client.post("/ui/listening/import/start")
-    assert "every 1s" in started.text  # het paneel peilt de voortgang
+    assert "every 1s" in started.text  # the panel polls the progress
     done = wait_until_done(client)
     assert "Imported 2 plays" in done.text and "toast" in done.text and "hx-swap-oob" in done.text
     assert "listening-changed" in done.headers["HX-Trigger"]
-    # Meteen zichtbaar, zonder herstart: de projecties lopen live mee.
+    # Visible right away, without a restart: the projections follow along live.
     assert [p["track"] for p in client.get("/listening/recent").json()] == ["Blinding Lights", "Blinding Lights"] or \
         len(client.get("/listening/recent").json()) == 2
     [backup] = list(client.backup_dir.iterdir())
     assert json.loads((backup / "info.json").read_text())["reason"] == "before-import"
     assert "saved automatically before an import" in client.get("/ui/backups").text
-    # De toast komt maar één keer.
+    # The toast comes only once.
     assert "hx-swap-oob" not in client.get("/ui/listening/import").text
 
 
@@ -108,7 +108,7 @@ def test_only_one_import_at_a_time(client, monkeypatch):
     client.post("/ui/listening/import/start")
     again = client.post("/ui/listening/import/start")
     assert "toast-error" in again.text
-    assert "toast-error" in preview(client, upload("b.json", AUDIO)).text  # ook geen nieuw voorbeeld
+    assert "toast-error" in preview(client, upload("b.json", AUDIO)).text  # no new preview either
     release.set()
     wait_until_done(client)
 
@@ -120,11 +120,11 @@ def test_the_uploaded_file_is_not_kept(client, tmp_path):
     assert not list(tmp_path.rglob("Streaming_History_Audio_2021.json"))
 
 
-# ---- Opdrachtregel ----
+# ---- Command line ----
 
 @pytest.fixture
 def paths(tmp_path, monkeypatch):
-    monkeypatch.setattr(desktop, "is_running", lambda: False)  # nooit echt naar 127.0.0.1:8000
+    monkeypatch.setattr(desktop, "is_running", lambda: False)  # never really to 127.0.0.1:8000
     folder = tmp_path / "export"
     folder.mkdir()
     (folder / "Streaming_History_Audio_2021.json").write_text(json.dumps(AUDIO), encoding="utf-8")
@@ -147,7 +147,7 @@ def test_command_line_import_with_files_or_a_folder(paths, capsys, monkeypatch):
     out = capsys.readouterr().out
     assert "Imported 2 plays" in out and "Start Progen" in out
     assert len(EventStore(str(paths["db"]), ALL_EVENT_TYPES).load_type(TrackPlayed)) == 2
-    assert list(paths["backups"].iterdir())  # eerst een back-up
+    assert list(paths["backups"].iterdir())  # a backup first
     monkeypatch.setattr(desktop, "is_running", lambda: True)
     (paths["folder"] / "Streaming_History_Audio_2022.json").write_text(json.dumps([record("2022-01-01T08:00:00Z")]))
     assert run(paths, str(paths["folder"])) == 0

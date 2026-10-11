@@ -1,4 +1,4 @@
-"""De desktop-launcher (launch.pyw, stop.pyw) en de afsluitroute van de server."""
+"""The desktop launcher (launch.pyw, stop.pyw) and the server's shutdown route."""
 import importlib.util
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def load(name: str):
-    """launch.pyw en stop.pyw zijn scripts (.pyw), geen modules: zo laden we ze toch."""
+    """launch.pyw and stop.pyw are scripts (.pyw), not modules: this is how we load them anyway."""
     path = ROOT / name
     loader = SourceFileLoader(name.replace(".", "_"), str(path))
     module = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
@@ -21,7 +21,7 @@ def load(name: str):
     return module
 
 
-# ---- Afsluitroute ----
+# ---- Shutdown route ----
 
 @pytest.fixture
 def stops():
@@ -40,7 +40,7 @@ def test_shutdown_from_this_computer_with_header(stops):
 
 
 def test_shutdown_needs_the_header(stops):
-    # Een website in je browser kan wel naar 127.0.0.1 posten, maar geen eigen header meesturen.
+    # A website in your browser can post to 127.0.0.1, but it can't send its own header.
     assert client_from("127.0.0.1", stops).post("/admin/shutdown").status_code == 403
     assert stops == []
 
@@ -67,7 +67,7 @@ def test_server_always_on_localhost_without_reload():
 
 
 def test_server_never_waits_forever_when_stopping():
-    # Zonder grens kan uvicorn eeuwig wachten op een weggevallen verbinding van het venster.
+    # Without a limit uvicorn can wait forever for a dropped connection from the window.
     command = load("launch.pyw").server_command()
     assert int(command[command.index("--timeout-graceful-shutdown") + 1]) <= 10
 
@@ -79,7 +79,7 @@ def test_uses_the_venv_python():
 
 @pytest.fixture
 def launch(monkeypatch):
-    """launch.pyw met nep-onderdelen: geen echte server, geen venster, geen icoon."""
+    """launch.pyw with fake parts: no real server, no window, no icon."""
     module = load("launch.pyw")
     calls = {"started": 0, "windows": 0, "trays": 0, "messages": [], "dpi_aware": 0}
     monkeypatch.setattr(module, "make_dpi_aware", lambda: calls.__setitem__("dpi_aware", calls["dpi_aware"] + 1))
@@ -115,7 +115,7 @@ def test_dpi_awareness_uses_per_monitor_v2_and_never_fails(monkeypatch):
     desktop.make_dpi_aware()
     assert calls == [desktop.ctypes.c_void_p(desktop.PER_MONITOR_AWARE_V2).value]
 
-    class Nothing:  # geen Windows, of een heel oude versie: gewoon doorgaan
+    class Nothing:  # not Windows, or a very old version: just carry on
         pass
 
     monkeypatch.setattr(desktop.ctypes, "windll", Nothing(), raising=False)
@@ -129,7 +129,7 @@ def test_skips_starting_when_progen_already_runs(launch, monkeypatch):
 
 
 def test_starts_server_waits_opens_window_and_shows_the_icon(launch, monkeypatch):
-    answers = iter([False, False, True])  # eerst niet, na even wachten wel
+    answers = iter([False, False, True])  # not at first, after waiting a moment yes
     monkeypatch.setattr(launch, "is_running", lambda: next(answers))
     launch.main([])
     assert (launch.calls["started"], launch.calls["windows"], launch.calls["trays"]) == (1, 1, 1)
@@ -143,7 +143,7 @@ def test_background_start_opens_no_window(launch, monkeypatch):
 
 
 def test_second_click_only_opens_a_window(launch, monkeypatch):
-    # Er is al een icoon (en dus een launcher die de server beheert).
+    # There already is an icon (and so a launcher that manages the server).
     monkeypatch.setattr(launch, "claim_tray", lambda: False)
     monkeypatch.setattr(launch, "is_running", lambda: True)
     launch.main([])
@@ -151,7 +151,7 @@ def test_second_click_only_opens_a_window(launch, monkeypatch):
 
 
 def test_starts_the_server_even_when_an_old_icon_still_exists(launch, monkeypatch):
-    # Een vastgelopen launcher houdt het icoon vast; dan moet opstarten toch werken.
+    # A stuck launcher holds on to the icon; starting up must still work then.
     monkeypatch.setattr(launch, "claim_tray", lambda: False)
     answers = iter([False, False, True])
     monkeypatch.setattr(launch, "is_running", lambda: next(answers))
@@ -160,7 +160,7 @@ def test_starts_the_server_even_when_an_old_icon_still_exists(launch, monkeypatc
 
 
 def test_own_server_stops_because_another_one_just_started(launch, monkeypatch):
-    # Twee keer snel klikken: de tweede server krijgt de poort niet, maar Progen draait wel.
+    # Clicking twice quickly: the second server doesn't get the port, but Progen does run.
     monkeypatch.setattr(launch, "start_server", lambda: FakeProcess(exit_code=1))
     answers = iter([False, False, False, True])
     monkeypatch.setattr(launch, "is_running", lambda: next(answers))
@@ -202,7 +202,7 @@ class FakeProcess:
         return self.exit_code
 
 
-# ---- Het icoon in het systeemvak ----
+# ---- The tray icon ----
 
 class FakeIcon:
     def __init__(self):
@@ -217,15 +217,15 @@ class FakeIcon:
 
 
 def tray(monkeypatch):
-    """launch.pyw waarin acties van het icoon meteen draaien in plaats van op de achtergrond."""
+    """launch.pyw in which the icon's actions run right away instead of in the background."""
     launch = load("launch.pyw")
     monkeypatch.setattr(launch, "in_background", lambda action: action())
-    monkeypatch.setattr(launch, "show_message", lambda *a, **kw: pytest.fail("geen popup vanuit het icoon"))
+    monkeypatch.setattr(launch, "show_message", lambda *a, **kw: pytest.fail("no popup from the icon"))
     return launch
 
 
 def test_tray_actions_run_in_the_background():
-    # Het menu van het icoon mag nooit blokkeren (anders reageert het icoon, en een popup, niet meer).
+    # The icon's menu must never block (otherwise the icon, and a popup, stop responding).
     import threading
     launch = load("launch.pyw")
     ran_in, done = [], threading.Event()
@@ -251,7 +251,7 @@ def test_stop_in_the_tray_keeps_the_icon_when_stopping_fails(monkeypatch):
     icon = FakeIcon()
     monkeypatch.setattr(launch, "request_stop", lambda: "Progen refused to stop (HTTP 403).")
     dict(launch.tray_menu_actions(icon))["Stop Progen"]()
-    assert not icon.stopped and icon.notes == ["Progen refused to stop (HTTP 403)."]  # ballon, geen popup
+    assert not icon.stopped and icon.notes == ["Progen refused to stop (HTTP 403)."]  # a balloon, not a popup
 
 
 def test_stop_in_the_tray_when_progen_already_stopped_just_removes_the_icon(monkeypatch):
@@ -280,7 +280,7 @@ def test_tray_icon_image_comes_from_the_ico():
         assert (64, 64) in ico.info["sizes"]
 
 
-# ---- stop.pyw en app/desktop.py ----
+# ---- stop.pyw and app/desktop.py ----
 
 class Answer:
     def __init__(self, body=b""):
@@ -335,7 +335,7 @@ def test_sync_from_the_tray_returns_the_message_as_text(monkeypatch):
     assert sent[0].get_header("Hx-request") == "true"
 
 
-# ---- De server stopt altijd ----
+# ---- The server always stops ----
 
 def test_stopping_also_schedules_a_hard_exit_as_safety_net(monkeypatch):
     import app.shutdown as shutdown
@@ -353,11 +353,11 @@ def test_stopping_also_schedules_a_hard_exit_as_safety_net(monkeypatch):
     shutdown.stop_this_server()
     graceful, hard = timers
     assert graceful.seconds < 1 and graceful.args == [shutdown.signal.SIGINT]
-    assert hard.seconds >= 15 and hard.daemon  # daemon: bij een gewone stop verdwijnt hij vanzelf
+    assert hard.seconds >= 15 and hard.daemon  # daemon: on an ordinary stop it disappears by itself
     assert hard.function is shutdown.force_exit
 
 
-# ---- Scherpe iconen ----
+# ---- Sharp icons ----
 
 def test_tray_icon_is_the_real_ico_at_the_small_icon_size(monkeypatch):
     launch = load("launch.pyw")
@@ -382,7 +382,7 @@ def test_tray_icon_is_the_real_ico_at_the_small_icon_size(monkeypatch):
 def test_tray_icon_falls_back_when_windows_cannot_load_it(monkeypatch):
     launch = load("launch.pyw")
     monkeypatch.setattr(launch.ctypes, "WinDLL", lambda name, **kw: (_ for _ in ()).throw(OSError()), raising=False)
-    assert launch.tray_icon_handle() is None  # pystray maakt dan zelf een icoon
+    assert launch.tray_icon_handle() is None  # pystray then makes an icon itself
 
 
 def test_page_offers_sharp_png_icons_and_a_manifest():
@@ -402,14 +402,14 @@ def test_page_offers_sharp_png_icons_and_a_manifest():
         assert client.get(icon["src"]).status_code == 200
 
 
-# ---- Herinneringen van Planner bij de klok ----
+# ---- Planner reminders by the clock ----
 
 def test_reminders_are_notified_once_each(monkeypatch):
     import datetime as dt
     launch = load("launch.pyw")
     icon, seen, asked = FakeIcon(), set(), []
     answers = [[{"key": "p/2026-10-09/1", "text": "Tomorrow: Dentist at 14:00"}],
-               [{"key": "p/2026-10-09/1", "text": "Tomorrow: Dentist at 14:00"},   # overlap: niet nog eens
+               [{"key": "p/2026-10-09/1", "text": "Tomorrow: Dentist at 14:00"},   # overlap: not again
                 {"key": "g/2026-10-09/2", "text": "In 3 hours: Gym at 18:00"},
                 {"key": "s/2026-10-09/2", "text": "Today: Birthday Sam"}]]
     clock = iter([dt.datetime(2026, 10, 8, 14, 0, 30), dt.datetime(2026, 10, 8, 14, 1, 30)])
@@ -422,8 +422,8 @@ def test_reminders_are_notified_once_each(monkeypatch):
     start = dt.datetime(2026, 10, 8, 13, 59, 40)
     since = launch.check_reminders(icon, seen, start, fetch)
     since = launch.check_reminders(icon, seen, since, fetch)
-    assert asked == [start, dt.datetime(2026, 10, 8, 14, 0, 30)]  # steeds vanaf de vorige controle
-    # Twee tegelijk in één melding (een tweede ballon zou de eerste wegdrukken).
+    assert asked == [start, dt.datetime(2026, 10, 8, 14, 0, 30)]  # each time from the previous check
+    # Two at once in one notification (a second balloon would push the first away).
     assert icon.notes == ["Tomorrow: Dentist at 14:00", "In 3 hours: Gym at 18:00\nToday: Birthday Sam"]
 
 
@@ -432,7 +432,7 @@ def test_reminders_keep_their_window_while_progen_is_unreachable(monkeypatch):
     launch = load("launch.pyw")
     monkeypatch.setattr(launch, "datetime_now", lambda: dt.datetime(2026, 10, 8, 14, 5))
     icon, start = FakeIcon(), dt.datetime(2026, 10, 8, 14, 0)
-    assert launch.check_reminders(icon, set(), start, lambda since: None) == start  # niets gemist
+    assert launch.check_reminders(icon, set(), start, lambda since: None) == start  # nothing missed
     assert icon.notes == []
 
 
@@ -452,7 +452,7 @@ def test_reminder_watch_starts_from_now_and_stops(monkeypatch):
     monkeypatch.setattr(launch, "fetch_due", fetch)
     monkeypatch.setattr(launch, "REMINDER_INTERVAL", 0.01)
     launch.watch_reminders(FakeIcon(), stopped)
-    assert asked == [start]  # nooit iets van vóór de start van de launcher
+    assert asked == [start]  # never anything from before the launcher started
 
 
 def test_due_is_asked_since_the_previous_check(monkeypatch):

@@ -1,4 +1,4 @@
-{# Settings: herinneringen voor Planner. Eén instelling voor alle plannen; elke wijziging slaat meteen op. #}
+{# Settings: reminders for Planner. One setting for all plans; every change saves right away. #}
 <div id="planner-reminders" hx-disinherit="*" hx-get="/ui/planner/reminders" hx-trigger="planner-changed from:body" hx-swap="outerHTML">
   <form class="reminders" hx-post="/ui/planner/reminders" hx-trigger="change" hx-swap="none">
     {% for key, label, enabled, minutes in [('first', 'First reminder', first_on, first_min), ('second', 'Second reminder', second_on, second_min)] %}

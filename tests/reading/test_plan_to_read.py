@@ -1,4 +1,4 @@
-"""Plan to Read: series die je nog wilt beginnen. Een extra status, geen nieuw event."""
+"""Plan to Read: series you still want to start. An extra status, no new event."""
 import pytest
 from fastapi.testclient import TestClient
 
@@ -19,13 +19,13 @@ PLANNED = StatusChanged("1", Status.READING, Status.PLAN_TO_READ)
 # ---- Aggregate ----
 
 def test_old_events_stay_readable():
-    # Given een serie uit de tijd vóór Plan to Read, when we hem opbouwen, then niets verandert.
+    # Given a series from before Plan to Read, when we build it, then nothing changes.
     series = ReadingSeries([STARTED, StatusChanged("1", Status.READING, Status.ON_HOLD)])
     assert series.status is Status.ON_HOLD
 
 
 def test_add_as_plan_to_read_uses_the_existing_events():
-    # Given niets, when ik toevoeg als Plan to Read, then SeriesStarted + StatusChanged(READING → PLAN_TO_READ).
+    # Given nothing, when I add as Plan to Read, then SeriesStarted + StatusChanged(READING → PLAN_TO_READ).
     series = ReadingSeries([])
     events = series.start("1", "Omniscient Reader", Kind.NOVEL, "x", 0, status=Status.PLAN_TO_READ)
     assert [type(e) for e in events] == [SeriesStarted, StatusChanged]
@@ -34,7 +34,7 @@ def test_add_as_plan_to_read_uses_the_existing_events():
 
 
 def test_logging_progress_on_plan_to_read_starts_reading():
-    # Given een serie op Plan to Read, when ik voortgang log, then staat hij automatisch op Reading.
+    # Given a series on Plan to Read, when I log progress, then it is on Reading automatically.
     series = ReadingSeries([STARTED, PLANNED])
     events = series.log_progress(3)
     assert [type(e) for e in events] == [StatusChanged, ProgressLogged]
@@ -44,16 +44,16 @@ def test_logging_progress_on_plan_to_read_starts_reading():
 
 @pytest.mark.parametrize("other", [s for s in Status if s is not Status.PLAN_TO_READ])
 def test_plan_to_read_changes_to_and_from_every_status(other):
-    # Van Plan to Read naar elke andere status...
+    # From Plan to Read to every other status...
     there = ReadingSeries([STARTED, PLANNED]).change_status(other)
     assert there[0].to_status is other
-    # ...en andersom.
+    # ...and the other way around.
     start = [STARTED] if other is Status.READING else [STARTED, StatusChanged("1", Status.READING, other)]
     back = ReadingSeries(start).change_status(Status.PLAN_TO_READ)
     assert (back[0].from_status, back[0].to_status) == (other, Status.PLAN_TO_READ)
 
 
-# ---- Projecties ----
+# ---- Projections ----
 
 def make_app():
     store = EventStore(":memory:", ALL_EVENT_TYPES)
@@ -69,7 +69,7 @@ def test_plan_to_read_is_not_currently_reading():
     handler.handle(StartSeries("Omniscient Reader", Kind.NOVEL, "x", 50, status=Status.PLAN_TO_READ))
     assert [e.title for e in library.currently_reading()] == ["Solo Leveling"]
     assert [e.title for e in library.by_status(Status.PLAN_TO_READ)] == ["Omniscient Reader"]
-    assert activity.total_chapters() == 0  # het beginhoofdstuk telt niet als gelezen
+    assert activity.total_chapters() == 0  # the starting chapter doesn't count as read
 
 
 def test_starting_from_the_backlog_counts_only_what_you_read():
@@ -80,7 +80,7 @@ def test_starting_from_the_backlog_counts_only_what_you_read():
     assert activity.total_chapters() == 4
 
 
-# ---- Webpagina ----
+# ---- Web page ----
 
 @pytest.fixture
 def client():
@@ -96,10 +96,10 @@ def add(client, title, status="reading", genres=()):
 def test_plan_to_read_is_everywhere_a_status_can_be_chosen(client):
     add(client, "Solo Leveling")
     assert 'value="plan_to_read"' in client.get("/ui/reading/add-form").text
-    assert 'value="plan_to_read"' in client.get("/ui/reading/library/grid").text  # statusmenu op de kaart
+    assert 'value="plan_to_read"' in client.get("/ui/reading/library/grid").text  # status menu on the card
     assert 'value="plan_to_read"' in client.get("/ui/reading/library").text      # filter
     form = client.get("/ui/reading/add-form").text
-    assert form.index('value="reading" checked') < form.index('value="plan_to_read"')  # standaard blijft Reading
+    assert form.index('value="reading" checked') < form.index('value="plan_to_read"')  # Reading stays the default
 
 
 def test_plan_to_read_does_not_count_as_reading(client):

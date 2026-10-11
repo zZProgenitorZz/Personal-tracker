@@ -1,6 +1,6 @@
 {% import "_macros.html" as ui %}
 {% import "_planner_macros.html" as pm %}
-{# Planner · Week: zeven kolommen, maandag tot zondag. Op een smal scherm een lijst per dag. #}
+{# Planner · Week: seven columns, Monday to Sunday. On a narrow screen a list per day. #}
 <div class="page planner" hx-disinherit="*" hx-get="/ui/planner/week?start={{ monday }}"
      hx-trigger="planner-changed from:body" hx-swap="outerHTML">
   {{ ui.tracker_tabs('planner', 'week', tabs) }}

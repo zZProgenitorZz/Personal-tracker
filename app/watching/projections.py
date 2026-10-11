@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from .events import ShowAdded, ShowGenresChanged, ShowRemoved, ShowStatusChanged, WatchKind, WatchStatus
 
 
-WATCHING_NOW = (WatchStatus.WATCHING, WatchStatus.REWATCHING)  # telt als "aan het kijken"
+WATCHING_NOW = (WatchStatus.WATCHING, WatchStatus.REWATCHING)  # counts as "watching"
 
 
 @dataclass
@@ -37,7 +37,7 @@ class WatchlistProjection:
         elif isinstance(event, ShowGenresChanged):
             self._entries[event.show_id].genres = list(event.genres)
         elif isinstance(event, ShowRemoved):
-            del self._entries[event.show_id]  # de titel is daarmee weer vrij
+            del self._entries[event.show_id]  # which frees up the title again
 
     def all(self) -> list[WatchEntry]:
         return sorted(self._entries.values(), key=lambda e: e.title.lower())
@@ -50,8 +50,8 @@ class WatchlistProjection:
         return sorted(watching, key=lambda e: e.updated_at, reverse=True)
 
     def stale(self, now: datetime, days: int) -> list[WatchEntry]:
-        """Gathering dust: op Watching, maar langer dan `days` dagen niet toegevoegd of van status gewisseld.
-        Langst stil eerst. (Genres aanpassen telt niet.)"""
+        """Gathering dust: on Watching, but not added or changed status for longer than `days` days.
+        Quiet the longest first. (Changing genres doesn't count.)"""
         limit = now - timedelta(days=days)
         return sorted((e for e in self.all() if e.status in WATCHING_NOW and e.updated_at < limit),
                       key=lambda e: e.updated_at)
@@ -65,7 +65,7 @@ class WatchlistProjection:
 
 
 class WatchActivityProjection:
-    """Afgerond per dag: alleen wanneer je iets op Completed zet, niet bij het toevoegen."""
+    """Finished per day: only when you set something to Completed, not when adding it."""
 
     def __init__(self):
         self.reset()

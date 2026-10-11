@@ -1,4 +1,4 @@
-"""Sunny: prompt, tools en de agent-loop. Met een nep-client, nooit de echte API."""
+"""Sunny: prompt, tools and the agent loop. With a fake client, never the real API."""
 import datetime as dt
 import json
 
@@ -28,7 +28,7 @@ TODAY = dt.date(2026, 10, 11)
 
 @pytest.fixture
 def data():
-    """Een kleine tracker met echte projecties en handlers op een :memory:-store."""
+    """A small tracker with real projections and handlers on a :memory: store."""
     store = EventStore(":memory:", ALL_EVENT_TYPES)
     library, watchlist = LibraryProjection(), WatchlistProjection()
     listen, artists, tracks, agenda = (ListeningActivityProjection(), TopArtistsProjection(), TopTracksProjection(),
@@ -63,7 +63,7 @@ def test_prompt_is_identity_soul_and_user_with_the_date_after_the_cached_part():
     assert fixed["text"].index("Sunny: identity") < fixed["text"].index("Sunny: soul") < fixed["text"].index("Sunny: user")
     assert "Cannot lie" in fixed["text"] and "Call me **Progen**" in fixed["text"]
     assert "Sunday 11 October 2026" in dated["text"]
-    assert system_blocks(dt.date(2026, 10, 12))[0] == fixed  # vast deel blijft byte-gelijk: cachebaar
+    assert system_blocks(dt.date(2026, 10, 12))[0] == fixed  # the fixed part stays byte-identical: cacheable
 
 
 def test_tools_still_missing_is_gone_now_they_are_built():
@@ -91,7 +91,7 @@ def test_read_tools_use_the_projections_and_return_compact_results(data):
     result, pending = run_tool("reading_overview", {"status": "reading"}, data)
     assert pending is None
     assert {r["title"] for r in result} == {"Solo Leveling", "Lord of the Mysteries"}
-    assert set(result[0]) == {"id", "title", "status", "chapter", "last_update", "days_ago"}  # alleen wat nodig is
+    assert set(result[0]) == {"id", "title", "status", "chapter", "last_update", "days_ago"}  # only what is needed
     found, _ = run_tool("find_item", {"query": "solo levelling", "domain": None}, data)
     assert found[0]["title"] == "Solo Leveling" and found[0]["domain"] == "reading"
     tracks, _ = run_tool("top_tracks", {"from": "2026-09-01", "to": "2026-10-15", "limit": 5}, data)
@@ -130,7 +130,7 @@ def test_delete_proposals_carry_the_name(data):
     assert pending.label == "Delete · Solo Leveling" and pending.delete_name == "Solo Leveling"
 
 
-# ---- De loop ----
+# ---- The loop ----
 
 def test_a_read_tool_round_then_the_answer(data):
     client = FakeClient(
@@ -140,7 +140,7 @@ def test_a_read_tool_round_then_the_answer(data):
     reply = Agent(client, data).ask("Where am I in Solo Leveling?", [])
     assert reply.text.startswith("Solo Leveling, chapter 119") and reply.actions == []
     first, second = client.calls
-    assert first["model"] == "claude-haiku-5-5"  # zonder instelling: het standaardmodel
+    assert first["model"] == "claude-haiku-5-5"  # without a setting: the default model
     assert first["output_config"] == {"effort": agent_module.EFFORT} and agent_module.EFFORT == "low"
     assert first["max_tokens"] == 1024 and first["tools"] == TOOL_DEFINITIONS
     assert first["system"][0]["cache_control"] == {"type": "ephemeral"}
@@ -157,7 +157,7 @@ def test_a_write_tool_becomes_a_pending_action(data):
     reply = Agent(client, data).ask("Read 120 of Solo Leveling", [])
     assert [a.label for a in reply.actions] == ["Solo Leveling · chapter 119 → 120"]
     assert client.calls[1]["messages"][-1]["content"][0]["content"] == "proposed, waiting for Progen's confirmation"
-    assert data.store.count() == before  # niets opgeslagen tot Confirm
+    assert data.store.count() == before  # nothing saved until Confirm
 
 
 def test_a_bad_tool_call_goes_back_as_an_error(data):

@@ -1,9 +1,9 @@
-"""Coverbronnen voor Watching. Zelfde vorm als bij Reading:
+"""Cover sources for Watching. Same shape as for Reading:
 
-    bron(client, zoekterm) -> list[SourceResult]
+    source(client, search_term) -> list[SourceResult]
 
-Een bron toevoegen of weghalen: schrijf een functie met @cover_source("Naam")
-erboven en zet hem in SOURCES (of haal hem eruit).
+To add or remove a source: write a function with @cover_source("Name")
+above it and put it in SOURCES (or take it out).
 """
 import os
 
@@ -51,7 +51,7 @@ def anilist_anime(client: httpx.Client, term: str) -> list[SourceResult]:
     return results
 
 
-# ---- TVmaze: series (geen sleutel nodig) ----
+# ---- TVmaze: series (no key needed) ----
 
 TVMAZE_URL = "https://api.tvmaze.com/search/shows"
 
@@ -71,12 +71,12 @@ def tvmaze(client: httpx.Client, term: str) -> list[SourceResult]:
     return results
 
 
-# ---- TMDB: films en series (optioneel, met gratis sleutel) ----
+# ---- TMDB: films and series (optional, with a free key) ----
 
 TMDB_URL = "https://api.themoviedb.org/3/search/multi"
 TMDB_POSTER = "https://image.tmdb.org/t/p/w780{}"
-TMDB_KEY_ENV = "TMDB_API_KEY"  # een "API Key" of een "API Read Access Token" van themoviedb.org
-TMDB_GENRES = {  # TMDB geeft genre-ids; dit zijn hun vaste namen (films en series samen)
+TMDB_KEY_ENV = "TMDB_API_KEY"  # an "API Key" or an "API Read Access Token" from themoviedb.org
+TMDB_GENRES = {  # TMDB returns genre ids; these are their fixed names (films and series together)
     28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime", 99: "Documentary",
     18: "Drama", 10751: "Family", 14: "Fantasy", 36: "History", 27: "Horror", 10402: "Music",
     9648: "Mystery", 10749: "Romance", 878: "Science Fiction", 53: "Thriller", 10752: "War",
@@ -88,9 +88,9 @@ TMDB_GENRES = {  # TMDB geeft genre-ids; dit zijn hun vaste namen (films en seri
 def tmdb(client: httpx.Client, term: str) -> list[SourceResult]:
     key = os.environ.get(TMDB_KEY_ENV, "").strip()
     if not key:
-        return []  # zonder sleutel doet TMDB niet mee
+        return []  # without a key TMDB doesn't take part
     params, headers = {"query": term, "include_adult": "false"}, {}
-    if "." in key:  # een Read Access Token (JWT) gaat in de header
+    if "." in key:  # a Read Access Token (JWT) goes in the header
         headers["Authorization"] = f"Bearer {key}"
     else:
         params["api_key"] = key
@@ -107,5 +107,5 @@ def tmdb(client: httpx.Client, term: str) -> list[SourceResult]:
     return results
 
 
-# Volgorde = volgorde bij gelijke score.
+# Order = the order on a tie.
 SOURCES = [anilist_anime, tvmaze, tmdb]

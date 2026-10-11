@@ -1,4 +1,4 @@
-"""Listening via de JSON-API, de webpagina, het startscherm en Settings."""
+"""Listening through the JSON API, the web page, the home screen and Settings."""
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -20,7 +20,7 @@ def client():
     return TestClient(create_app(":memory:"), headers={"HX-Request": "true"})
 
 
-# ---- JSON-API ----
+# ---- JSON API ----
 
 def test_post_play_stores_it_once(client):
     first = client.post("/listening/plays", json=body())
@@ -34,7 +34,7 @@ def test_post_play_stores_it_once(client):
 def test_post_invalid_play(client):
     assert client.post("/listening/plays", json=body(duration_ms=-1)).status_code == 400
     assert client.post("/listening/plays", json=body(track_id="")).status_code == 400
-    assert client.post("/listening/plays", json={"track": "zonder tijd"}).status_code == 422
+    assert client.post("/listening/plays", json={"track": "without a time"}).status_code == 422
 
 
 def test_get_endpoints_read_the_projections(client):
@@ -47,10 +47,10 @@ def test_get_endpoints_read_the_projections(client):
     assert sum(activity["minutes_per_day"].values()) == 6.0 and sum(activity["minutes_per_week"].values()) == 6.0
     assert client.get("/listening/top-artists", params={"month": month}).json()[0] == {"artist": "The Weeknd", "plays": 2}
     assert len(client.get("/listening/top-tracks", params={"month": month}).json()) == 2
-    assert client.get("/listening/top-artists", params={"month": "geen-maand"}).status_code == 422
+    assert client.get("/listening/top-artists", params={"month": "not-a-month"}).status_code == 422
 
 
-# ---- Webpagina ----
+# ---- Web page ----
 
 def test_pages_render(client):
     client.post("/listening/plays", json=body())

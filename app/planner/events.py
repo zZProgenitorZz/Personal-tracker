@@ -1,8 +1,8 @@
-"""Events van Planner: afspraken en plannen. Klassenamen zijn uniek over alle domeinen heen,
-want de event store slaat alleen de klassenaam op.
+"""Events of Planner: appointments and plans. Class names are unique across all domains,
+because the event store only stores the class name.
 
-Datum en tijd van een plan zijn lokale tijd (de klok van deze pc), niet UTC zoals `at`
-(wanneer Progen het vastlegde). Geen tijd = de hele dag; geen datum = "Someday".
+A plan's date and time are local time (this PC's clock), not UTC like `at`
+(when Progen recorded it). No time = all day; no date = "Someday".
 """
 import datetime as dt
 from dataclasses import dataclass, field
@@ -16,14 +16,14 @@ def now() -> dt.datetime:
 class Frequency(str, Enum):
     DAILY = "daily"
     WEEKLY = "weekly"
-    MONTHLY = "monthly"  # op dezelfde dag van de maand; bij 31 in een korte maand de laatste dag
+    MONTHLY = "monthly"  # on the same day of the month; for the 31st in a short month the last day
 
 
 @dataclass(frozen=True)
 class Repeat:
     every: Frequency
-    weekdays: tuple[int, ...] = ()  # alleen bij WEEKLY: 0 = maandag ... 6 = zondag
-    until: dt.date | None = None    # de laatste dag waarop het nog kan vallen
+    weekdays: tuple[int, ...] = ()  # only with WEEKLY: 0 = Monday ... 6 = Sunday
+    until: dt.date | None = None    # the last day it can still fall on
 
 
 @dataclass(frozen=True)
@@ -40,7 +40,7 @@ class PlanAdded:
 
 @dataclass(frozen=True)
 class PlanRescheduled:
-    """Verzet, ingepland of terug naar Someday (day None)."""
+    """Moved, scheduled or back to Someday (day None)."""
     plan_id: str
     day: dt.date | None
     time: dt.time | None
@@ -49,7 +49,7 @@ class PlanRescheduled:
 
 @dataclass(frozen=True)
 class PlanEdited:
-    """De volledige nieuwe titel, notitie, duur en herhaling."""
+    """The complete new title, note, duration and repeat."""
     plan_id: str
     title: str
     note: str
@@ -61,7 +61,7 @@ class PlanEdited:
 @dataclass(frozen=True)
 class PlanDone:
     plan_id: str
-    on: dt.date  # bij een herhaling: welk voorkomen
+    on: dt.date  # with a repeat: which occurrence
     at: dt.datetime = field(default_factory=now)
 
 
@@ -74,7 +74,7 @@ class PlanReopened:
 
 @dataclass(frozen=True)
 class PlanSkipped:
-    """Eén keer van een herhaling overslaan."""
+    """Skips one occurrence of a repeat."""
     plan_id: str
     on: dt.date
     at: dt.datetime = field(default_factory=now)
@@ -89,12 +89,12 @@ class PlanRemoved:
 
 @dataclass(frozen=True)
 class ReminderSettingsChanged:
-    """De volledige nieuwe instelling voor herinneringen (één voor alle plannen), in een eigen stream."""
+    """The complete new reminder setting (one for all plans), in its own stream."""
     first_enabled: bool
-    first_minutes: int      # hoeveel minuten van tevoren
+    first_minutes: int      # how many minutes before
     second_enabled: bool
     second_minutes: int
-    all_day_time: dt.time   # wanneer herinneringen voor plannen van de hele dag komen
+    all_day_time: dt.time   # when reminders for all-day plans come
     at: dt.datetime = field(default_factory=now)
 
 

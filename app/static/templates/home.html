@@ -1,5 +1,5 @@
 {% import "_macros.html" as ui %}
-{# Startscherm: één kaart per tracker. Ververst na een wijziging in welke tracker dan ook. #}
+{# Home screen: one card per tracker. Refreshes after a change in any tracker. #}
 <div class="page" hx-disinherit="*" hx-get="/ui/home" hx-trigger="reading-changed from:body, watching-changed from:body, listening-changed from:body, planner-changed from:body" hx-swap="outerHTML">
   <header class="page-head">
     <div>

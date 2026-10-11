@@ -1,4 +1,4 @@
-"""Read models van Listening: recent, minuten per dag/week, top artiesten en nummers per maand."""
+"""Listening's read models: recent, minutes per day/week, top artists and tracks per month."""
 from datetime import date, datetime, time, timedelta, timezone
 
 from app.eventstore import EventStore
@@ -10,7 +10,7 @@ from app.listening.projections import (
 
 
 def local(day: date, hour=12, minute=0) -> datetime:
-    """Een tijdstip op `day` in de lokale tijd, als UTC (zo komt het binnen)."""
+    """A moment on `day` in local time, as UTC (that is how it comes in)."""
     return datetime.combine(day, time(hour, minute)).astimezone().astimezone(timezone.utc)
 
 
@@ -56,26 +56,26 @@ def test_no_plays_means_no_latest_time():
 
 def test_minutes_per_day_use_ms_played_when_known():
     handler, _, (_, activity, *_) = make_app()
-    handler.handle(play(local(DAY, 10), duration_ms=240_000))                # 4 min (lengte)
-    handler.handle(play(local(DAY, 11), duration_ms=240_000, ms_played=30_000))  # 0,5 min (echt geluisterd)
+    handler.handle(play(local(DAY, 10), duration_ms=240_000))                # 4 min (length)
+    handler.handle(play(local(DAY, 11), duration_ms=240_000, ms_played=30_000))  # 0.5 min (really listened)
     assert activity.minutes_per_day() == {DAY: 4.5}
 
 
 def test_minutes_per_week():
     handler, _, (_, activity, *_) = make_app()
-    handler.handle(play(local(date(2026, 10, 5)), duration_ms=60_000))   # maandag, week 41
-    handler.handle(play(local(date(2026, 10, 11)), duration_ms=120_000))  # zondag, week 41
-    handler.handle(play(local(date(2026, 10, 12)), duration_ms=60_000))  # maandag, week 42
+    handler.handle(play(local(date(2026, 10, 5)), duration_ms=60_000))   # Monday, week 41
+    handler.handle(play(local(date(2026, 10, 11)), duration_ms=120_000))  # Sunday, week 41
+    handler.handle(play(local(date(2026, 10, 12)), duration_ms=60_000))  # Monday, week 42
     assert activity.minutes_per_week() == {"2026-W41": 3.0, "2026-W42": 1.0}
 
 
 def test_days_follow_local_time_not_utc():
     handler, _, (_, activity, *_) = make_app()
-    handler.handle(play(local(DAY, 0, 30)))  # net na middernacht lokaal
+    handler.handle(play(local(DAY, 0, 30)))  # just after midnight local time
     assert list(activity.minutes_per_day()) == [DAY]
 
 
-# ---- Top artiesten en nummers per maand ----
+# ---- Top artists and tracks per month ----
 
 def test_top_artists_per_month_count_every_artist_of_a_play():
     handler, _, (_, _, artists, _) = make_app()
@@ -105,7 +105,7 @@ def test_ties_are_broken_by_name():
     assert artists.top(2026, 10) == [("Abba", 1), ("Zed", 1)]
 
 
-# ---- Opnieuw opbouwen ----
+# ---- Rebuilding ----
 
 def test_rebuilt_read_models_equal_the_live_ones():
     handler, store, live = make_app()
