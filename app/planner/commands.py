@@ -100,7 +100,7 @@ class PlannerCommandHandler:
             elif isinstance(command, RemovePlan):
                 events = plan.remove()
             else:
-                raise TypeError(f"Onbekend command: {type(command).__name__}")
+                raise TypeError(f"Unknown command: {type(command).__name__}")
 
         if events:
             self._store.append(plan.plan_id, events)

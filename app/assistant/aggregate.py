@@ -5,6 +5,8 @@ from .events import AssistantSettingsChanged
 from .models import DEFAULT_MODEL, model_by_id
 
 log = logging.getLogger("progen.assistant")
+# The settings are rebuilt on every message; warn about a missing model only once per process.
+_warned_model: str | None = None
 
 
 class AssistantSettings:
@@ -18,8 +20,8 @@ class AssistantSettings:
         for event in events:
             if isinstance(event, AssistantSettingsChanged):
                 self.stored = event.model
-        if model_by_id(self.stored) is None:  # report once, not on every read
-            log.warning("Sunny: model %r is not in the list (anymore); using %s instead", self.stored, DEFAULT_MODEL)
+        if model_by_id(self.stored) is None:
+            _warn_missing(self.stored)
 
     @property
     def model(self) -> str:
@@ -33,3 +35,10 @@ class AssistantSettings:
             return []  # the same model: no event
         self.stored = model
         return [AssistantSettingsChanged(model)]
+
+
+def _warn_missing(model: str) -> None:
+    global _warned_model
+    if model != _warned_model:
+        _warned_model = model
+        log.warning("Sunny: model %r is not in the list (anymore); using %s instead", model, DEFAULT_MODEL)

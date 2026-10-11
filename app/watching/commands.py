@@ -61,7 +61,7 @@ class WatchingCommandHandler:
             item = self._load(command.show_id)
             events = item.remove()
         else:
-            raise TypeError(f"Onbekend command: {type(command).__name__}")
+            raise TypeError(f"Unknown command: {type(command).__name__}")
 
         self._store.append(item.show_id, events)
         return events

@@ -15,7 +15,7 @@ class AssistantCommandHandler:
 
     def handle(self, command) -> list:
         if not isinstance(command, ChangeAssistantModel):
-            raise TypeError(f"Onbekend command: {type(command).__name__}")
+            raise TypeError(f"Unknown command: {type(command).__name__}")
         settings = AssistantSettings(self._store.load_stream(AssistantSettings.STREAM))
         events = settings.change(command.model)
         if events:

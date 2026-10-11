@@ -79,7 +79,7 @@ class ReadingCommandHandler:
             series = self._load(command.series_id)
             events = series.remove()
         else:
-            raise TypeError(f"Onbekend command: {type(command).__name__}")
+            raise TypeError(f"Unknown command: {type(command).__name__}")
 
         self._store.append(series.series_id, events)
         return events

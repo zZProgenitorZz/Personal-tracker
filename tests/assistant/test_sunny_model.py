@@ -11,6 +11,7 @@ from markupsafe import escape
 from fakes import FakeClient, response, text
 from fastapi.testclient import TestClient
 
+import app.assistant.aggregate as aggregate
 from app.assistant.agent import Agent
 from app.assistant.aggregate import AssistantSettings
 from app.assistant.commands import AssistantCommandHandler, ChangeAssistantModel
@@ -82,11 +83,13 @@ def test_an_unknown_model_is_refused():
         AssistantCommandHandler(store_with()).handle(ChangeAssistantModel("gpt-nonsense"))
 
 
-def test_a_stored_model_that_left_the_list_falls_back_to_the_default(caplog):
-    settings = AssistantSettings([AssistantSettingsChanged("an-old-model-that-was-removed")])
+def test_a_stored_model_that_left_the_list_falls_back_to_the_default(caplog, monkeypatch):
+    monkeypatch.setattr(aggregate, "_warned_model", None)
+    events = [AssistantSettingsChanged("an-old-model-that-was-removed")]
     with caplog.at_level(logging.WARNING, logger="progen.assistant"):
-        assert settings.model == DEFAULT_MODEL
-    assert "an-old-model-that-was-removed" in caplog.text
+        for _ in range(3):  # rebuilt on every message
+            assert AssistantSettings(events).model == DEFAULT_MODEL
+    assert caplog.text.count("an-old-model-that-was-removed") == 1  # warned only once
 
 
 # ---- Agent ----

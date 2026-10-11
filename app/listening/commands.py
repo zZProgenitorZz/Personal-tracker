@@ -39,7 +39,7 @@ class ListeningCommandHandler:
     def handle(self, command) -> list:
         """Returns the stored events; an empty list means: already known, nothing stored."""
         if not isinstance(command, RecordPlay):
-            raise TypeError(f"Onbekend command: {type(command).__name__}")
+            raise TypeError(f"Unknown command: {type(command).__name__}")
         command = replace(command, played_at=as_utc(command.played_at))
         stream = stream_id(command.played_at)
         events = Play(self._store.load_stream(stream)).record(command)
