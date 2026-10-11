@@ -16,12 +16,12 @@ from app.event_types import ALL_EVENT_TYPES
 from app.planner.commands import AddPlan, PlannerCommandHandler
 from app.planner.events import Frequency, Repeat
 from app.planner.projections import AgendaProjection
-from app.reading.commands import ReadingCommandHandler, StartSeries
-from app.reading.events import Kind
-from app.reading.projections import LibraryProjection
+from app.reading.commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, StartSeries
+from app.reading.events import Kind, Status
+from app.reading.projections import LibraryProjection, ReadingHistoryProjection
 from app.watching.commands import AddShow, WatchingCommandHandler
 from app.watching.events import WatchKind, WatchStatus
-from app.watching.projections import WatchlistProjection
+from app.watching.projections import WatchHistoryProjection, WatchlistProjection
 
 TODAY = dt.date(2026, 10, 11)
 
@@ -33,7 +33,8 @@ def data():
     library, watchlist = LibraryProjection(), WatchlistProjection()
     listen, artists, tracks, agenda = (ListeningActivityProjection(), TopArtistsProjection(), TopTracksProjection(),
                                        AgendaProjection())
-    for projection in (library, watchlist, listen, artists, tracks, agenda):
+    reading_history, watch_history = ReadingHistoryProjection(), WatchHistoryProjection()
+    for projection in (library, watchlist, listen, artists, tracks, agenda, reading_history, watch_history):
         store.subscribe(projection.apply)
     reading, watching, planner = ReadingCommandHandler(store, library), WatchingCommandHandler(store, watchlist), \
         PlannerCommandHandler(store)
@@ -44,7 +45,8 @@ def data():
     ListeningCommandHandler(store).handle(RecordPlay(dt.datetime(2026, 10, 1, 12, tzinfo=dt.timezone.utc),
                                                      "spotify:track:x", "Midnight City", ["M83"], "Hurry Up", "a", 240_000))
     tracker = TrackerData(library=library, watchlist=watchlist, listening=listen,
-                          top_artists=artists, top_tracks=tracks, agenda=agenda, reading=reading, watching=watching,
+                          top_artists=artists, top_tracks=tracks, agenda=agenda, reading_history=reading_history,
+                          watch_history=watch_history, reading=reading, watching=watching,
                           planner=planner, now=lambda: dt.datetime(2026, 10, 11, 10, 0))
     tracker.store = store
     return tracker
@@ -76,9 +78,9 @@ def test_tools_still_missing_is_gone_now_they_are_built():
 def test_tools_are_strict_and_the_last_one_carries_the_cache_marker():
     names = [t["name"] for t in TOOL_DEFINITIONS]
     assert names == ["find_item", "reading_overview", "watching_overview", "top_tracks", "top_artists",
-                     "listening_minutes", "plans_between", "set_reading_progress", "set_reading_status", "add_series",
-                     "set_watch_status", "add_show", "add_plan", "plan_done", "plan_skip", "plan_reschedule", "plan_edit",
-                     "delete_item"]
+                     "listening_minutes", "plans_between", "history_between", "item_history", "set_reading_progress",
+                     "set_reading_status", "add_series", "set_watch_status", "add_show", "add_plan", "plan_done",
+                     "plan_skip", "plan_reschedule", "plan_edit", "delete_item"]
     for definition in TOOL_DEFINITIONS:
         schema = definition["input_schema"]
         assert definition["strict"] is True and schema["additionalProperties"] is False
@@ -128,6 +130,50 @@ def test_write_tools_only_propose_and_store_nothing(data):
 def test_delete_proposals_carry_the_name(data):
     _, pending = run_tool("delete_item", {"domain": "reading", "id": series_id(data, "Solo Leveling")}, data)
     assert pending.label == "Delete · Solo Leveling" and pending.delete_name == "Solo Leveling"
+
+
+# ---- History tools ----
+
+def test_history_between_is_compact_json_for_reading_and_watching(data):
+    solo = series_id(data, "Solo Leveling")
+    data.reading.handle(LogProgress(solo, 125))
+    data.reading.handle(ChangeStatus(solo, Status.COMPLETED))
+    today = dt.date.today().isoformat()  # the events carry the real time
+    result, pending = run_tool("history_between", {"from": today, "to": today, "domain": None}, data)
+    assert pending is None
+    assert result["reading"] == [{"title": "Solo Leveling", "kind": "manhwa", "chapters": 6, "from_chapter": 119,
+                                  "to_chapter": 125, "changes": [f"completed {today}"]}]
+    assert result["watching"] == [{"title": "Severance", "kind": "series", "finished_on": None, "rewatch": False}]
+    assert result["totals"] == {"finished": 1, "chapters": 6, "days_read": 1}
+    json.dumps(result)
+    only, _ = run_tool("history_between", {"from": today, "to": today, "domain": "watching"}, data)
+    assert set(only) == {"watching", "totals"}
+
+
+def test_item_history_includes_earlier_removed_versions(data):
+    old = series_id(data, "Solo Leveling")
+    data.reading.handle(LogProgress(old, 130))
+    data.reading.handle(RemoveSeries(old))
+    data.reading.handle(StartSeries("Solo Leveling", Kind.MANHWA, "", 130))
+    result, _ = run_tool("item_history", {"domain": "reading", "id": series_id(data, "Solo Leveling")}, data)
+    assert result["chapters"] == 11 and result["start_status"] == "reading" and result["changes"] == []
+    assert result["first_read"] == result["last_read"] == dt.date.today().isoformat()
+    show = data.watchlist.all()[0].show_id
+    watched, _ = run_tool("item_history", {"domain": "watching", "id": show}, data)
+    assert watched == {"title": "Severance", "kind": "series", "added": dt.date.today().isoformat(),
+                       "start_status": "watching", "changes": [], "times_completed": 0, "completed_on": [],
+                       "times_rewatched": 0}
+
+
+def test_history_tools_reject_an_unknown_id_or_a_bad_date(data):
+    with pytest.raises(ToolError, match="find_item"):
+        run_tool("item_history", {"domain": "reading", "id": "nope"}, data)
+    with pytest.raises(ToolError, match="find_item"):
+        run_tool("item_history", {"domain": "watching", "id": "nope"}, data)
+    with pytest.raises(ToolError, match="date"):
+        run_tool("history_between", {"from": "september", "to": "2026-09-30", "domain": None}, data)
+    with pytest.raises(ToolError):
+        run_tool("history_between", {"from": "2026-09-30", "to": "2026-09-01", "domain": "reading"}, data)
 
 
 # ---- The loop ----

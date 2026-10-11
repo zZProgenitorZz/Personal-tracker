@@ -8,24 +8,17 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 
+from ..domain import title_key
 from ..listening.events import TrackPlayed
 from ..listening.projections import listened_ms
 from ..reading.events import (
-    GenresChanged, Kind, ProgressLogged, SeriesRemoved, SeriesStarted, Status, StatusChanged,
+    GenresChanged, Kind, ProgressLogged, SeriesRemoved, SeriesStarted, Status, StatusChanged, is_start_status,
 )
+from ..reading.projections import chapters_read
 from ..watching.events import ShowAdded, ShowGenresChanged, ShowStatusChanged, WatchKind, WatchStatus
 
 TOP = 5
-# ReadingSeries.start records another starting status as StatusChanged right after SeriesStarted,
-# in the same command (so within milliseconds). A status change that comes this soon after
-# adding is the starting status and not a real change (see _is_start_status).
-START_STATUS_WINDOW = timedelta(seconds=5)
 MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-
-
-def title_key(title: str) -> str:
-    """The same title as Reading sees it (find_by_title): case and surrounding spaces don't count."""
-    return title.strip().lower()
 
 
 def _day(moment: datetime) -> date:
@@ -141,6 +134,7 @@ class WrappedProjection:
         self._versions: dict[str, list[str]] = defaultdict(list)
         self._started_by: dict[str, str] = {}          # title key -> the series_id that started it
         self._just_added: SeriesStarted | None = None  # the previous Reading event, if that was SeriesStarted
+        self._counted: dict[tuple[str, date], float] = {}  # chapters per (series_id, day), see chapters_read
         self._shows: dict[str, Title] = {}
         self._show_genres: dict[str, list[str]] = {}
         self._tracks: dict[str, tuple[str, tuple[str, ...]]] = {}
@@ -178,12 +172,12 @@ class WrappedProjection:
         elif isinstance(event, GenresChanged):
             self._series_genres[event.series_id] = list(event.genres)
         elif isinstance(event, ProgressLogged):
-            chapters = event.chapter - event.previous_chapter
-            if chapters > 0:  # the same rule as ReadingActivity
+            day, chapters = chapters_read(event, self._counted)  # the same rule as ReadingActivity
+            if chapters:
                 year.chapters_per_day[day] += chapters
                 year.chapters_per_series[event.series_id] += chapters
         elif isinstance(event, StatusChanged):
-            if self._is_start_status(event):
+            if is_start_status(self._just_added, event):
                 if event.to_status in (Status.PLAN_TO_READ, Status.COMPLETED):
                     # Added as backlog or as something you had already finished: not started, not finished.
                     # Only undo if this version started the series, not an earlier one.
@@ -196,15 +190,6 @@ class WrappedProjection:
                 self._start(event.series_id, year)  # out of the backlog: only started now
             if event.to_status is Status.COMPLETED and event.series_id in self._key:
                 year.completed_series.setdefault(self._key[event.series_id], day)
-
-    def _is_start_status(self, event: StatusChanged) -> bool:
-        """The starting status from ReadingSeries.start: follows right after the SeriesStarted of the same
-        series (no other Reading event in between) and within a few seconds. Listening plays from the sync
-        may come in between; they don't count for this rule."""
-        added = self._just_added
-        return (added is not None and added.series_id == event.series_id
-                and event.from_status is Status.READING
-                and abs(event.at - added.at) <= START_STATUS_WINDOW)
 
     def _start(self, series_id: str, year: _Year) -> None:
         """A series starts once: in the year of the first version, not again after removing it."""
@@ -253,7 +238,8 @@ class WrappedProjection:
         finished_days = list(y.completed_series.values()) + list(y.finished_shows.values())
         activity: dict[date, float] = defaultdict(float)
         for day, chapters in y.chapters_per_day.items():
-            activity[day] += chapters
+            if chapters > 0:
+                activity[day] += chapters
         for day in finished_days:
             activity[day] += 1
         for day, plays in y.plays_per_day.items():
@@ -271,7 +257,7 @@ class WrappedProjection:
         return YearReview(
             year=number,
             chapters=sum(y.chapters_per_day.values()),
-            top_series=sorted(((self._title(key), n) for key, n in chapters_per_title.items()),
+            top_series=sorted(((self._title(key), n) for key, n in chapters_per_title.items() if n > 0),
                               key=lambda tn: (-tn[1], tn[0].title.lower()))[:TOP],
             reading_genres=_ranked(reading_genres),
             series_started=len(y.started),

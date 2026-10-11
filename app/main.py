@@ -38,7 +38,7 @@ from .reading.api import create_reading_router
 from .reading.commands import ReadingCommandHandler
 from .cover_search import CoverSearch
 from .reading.cover_sources import SOURCES as READING_SOURCES
-from .reading.projections import LibraryProjection, ReadingActivityProjection
+from .reading.projections import LibraryProjection, ReadingActivityProjection, ReadingHistoryProjection
 from .reading.web import create_reading_web_router, reading_summary
 from .security import ALLOWED_HOSTS, protect
 from .settings_web import create_settings_router
@@ -46,7 +46,7 @@ from .shutdown import create_shutdown_router, stop_this_server
 from .watching.api import create_watching_router
 from .watching.commands import WatchingCommandHandler
 from .watching.cover_sources import SOURCES as WATCHING_SOURCES
-from .watching.projections import WatchActivityProjection, WatchlistProjection
+from .watching.projections import WatchActivityProjection, WatchHistoryProjection, WatchlistProjection
 from .watching.web import create_watching_web_router, watching_summary
 from .web import STATIC, Tracker, create_home_router, render
 from .wrapped.projections import WrappedProjection
@@ -95,8 +95,10 @@ def create_app(
     wrapped = WrappedProjection()  # year in review across all trackers, from the same events
     agenda = AgendaProjection()
     planner_activity = PlannerActivityProjection()
+    # What happened when, removed items included: for Sunny's history tools.
+    reading_history, watch_history = ReadingHistoryProjection(), WatchHistoryProjection()
     projections = [library, activity, watchlist, watch_activity, recent_plays, listen_activity, top_artists, top_tracks,
-                   wrapped, agenda, planner_activity]
+                   wrapped, agenda, planner_activity, reading_history, watch_history]
 
     def rebuild() -> None:
         """Rebuilds the read models from all events (at startup and after a restore)."""
@@ -164,7 +166,8 @@ def create_app(
     # Sunny, the assistant: reads the projections, only writes after Confirm through the same handlers.
     # Never a real client in the tests (":memory:"); they give it a fake client themselves.
     sunny = Sunny(TrackerData(library=library, watchlist=watchlist, listening=listen_activity,
-                              top_artists=top_artists, top_tracks=top_tracks, agenda=agenda, reading=handler,
+                              top_artists=top_artists, top_tracks=top_tracks, agenda=agenda,
+                              reading_history=reading_history, watch_history=watch_history, reading=handler,
                               watching=watching, planner=planner, now=lambda: clock.local_now()),
                   AssistantCommandHandler(store), use_real_client=scratch is None)
     app.state.sunny = sunny

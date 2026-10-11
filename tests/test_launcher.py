@@ -1,5 +1,6 @@
 """The desktop launcher (launch.pyw, stop.pyw) and the server's shutdown route."""
 import importlib.util
+import sys
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
@@ -72,6 +73,7 @@ def test_server_never_waits_forever_when_stopping():
     assert int(command[command.index("--timeout-graceful-shutdown") + 1]) <= 10
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="checks a Windows path")
 def test_uses_the_venv_python():
     launch = load("launch.pyw")
     assert launch.python_executable() == ROOT / ".venv" / "Scripts" / "python.exe"

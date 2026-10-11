@@ -20,11 +20,11 @@ from ..planner.projections import AgendaProjection
 from ..planner.schedule import next_occurrence
 from ..reading.commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, StartSeries
 from ..reading.events import KIND_LABELS, STATUS_LABELS, Kind, Status
-from ..reading.projections import LibraryProjection
+from ..reading.projections import LibraryProjection, ReadingHistoryProjection
 from ..listening.projections import ListeningActivityProjection, TopArtistsProjection, TopTracksProjection
 from ..watching.commands import AddShow, ChangeShowStatus, RemoveShow, WatchingCommandHandler
 from ..watching.events import WATCH_KIND_LABELS, WATCH_STATUS_LABELS, WatchKind, WatchStatus
-from ..watching.projections import WatchlistProjection
+from ..watching.projections import WatchHistoryProjection, WatchlistProjection
 
 PROPOSED = "proposed, waiting for Progen's confirmation"
 MAX_ROWS = 40  # never the whole library in one answer
@@ -53,6 +53,8 @@ class TrackerData:
     top_artists: TopArtistsProjection
     top_tracks: TopTracksProjection
     agenda: AgendaProjection
+    reading_history: ReadingHistoryProjection
+    watch_history: WatchHistoryProjection
     reading: ReadingCommandHandler
     watching: WatchingCommandHandler
     planner: PlannerCommandHandler
@@ -86,7 +88,8 @@ TOOL_DEFINITIONS = [
           {"query": {"type": "string"},
            "domain": _nullable({"type": "string", "enum": ["reading", "watching", "plan"]})}),
     _tool("reading_overview", "Series in the reading library: id, title, status, chapter, last update. "
-                              "Optionally only one status.", {"status": _nullable(READING_STATUS)}),
+                              "Optionally only one status. For past activity use history_between.",
+          {"status": _nullable(READING_STATUS)}),
     _tool("watching_overview", "Movies, series and anime in the watch list: id, title, kind, status. "
                                "Optionally only one status.", {"status": _nullable(WATCH_STATUS)}),
     _tool("top_tracks", "Most played songs between two dates (inclusive).", {"from": DATE, "to": DATE, "limit": LIMIT}),
@@ -95,6 +98,13 @@ TOOL_DEFINITIONS = [
           {"from": DATE, "to": DATE}),
     _tool("plans_between", "Every planned time between two dates (inclusive), repeats worked out.",
           {"from": DATE, "to": DATE}),
+    _tool("history_between", "What was read and watched between two dates (inclusive): chapters, status changes, "
+                             "finished shows, totals. Shows added as already completed have no finish date. "
+                             "Watching has no episodes, only status periods.",
+          {"from": DATE, "to": DATE, "domain": _nullable({"type": "string", "enum": ["reading", "watching"]})}),
+    _tool("item_history", "The full history of one series or show (removed earlier versions included): added, "
+                          "status changes with dates, times completed, reading days and chapters.",
+          {"domain": {"type": "string", "enum": ["reading", "watching"]}, "id": {"type": "string"}}),
     _tool("set_reading_progress", "Set the chapter Progen is at for a series." + WRITE_NOTE,
           {"series_id": {"type": "string"}, "chapter": {"type": "number"}}),
     _tool("set_reading_status", "Change the status of a series." + WRITE_NOTE,
@@ -231,6 +241,57 @@ def plans_between(args: dict, data: TrackerData) -> list[dict]:
             for o in data.agenda.between(*_period(args))][:MAX_PLANS]
 
 
+def _num(value: float | None):
+    """57.0 -> 57, 45.5 -> 45.5: compact JSON."""
+    return int(value) if value is not None and float(value).is_integer() else value
+
+
+def _change(change) -> str:
+    """(day, from, to) -> "completed 2026-09-14" """
+    return f"{change[2].value} {change[0].isoformat()}"
+
+
+def history_between(args: dict, data: TrackerData) -> dict:
+    start, end = _period(args)
+    domain = args.get("domain")
+    result, totals = {}, {"finished": 0}
+    if domain in (None, "reading"):
+        period = data.reading_history.between(start, end)
+        result["reading"] = [{"title": r.title, "kind": r.kind.value, "chapters": _num(r.chapters),
+                              "from_chapter": _num(r.from_chapter), "to_chapter": _num(r.to_chapter),
+                              "changes": [_change(c) for c in r.changes]} for r in period.rows[:MAX_ROWS]]
+        totals.update(chapters=_num(period.chapters), days_read=period.days_read)
+        totals["finished"] += period.completed
+    if domain in (None, "watching"):
+        rows = data.watch_history.between(start, end)
+        result["watching"] = [{"title": r.title, "kind": r.kind.value,
+                               "finished_on": r.finished_on.isoformat() if r.finished_on else None,
+                               "rewatch": r.rewatch} for r in rows[:MAX_ROWS]]
+        totals["finished"] += sum(r.finished_on is not None for r in rows)
+    return {**result, "totals": totals}
+
+
+def item_history(args: dict, data: TrackerData) -> dict:
+    domain, item_id = args["domain"], args["id"]
+    if domain == "reading":
+        history = data.reading_history
+        t = history.timeline(_lookup(history.key_of(item_id), "series", item_id))
+        return {"title": t.title, "kind": t.kind.value, "added": t.added.isoformat(),
+                "start_status": t.start_status.value, "changes": [_change(c) for c in t.changes],
+                "times_completed": t.times_completed, "chapters": _num(t.chapters),
+                "first_read": t.first_read.isoformat() if t.first_read else None,
+                "last_read": t.last_read.isoformat() if t.last_read else None}
+    if domain == "watching":
+        history = data.watch_history
+        t = history.timeline(_lookup(history.key_of(item_id), "show", item_id))
+        return {"title": t.title, "kind": t.kind.value, "added": t.added.isoformat(),
+                "start_status": t.start_status.value, "changes": [_change(c) for c in t.changes],
+                "times_completed": t.times_completed,
+                "completed_on": [d.isoformat() if d else "date unknown" for d in t.completed],
+                "times_rewatched": t.times_rewatched}
+    raise ToolError("'domain' must be reading or watching")
+
+
 # ---- Write tools: proposals only ----
 
 def set_reading_progress(args: dict, data: TrackerData) -> PendingAction:
@@ -346,7 +407,7 @@ def delete_item(args: dict, data: TrackerData) -> PendingAction:
 
 
 READ_TOOLS = {f.__name__: f for f in (find_item, reading_overview, watching_overview, top_tracks, top_artists,
-                                      listening_minutes, plans_between)}
+                                      listening_minutes, plans_between, history_between, item_history)}
 WRITE_TOOLS = {f.__name__: f for f in (set_reading_progress, set_reading_status, add_series, set_watch_status,
                                        add_show, add_plan, plan_done, plan_skip, plan_reschedule, plan_edit,
                                        delete_item)}
