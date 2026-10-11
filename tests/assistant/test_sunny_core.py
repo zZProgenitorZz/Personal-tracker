@@ -18,7 +18,7 @@ from app.planner.events import Frequency, Repeat
 from app.planner.projections import AgendaProjection
 from app.reading.commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, StartSeries
 from app.reading.events import Kind, Status
-from app.reading.projections import LibraryProjection, ReadingHistoryProjection
+from app.reading.projections import LibraryProjection, ReadingActivityProjection, ReadingHistoryProjection
 from app.watching.commands import AddShow, WatchingCommandHandler
 from app.watching.events import WatchKind, WatchStatus
 from app.watching.projections import WatchHistoryProjection, WatchlistProjection
@@ -33,8 +33,10 @@ def data():
     library, watchlist = LibraryProjection(), WatchlistProjection()
     listen, artists, tracks, agenda = (ListeningActivityProjection(), TopArtistsProjection(), TopTracksProjection(),
                                        AgendaProjection())
-    reading_history, watch_history = ReadingHistoryProjection(), WatchHistoryProjection()
-    for projection in (library, watchlist, listen, artists, tracks, agenda, reading_history, watch_history):
+    reading_activity, reading_history, watch_history = (ReadingActivityProjection(), ReadingHistoryProjection(),
+                                                        WatchHistoryProjection())
+    for projection in (library, watchlist, listen, artists, tracks, agenda, reading_activity, reading_history,
+                       watch_history):
         store.subscribe(projection.apply)
     reading, watching, planner = ReadingCommandHandler(store, library), WatchingCommandHandler(store, watchlist), \
         PlannerCommandHandler(store)
@@ -45,7 +47,8 @@ def data():
     ListeningCommandHandler(store).handle(RecordPlay(dt.datetime(2026, 10, 1, 12, tzinfo=dt.timezone.utc),
                                                      "spotify:track:x", "Midnight City", ["M83"], "Hurry Up", "a", 240_000))
     tracker = TrackerData(library=library, watchlist=watchlist, listening=listen,
-                          top_artists=artists, top_tracks=tracks, agenda=agenda, reading_history=reading_history,
+                          top_artists=artists, top_tracks=tracks, agenda=agenda, reading_activity=reading_activity,
+                          reading_history=reading_history,
                           watch_history=watch_history, reading=reading, watching=watching,
                           planner=planner, now=lambda: dt.datetime(2026, 10, 11, 10, 0))
     tracker.store = store
@@ -78,7 +81,7 @@ def test_tools_still_missing_is_gone_now_they_are_built():
 def test_tools_are_strict_and_the_last_one_carries_the_cache_marker():
     names = [t["name"] for t in TOOL_DEFINITIONS]
     assert names == ["find_item", "reading_overview", "watching_overview", "top_tracks", "top_artists",
-                     "listening_minutes", "plans_between", "history_between", "item_history", "set_reading_progress",
+                     "listening_minutes", "plans_between", "history_between", "notices", "item_history", "set_reading_progress",
                      "set_reading_status", "add_series", "set_watch_status", "add_show", "add_plan", "plan_done",
                      "plan_skip", "plan_reschedule", "plan_edit", "delete_item"]
     for definition in TOOL_DEFINITIONS:

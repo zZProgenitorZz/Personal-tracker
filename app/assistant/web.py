@@ -51,6 +51,16 @@ def create_assistant_router(sunny: Sunny) -> APIRouter:
     def cancel(request: Request, proposal_id: str):
         return result(request, sunny.cancel(proposal_id))
 
+    @router.get("/notices")
+    def notices(request: Request):
+        """The block at the top of the panel, plus the badge on the button (out of band)."""
+        return render(request, "_sunny_notices.html", notices=sunny.notices())
+
+    @router.post("/notices/dismiss")
+    def dismiss(request: Request, key: str = Form("")):
+        sunny.dismiss(key)
+        return render(request, "_sunny_notices.html", notices=sunny.notices())
+
     @router.post("/reset")
     def reset(request: Request):
         sunny.reset()

@@ -7,6 +7,9 @@ from .events import ShowAdded, ShowGenresChanged, ShowRemoved, ShowStatusChanged
 
 
 WATCHING_NOW = (WatchStatus.WATCHING, WatchStatus.REWATCHING)  # counts as "watching"
+# Gathering dust: a title on Watching that hasn't been added or changed status in this many days.
+# Looser than for Reading, because Watching doesn't track episodes: a weaker signal.
+STALE_WATCHING_DAYS = 30
 
 
 @dataclass

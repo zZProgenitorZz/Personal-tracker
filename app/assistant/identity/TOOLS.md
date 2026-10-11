@@ -13,6 +13,7 @@ One agent, one lane: Sunny only works on the tracker data. Tools call the existi
 | `listening_minutes` | `from`, `to` | activity projection | exists (per day) |
 | `plans_between` | `from`, `to` | agenda | **new: range** (now per day only) |
 | `history_between` | `from`, `to`, optional `domain` (reading/watching) | reading and watch history projections: chapters (first → last), status changes, finished shows, totals | new |
+| `notices` | none | the same notices as on Sunny's button (overdue plans, a streak about to end, dusty titles, an old backlog), minus the ones put away with "Not today"; fixed lines, no AI | new |
 | `item_history` | `domain` (reading/watching), `id` from `find_item` | the same history: added, every status change with its date, times completed/rewatched, reading days; earlier removed versions included | new |
 
 History comes from the events that already exist, so it covers all old data. Limits: a show added as already completed has no finish date, and Watching has no episodes, only status periods. A chapter correction on the same day (12 → 120 → 12) takes the typo back.

@@ -17,12 +17,9 @@ from ..web import Backlog, cover_search_response, pick_from_backlog, render, sav
 from .commands import AddShow, ChangeShowStatus, RemoveShow, SetShowGenres, WatchingCommandHandler
 from .events import WATCH_KIND_LABELS, WATCH_STATUS_LABELS, WatchKind, WatchStatus
 from .genres import WATCH_GENRES
-from .projections import WatchActivityProjection, WatchEntry, WatchlistProjection
+from .projections import STALE_WATCHING_DAYS, WatchActivityProjection, WatchEntry, WatchlistProjection
 
 CHANGED = "watching-changed"
-# Gathering dust: a title on Watching that hasn't been added or changed status in this many days.
-# Looser than for Reading, because Watching doesn't track episodes: a weaker signal.
-STALE_WATCHING_DAYS = 30
 DUST_SHOWN = 5  # after that "+N more"
 
 templates.env.globals.update(

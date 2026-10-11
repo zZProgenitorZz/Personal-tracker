@@ -23,6 +23,10 @@ def chapters_read(event: ProgressLogged, counted: dict[tuple[str, date], float])
     return day, change
 
 
+# Gathering dust: a series on Reading without progress or a status change in this many days.
+STALE_READING_DAYS = 21
+
+
 @dataclass
 class LibraryEntry:
     series_id: str

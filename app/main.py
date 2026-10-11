@@ -167,7 +167,7 @@ def create_app(
     # Never a real client in the tests (":memory:"); they give it a fake client themselves.
     sunny = Sunny(TrackerData(library=library, watchlist=watchlist, listening=listen_activity,
                               top_artists=top_artists, top_tracks=top_tracks, agenda=agenda,
-                              reading_history=reading_history, watch_history=watch_history, reading=handler,
+                              reading_activity=activity, reading_history=reading_history, watch_history=watch_history, reading=handler,
                               watching=watching, planner=planner, now=lambda: clock.local_now()),
                   AssistantCommandHandler(store), use_real_client=scratch is None)
     app.state.sunny = sunny

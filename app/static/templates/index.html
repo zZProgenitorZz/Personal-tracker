@@ -65,7 +65,16 @@
 
 {# Sunny, the assistant: a button at the bottom right and a panel that slides in from the right (not on Settings). #}
 <button id="sunny-fab" class="sunny-fab" type="button" data-sunny-open aria-label="Ask Sunny" title="Ask Sunny"
-        aria-controls="sunny-panel" aria-expanded="false">{{ ui.icon('sunny', 30) }}</button>
+        aria-controls="sunny-panel" aria-expanded="false">{{ ui.icon('sunny', 30) }}<span id="sunny-badge"
+        class="sunny-badge" hidden></span></button>
+{# Planner reminders while the page is open: Sunny pops in at the top left (trackly.js fills the list). #}
+<div id="sunny-pop" class="sunny-pop" role="status" aria-live="polite" hidden>
+  <span class="sunny-pop-face">{{ ui.icon('sunny', 44) }}</span>
+  <div class="sunny-pop-bubble">
+    <p class="sunny-pop-line">Heads up, Progen.</p>
+    <ul id="sunny-pop-list" class="sunny-pop-list"></ul>
+  </div>
+</div>
 <aside id="sunny-panel" class="sunny-panel" aria-label="Sunny" aria-hidden="true" inert>
   <header class="sunny-head">
     <div>
@@ -78,6 +87,9 @@
             hx-swap="innerHTML">New chat</button>
     <button class="btn-close" type="button" data-sunny-close aria-label="Close Sunny">{{ ui.icon('x', 18) }}</button>
   </header>
+  {# Notices (fixed lines, no AI); also sets the badge on the button. Refreshes like the other live parts. #}
+  <div id="sunny-notices" hx-get="/ui/assistant/notices" hx-swap="innerHTML"
+       hx-trigger="load, every 300s, reading-changed from:body, watching-changed from:body, planner-changed from:body"></div>
   <div id="sunny-body" class="sunny-body" hx-get="/ui/assistant" hx-trigger="load" hx-swap="innerHTML">
     <div class="loading"></div>
   </div>

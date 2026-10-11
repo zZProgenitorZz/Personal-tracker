@@ -1,0 +1,27 @@
+{# Notices at the top of Sunny's panel (#sunny-notices in index.html): fixed lines, no AI. The badge on the
+   button comes along out of band. Action buttons call the ordinary routes; their *-changed event refreshes this. #}
+{% if notices %}
+<section class="sunny-notices" aria-label="Notices">
+  <ul>
+    {% for n in notices %}
+    <li class="sunny-notice notice-{{ n.kind }}">
+      <p>{{ n.text }}</p>
+      <div class="sunny-notice-actions">
+        {% for a in n.actions %}
+        {% if a.method == "link" %}
+        <a class="btn btn-ghost btn-sm" href="{{ a.url }}" data-sunny-close>{{ a.label }}</a>
+        {% else %}
+        <button class="btn btn-ghost btn-sm" type="button" hx-post="{{ a.url }}" hx-vals='{{ a.vals|tojson }}'
+                hx-swap="none"{% if a.confirm %} hx-confirm="{{ a.confirm }}" data-confirm-kind="drop"{% endif %}>{{ a.label }}</button>
+        {% endif %}
+        {% endfor %}
+        <button class="btn-link" type="button" hx-post="/ui/assistant/notices/dismiss" hx-vals='{{ {"key": n.key}|tojson }}'
+                hx-target="#sunny-notices" hx-swap="innerHTML">Not today</button>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+<span id="sunny-badge" class="sunny-badge" hx-swap-oob="true" data-count="{{ notices|length }}"
+      {% if not notices %}hidden{% endif %}>{{ notices|length }}</span>

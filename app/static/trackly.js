@@ -467,6 +467,122 @@ document.addEventListener("htmx:afterSwap", (event) => {
 });
 
 
+// ---- Sunny: notices on the button ----
+// The notices block in the panel brings the badge along (out of band); the button glows while it has a number.
+
+document.addEventListener("htmx:afterSettle", () => {
+  const badge = el("sunny-badge");
+  if (badge) el("sunny-fab").classList.toggle("has-notices", !badge.hidden);
+});
+
+
+// ---- Sunny: planner reminders while the page is open ----
+// Every minute, the same /planner/due the tray icon asks. Each reminder shows once per window
+// (sessionStorage, so also after an htmx swap or a reload). Not on Settings: they wait until you leave.
+
+const REMINDER_CHECK_MS = 60 * 1000;
+const POP_CLOSE_MS = 60 * 1000;
+let popTimer = null;
+
+function stored(name, fallback) {
+  try {
+    const value = sessionStorage.getItem(name);
+    return value === null ? fallback : JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function store(name, value) {
+  try {
+    sessionStorage.setItem(name, JSON.stringify(value));
+  } catch {
+    // private window or blocked storage: reminders still show, maybe twice
+  }
+}
+
+function localIso(date) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T` +
+         `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+async function checkReminders() {
+  if (location.hash.startsWith("#settings")) return;  // Sunny stays hidden on Settings
+  const now = localIso(new Date());
+  const since = stored("sunny-due-since", now);
+  let due;
+  try {
+    const response = await fetch(`/planner/due?since=${encodeURIComponent(since)}`);
+    if (!response.ok) return;
+    due = await response.json();
+  } catch {
+    return;  // Progen isn't answering: next time from the same moment
+  }
+  store("sunny-due-since", now);
+  const seen = new Set(stored("sunny-due-seen", []));
+  const fresh = due.filter((item) => !seen.has(item.key));
+  if (!fresh.length) return;
+  fresh.forEach((item) => seen.add(item.key));
+  store("sunny-due-seen", [...seen].slice(-200));
+  showReminders(fresh);
+}
+
+function showReminders(items) {
+  const list = el("sunny-pop-list");
+  for (const item of items) {
+    const li = document.createElement("li");
+    const text = document.createElement("p");
+    text.textContent = item.text;
+    const done = document.createElement("button");
+    done.className = "btn btn-ghost btn-sm";
+    done.type = "button";
+    done.textContent = "Done";
+    done.setAttribute("hx-post", `/ui/planner/plans/${encodeURIComponent(item.plan_id)}/done`);
+    done.setAttribute("hx-vals", JSON.stringify({ on: item.on }));
+    done.setAttribute("hx-swap", "none");
+    done.dataset.popClose = "";
+    const ok = document.createElement("button");
+    ok.className = "btn-link";
+    ok.type = "button";
+    ok.textContent = "Got it";
+    ok.dataset.popClose = "";
+    const actions = document.createElement("div");
+    actions.className = "sunny-pop-actions";
+    actions.append(done, ok);
+    li.append(text, actions);
+    list.append(li);
+    htmx.process(li);
+  }
+  const pop = el("sunny-pop");
+  pop.hidden = false;
+  clearTimeout(popTimer);
+  popTimer = setTimeout(closePop, POP_CLOSE_MS);  // the Windows notification still has it
+}
+
+function closePop() {
+  el("sunny-pop").hidden = true;
+  el("sunny-pop-list").replaceChildren();
+}
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-pop-close]");
+  if (!button) return;
+  // After htmx has sent "Done": remove only this line, and the pop-in when it was the last one.
+  setTimeout(() => {
+    button.closest("li").remove();
+    if (!el("sunny-pop-list").children.length) closePop();
+  }, 0);
+});
+
+window.addEventListener("hashchange", () => {
+  if (location.hash.startsWith("#settings")) closePop();
+});
+document.addEventListener("DOMContentLoaded", () => {
+  checkReminders();
+  setInterval(checkReminders, REMINDER_CHECK_MS);
+});
+
 // ---- Toasts ----
 
 function showToast(message) {

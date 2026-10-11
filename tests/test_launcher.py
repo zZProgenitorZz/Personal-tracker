@@ -210,12 +210,14 @@ class FakeIcon:
     def __init__(self):
         self.stopped = False
         self.notes = []
+        self.titles = []
 
     def stop(self):
         self.stopped = True
 
     def notify(self, text, title):
         self.notes.append(text)
+        self.titles.append(title)
 
 
 def tray(monkeypatch):
@@ -427,6 +429,7 @@ def test_reminders_are_notified_once_each(monkeypatch):
     assert asked == [start, dt.datetime(2026, 10, 8, 14, 0, 30)]  # each time from the previous check
     # Two at once in one notification (a second balloon would push the first away).
     assert icon.notes == ["Tomorrow: Dentist at 14:00", "In 3 hours: Gym at 18:00\nToday: Birthday Sam"]
+    assert icon.titles == ["Sunny", "Sunny"]  # Sunny is the face of reminders
 
 
 def test_reminders_keep_their_window_while_progen_is_unreachable(monkeypatch):

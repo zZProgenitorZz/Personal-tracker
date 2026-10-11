@@ -17,11 +17,9 @@ from ..cover_search import CoverSearch
 from .commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, SetGenres, StartSeries
 from .events import KIND_LABELS, STATUS_LABELS, Kind, Status, StatusChanged
 from .genres import GENRES
-from .projections import LibraryEntry, LibraryProjection, ReadingActivityProjection
+from .projections import STALE_READING_DAYS, LibraryEntry, LibraryProjection, ReadingActivityProjection
 
 CHANGED = "reading-changed"
-# Gathering dust: a series on Reading without progress or a status change in this many days.
-STALE_READING_DAYS = 21
 DUST_SHOWN = 5  # after that "+N more"
 
 templates.env.globals.update(STATUS_LABELS=STATUS_LABELS, KIND_LABELS=KIND_LABELS, GENRES=GENRES)

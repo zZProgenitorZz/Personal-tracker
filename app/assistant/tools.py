@@ -9,7 +9,7 @@ An invalid call (unknown id, wrong date) becomes a ToolError: it goes back to th
 is_error, so Sunny can fix it itself or ask.
 """
 import datetime as dt
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from rapidfuzz import fuzz, process
@@ -20,8 +20,9 @@ from ..planner.projections import AgendaProjection
 from ..planner.schedule import next_occurrence
 from ..reading.commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, StartSeries
 from ..reading.events import KIND_LABELS, STATUS_LABELS, Kind, Status
-from ..reading.projections import LibraryProjection, ReadingHistoryProjection
+from ..reading.projections import LibraryProjection, ReadingActivityProjection, ReadingHistoryProjection
 from ..listening.projections import ListeningActivityProjection, TopArtistsProjection, TopTracksProjection
+from .notices import visible
 from ..watching.commands import AddShow, ChangeShowStatus, RemoveShow, WatchingCommandHandler
 from ..watching.events import WATCH_KIND_LABELS, WATCH_STATUS_LABELS, WatchKind, WatchStatus
 from ..watching.projections import WatchHistoryProjection, WatchlistProjection
@@ -53,12 +54,15 @@ class TrackerData:
     top_artists: TopArtistsProjection
     top_tracks: TopTracksProjection
     agenda: AgendaProjection
+    reading_activity: ReadingActivityProjection
     reading_history: ReadingHistoryProjection
     watch_history: WatchHistoryProjection
     reading: ReadingCommandHandler
     watching: WatchingCommandHandler
     planner: PlannerCommandHandler
     now: Callable[[], dt.datetime]   # local time, like the planner
+    # Notices put away with "Not today": (key, local date). Sunny's session shares this set.
+    dismissed: set = field(default_factory=set)
 
     def handler(self, domain: str):
         return {"reading": self.reading, "watching": self.watching, "planner": self.planner}[domain]
@@ -102,6 +106,7 @@ TOOL_DEFINITIONS = [
                              "finished shows, totals. Shows added as already completed have no finish date. "
                              "Watching has no episodes, only status periods.",
           {"from": DATE, "to": DATE, "domain": _nullable({"type": "string", "enum": ["reading", "watching"]})}),
+    _tool("notices", "What needs Progen's attention today.", {}),
     _tool("item_history", "The full history of one series or show (removed earlier versions included): added, "
                           "status changes with dates, times completed, reading days and chapters.",
           {"domain": {"type": "string", "enum": ["reading", "watching"]}, "id": {"type": "string"}}),
@@ -271,6 +276,10 @@ def history_between(args: dict, data: TrackerData) -> dict:
     return {**result, "totals": totals}
 
 
+def notices(args: dict, data: TrackerData) -> list[dict]:
+    return [{"kind": n.kind, "text": n.text} for n in visible(data, data.now())]
+
+
 def item_history(args: dict, data: TrackerData) -> dict:
     domain, item_id = args["domain"], args["id"]
     if domain == "reading":
@@ -407,7 +416,7 @@ def delete_item(args: dict, data: TrackerData) -> PendingAction:
 
 
 READ_TOOLS = {f.__name__: f for f in (find_item, reading_overview, watching_overview, top_tracks, top_artists,
-                                      listening_minutes, plans_between, history_between, item_history)}
+                                      listening_minutes, plans_between, history_between, notices, item_history)}
 WRITE_TOOLS = {f.__name__: f for f in (set_reading_progress, set_reading_status, add_series, set_watch_status,
                                        add_show, add_plan, plan_done, plan_skip, plan_reschedule, plan_edit,
                                        delete_item)}

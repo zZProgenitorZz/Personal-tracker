@@ -196,7 +196,7 @@ def check_reminders(icon, seen: set, since: datetime.datetime, fetch=None) -> da
     new = [item for item in due if item["key"] not in seen]
     seen.update(item["key"] for item in new)
     if new:
-        icon.notify("\n".join(item["text"] for item in new), "Progen")
+        icon.notify("\n".join(item["text"] for item in new), "Sunny")
     return now
 
 

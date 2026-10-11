@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 
 from ..domain import DomainError
 from .agent import Agent, SunnyProblem, make_client
+from .notices import Notice, visible
 from .commands import AssistantCommandHandler
 from .tools import PendingAction, TrackerData
 
@@ -58,6 +59,11 @@ class Sunny:
     _client: object = None
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
+    def __post_init__(self):
+        # Notices put away with "Not today": (key, local date). In memory only, like the proposals;
+        # the tools see the same set through the data.
+        self.dismissed = self.data.dismissed
+
     @property
     def client(self):
         if self._client is None and self.use_real_client:
@@ -73,6 +79,16 @@ class Sunny:
             self.history.clear()
             self.entries.clear()
             self.proposals.clear()
+
+    # ---- Notices ----
+
+    def notices(self) -> list[Notice]:
+        return visible(self.data, self.data.now())
+
+    def dismiss(self, key: str) -> None:
+        """Hidden until tomorrow. No event: it is only about today."""
+        with self._lock:
+            self.dismissed.add((key, self.data.now().date()))
 
     # ---- A message ----
 

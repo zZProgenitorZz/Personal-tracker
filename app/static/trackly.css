@@ -1084,10 +1084,88 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
   .model-option { grid-template-columns: 18px minmax(0, 1fr); }
   .model-price { grid-column: 2; }
 }
+/* Notices: a number on the button, which glows a little brighter while there is something to say */
+.sunny-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: var(--purple-hi);
+  color: #0a0810;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 2px #0a0810;
+}
+.sunny-badge[hidden] { display: none; }
+.sunny-fab.has-notices { box-shadow: 0 14px 34px -10px rgba(0, 0, 0, .95), 0 0 30px -2px rgba(139, 92, 246, .85); }
+.sunny-notices { padding: 14px 18px 4px; border-bottom: 1px solid var(--border); }
+.sunny-notices ul { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.sunny-notice { display: grid; gap: 8px; padding: 12px 14px; border-radius: var(--radius-md); background: rgba(139, 92, 246, .08); box-shadow: inset 0 0 0 1px rgba(167, 139, 250, .2); }
+.sunny-notice p { margin: 0; font-size: 13.5px; line-height: 1.45; }
+.sunny-notice-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sunny-notice-actions .btn { padding: 6px 11px; font-size: 12.5px; }
+.sunny-notices:last-child { padding-bottom: 14px; }
+
+/* Planner reminders: Sunny's face pops in at the top left, bobs and blinks, with a speech bubble */
+.sunny-pop {
+  position: fixed;
+  top: 96px;
+  left: 24px;
+  z-index: 45;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: min(380px, calc(100vw - 48px));
+  animation: sunny-pop-in .45s var(--ease) both;
+}
+.sunny-pop[hidden] { display: none; }
+.sunny-pop-face {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #1a1528, #05040a 70%);
+  color: var(--purple-hi);
+  box-shadow: 0 14px 34px -10px rgba(0, 0, 0, .95), 0 0 30px -4px rgba(139, 92, 246, .7);
+  animation: sunny-bob 2.6s ease-in-out infinite;
+}
+.sunny-pop-face circle { transform-box: fill-box; transform-origin: center; animation: sunny-blink 4.5s infinite; }
+.sunny-pop-bubble {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border-top-left-radius: 6px;
+  background: linear-gradient(180deg, #1b1527, #110d19);
+  box-shadow: inset 0 0 0 1px var(--border-strong), 0 20px 50px -20px rgba(0, 0, 0, .9);
+}
+.sunny-pop-line { margin: 0; color: var(--purple-hi); font-size: 12.5px; font-weight: 600; }
+.sunny-pop-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.sunny-pop-list p { margin: 0 0 6px; font-size: 14px; line-height: 1.4; }
+.sunny-pop-actions { display: flex; align-items: center; gap: 10px; }
+.sunny-pop-actions .btn { padding: 6px 11px; font-size: 12.5px; }
+@keyframes sunny-pop-in { from { opacity: 0; transform: translateX(-24px) scale(.94); } }
+@keyframes sunny-bob { 50% { transform: translateY(-4px); } }
+@keyframes sunny-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+@media (prefers-reduced-motion: reduce) {
+  .sunny-pop, .sunny-pop-face, .sunny-pop-face circle { animation: none !important; }
+}
+
 /* Toasts not behind the panel */
 body:has(.sunny-panel.is-open) .toasts { right: calc(min(400px, 100vw) + 24px); }
 @media (max-width: 760px) {
   .sunny-fab { right: 16px; bottom: 96px; width: 52px; height: 52px; }
+  .sunny-pop { top: 16px; left: 16px; max-width: calc(100vw - 32px); }
   .sunny-panel { width: 100vw; border-left: 0; }
   body:has(.sunny-panel.is-open) .toasts { right: 16px; bottom: 90px; }
 }
