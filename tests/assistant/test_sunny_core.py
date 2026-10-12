@@ -1,6 +1,7 @@
 """Sunny: prompt, tools and the agent loop. With a fake client, never the real API."""
 import datetime as dt
 import json
+from types import SimpleNamespace
 
 import pytest
 from fakes import FakeClient, response, text, thinking, tool
@@ -13,6 +14,7 @@ from app.assistant.tools import (
 )
 from app.eventstore import EventStore
 from app.listening.commands import ListeningCommandHandler, RecordPlay
+from app.listening.events import TrackPlayed
 from app.listening.projections import ListeningActivityProjection, TopArtistsProjection, TopTracksProjection
 from app.event_types import ALL_EVENT_TYPES
 from app.planner.commands import AddPlan, PlannerCommandHandler
@@ -145,12 +147,52 @@ def test_delete_proposals_carry_the_name(data):
 
 def test_listening_stats_gives_minutes_days_and_both_top_lists(data):
     stats, _ = run_tool("listening_stats", {"from": "2026-10-01", "to": "2026-10-31", "limit": 5}, data)
-    assert stats == {"minutes": 4, "days_listened": 1, "top_artists": [{"artist": "M83", "plays": 1}],
+    assert stats == {"minutes": 4, "days_listened": 1, "plays": 1, "top_artists": [{"artist": "M83", "plays": 1}],
                      "top_tracks": [{"track": "Midnight City", "artists": ["M83"], "plays": 1, "minutes": 4.0}]}
     empty, _ = run_tool("listening_stats", {"from": "2026-09-01", "to": "2026-09-30", "limit": 5}, data)
-    assert empty == {"minutes": 0, "days_listened": 0, "top_artists": [], "top_tracks": []}
+    assert empty == {"minutes": 0, "days_listened": 0, "plays": 0, "top_artists": [], "top_tracks": []}
     with pytest.raises(ToolError, match="date"):
         run_tool("listening_stats", {"from": "2026-10-01", "to": "end of october", "limit": 5}, data)
+
+
+def listened(*plays):
+    """Listening projections fed with (day, track, artists) plays, as the data the tools read."""
+    stats = SimpleNamespace(listening=ListeningActivityProjection(), top_artists=TopArtistsProjection(),
+                            top_tracks=TopTracksProjection())
+    for day, track, artists in plays:
+        when = dt.datetime(2026, 9, day, 12, tzinfo=dt.timezone.utc)
+        event = TrackPlayed(when, f"spotify:track:{track}", track, list(artists), "Album", "a", 180_000, at=when)
+        for projection in (stats.listening, stats.top_artists, stats.top_tracks):
+            projection.apply(event)
+    return stats
+
+
+def september(stats, limit=2) -> dict:
+    return run_tool("listening_stats", {"from": "2026-09-01", "to": "2026-09-30", "limit": limit}, stats)[0]
+
+
+def test_listening_stats_counts_every_play_in_the_period():
+    stats = listened((1, "One", ["A"]), (2, "One", ["A"]), (2, "Two", ["B"]), (3, "Three", ["A", "B"]))
+    result = september(stats)
+    assert result["plays"] == 4 and result["days_listened"] == 3  # a play with two artists is still one play
+    assert run_tool("listening_stats", {"from": "2026-09-02", "to": "2026-09-02"}, stats)[0]["plays"] == 2
+
+
+def test_a_tie_at_the_top_is_counted_over_the_whole_period_not_only_within_limit():
+    stats = listened(*[(day, track, [artist]) for day, (track, artist) in
+                       enumerate([("One", "A"), ("Two", "B"), ("Three", "C"), ("Four", "D")], 1)])
+    result = september(stats, limit=2)
+    assert len(result["top_tracks"]) == 2 and result["top_track_tie"] == 4
+    assert len(result["top_artists"]) == 2 and result["top_artist_tie"] == 4
+
+
+def test_without_a_tie_the_tie_fields_are_left_out():
+    stats = listened((1, "One", ["A"]), (2, "One", ["A"]), (3, "Two", ["B"]))
+    result = september(stats)
+    assert "top_track_tie" not in result and "top_artist_tie" not in result
+    tied_artists = listened((1, "One", ["A"]), (2, "One", ["A"]), (3, "Two", ["B"]), (4, "Three", ["B"]))
+    result = september(tied_artists)
+    assert result["top_artist_tie"] == 2 and "top_track_tie" not in result  # A and B 2 each, One leads alone
 
 
 def test_library_gives_each_domain_its_rows_and_checks_the_status(data):

@@ -87,6 +87,12 @@ def _ranked(counter: Counter, name) -> list:
     return sorted(counter.items(), key=lambda item: (-item[1], name(item[0]).lower()))
 
 
+def _tied_first(counter: Counter) -> int:
+    """How many share first place (most plays); 0 when nothing was played."""
+    top = max(counter.values(), default=0)
+    return sum(n == top for n in counter.values()) if top else 0
+
+
 def _month_range(year: int, month: int) -> tuple[date, date]:
     return date(year, month, 1), date(year, month, calendar.monthrange(year, month)[1])
 
@@ -115,6 +121,10 @@ class TopArtistsProjection:
     def count(self, year: int, month: int) -> int:
         """How many different artists you listened to that month."""
         return len(self._total(*_month_range(year, month)))
+
+    def tied_first(self, start: date, end: date) -> int:
+        """How many artists share first place from `start` up to and including `end`."""
+        return _tied_first(self._total(start, end))
 
     def _total(self, start: date, end: date) -> Counter:
         total: Counter = Counter()
@@ -152,6 +162,15 @@ class TopTracksProjection:
 
     def between(self, start: date, end: date, limit: int = 10) -> list[TrackCount]:
         """From `start` up to and including `end` (local days); most plays first."""
+        totals = self._totals(start, end)
+        ranked = _ranked(Counter({t: e.plays for t, e in totals.items()}), name=lambda t: totals[t].track)
+        return [totals[track_id] for track_id, _ in ranked[:limit]]
+
+    def tied_first(self, start: date, end: date) -> int:
+        """How many tracks share first place from `start` up to and including `end`."""
+        return _tied_first(Counter({t: e.plays for t, e in self._totals(start, end).items()}))
+
+    def _totals(self, start: date, end: date) -> dict[str, TrackCount]:
         totals: dict[str, TrackCount] = {}
         for day in sorted(d for d in self._days if start <= d <= end):
             for track_id, (plays, minutes) in self._days[day].items():
@@ -159,8 +178,7 @@ class TopTracksProjection:
                 entry = totals.setdefault(track_id, TrackCount(track_id, track, list(artists)))
                 entry.plays += plays
                 entry.minutes += minutes
-        ranked = _ranked(Counter({t: e.plays for t, e in totals.items()}), name=lambda t: totals[t].track)
-        return [totals[track_id] for track_id, _ in ranked[:limit]]
+        return totals
 
     def top(self, year: int, month: int, limit: int = 10) -> list[TrackCount]:
         return self.between(*_month_range(year, month), limit=limit)

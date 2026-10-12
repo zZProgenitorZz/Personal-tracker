@@ -110,7 +110,8 @@ TOOL_DEFINITIONS = [
                      "Optionally only one status. For past activity use history_between.",
           {"domain": DOMAIN, "status": _nullable({"type": "string"})}),
     _tool("listening_stats", "Listening between two dates (inclusive): minutes, days listened, top artists and "
-                             "top tracks.", {"from": DATE, "to": DATE, "limit": _nullable(LIMIT)}),
+                             "top tracks. plays = total plays; top_track_tie / top_artist_tie = how many share "
+                             "first place (only when tied).", {"from": DATE, "to": DATE, "limit": _nullable(LIMIT)}),
     _tool("plans_between", "Every planned time between two dates (inclusive), repeats worked out.",
           {"from": DATE, "to": DATE}),
     _tool("history_between", "What was read and watched between two dates (inclusive): chapters, status changes, "
@@ -256,10 +257,17 @@ def listening_stats(args: dict, data: TrackerData) -> dict:
     start, end = _period(args)
     limit = _limit(args)
     days = {d: m for d, m in data.listening.minutes_per_day().items() if start <= d <= end}
-    return {"minutes": round(sum(days.values())), "days_listened": sum(1 for m in days.values() if m > 0),
-            "top_artists": [{"artist": a, "plays": n} for a, n in data.top_artists.between(start, end, limit=limit)],
-            "top_tracks": [{"track": t.track, "artists": t.artists, "plays": t.plays, "minutes": round(t.minutes, 1)}
-                           for t in data.top_tracks.between(start, end, limit=limit)]}
+    stats = {"minutes": round(sum(days.values())), "days_listened": sum(1 for m in days.values() if m > 0),
+             "plays": sum(n for d, n in data.listening.plays_per_day().items() if start <= d <= end),
+             "top_artists": [{"artist": a, "plays": n} for a, n in data.top_artists.between(start, end, limit=limit)],
+             "top_tracks": [{"track": t.track, "artists": t.artists, "plays": t.plays, "minutes": round(t.minutes, 1)}
+                            for t in data.top_tracks.between(start, end, limit=limit)]}
+    # Over the whole period, not only within limit: so Sunny never names one of a tie as "the" top.
+    for key, tied in (("top_track_tie", data.top_tracks.tied_first(start, end)),
+                      ("top_artist_tie", data.top_artists.tied_first(start, end))):
+        if tied >= 2:
+            stats[key] = tied
+    return stats
 
 
 def plans_between(args: dict, data: TrackerData) -> list[dict]:
