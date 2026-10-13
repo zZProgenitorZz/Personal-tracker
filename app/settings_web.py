@@ -22,7 +22,10 @@ def create_settings_router(db_path: str, trackers: list[Tracker], backups: Backu
     def settings(request: Request):
         location = db_path if db_path == ":memory:" else str(Path(db_path).resolve())
         counts = [(t, t.summary()) for t in trackers]
-        return render(request, "settings.html", db_path=location, counts=counts, **backup_context())
+        auth = getattr(request.app.state, "auth", None)
+        return render(request, "settings.html", db_path=location, counts=counts, **backup_context(),
+                      extra_hosts=auth.extra_hosts if auth else [],
+                      signed_in=getattr(request.state, "signed_in", False))
 
     # ---- Starting automatically when you sign in to Windows ----
 

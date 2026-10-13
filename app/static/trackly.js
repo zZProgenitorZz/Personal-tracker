@@ -500,6 +500,11 @@ async function askSunny(text, retry) {
       headers: { "HX-Request": "true" },  // a change: the CSRF check wants to see it comes from the page
       body: new URLSearchParams({ message: text, retry: retry ? "1" : "" }),
     });
+    if (response.status === 401) {  // signed out (through your phone): to the login page
+      finished = true;
+      location.href = response.headers.get("HX-Redirect") || "/login";
+      return;
+    }
     if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
     const reader = response.body.getReader();
     const decoder = new TextDecoder();

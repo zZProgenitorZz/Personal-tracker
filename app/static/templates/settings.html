@@ -54,6 +54,18 @@
     <div hx-get="/ui/autostart" hx-trigger="load" hx-swap="outerHTML"><div class="loading"></div></div>
   </section>
 
+  {% if extra_hosts %}
+  {# Only when PROGEN_EXTRA_HOSTS is set (your phone through Tailscale): there, sign-in is required. #}
+  <section class="panel spaced">
+    <div class="panel-head"><h2>Phone access</h2><span class="muted">Through Tailscale</span></div>
+    <p class="muted note">Also reachable as {{ extra_hosts|join(", ") }}, with a password.
+      On this computer no sign-in is needed.</p>
+    {% if signed_in %}
+    <button class="btn btn-ghost" type="button" hx-post="/logout" hx-swap="none">{{ ui.icon('log-out', 16) }}Log out</button>
+    {% endif %}
+  </section>
+  {% endif %}
+
   <section class="panel spaced">
     <div class="panel-head"><h2>Sunny</h2><span class="muted">Your assistant</span></div>
     <div hx-get="/ui/assistant/settings" hx-trigger="load" hx-swap="outerHTML"><div class="loading"></div></div>

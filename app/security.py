@@ -1,11 +1,14 @@
 """Protection against other websites: CSRF and DNS rebinding.
 
-Progen only runs on your own computer, but your browser can also send requests
-on behalf of a website you have open. So:
+Progen only listens on your own computer (127.0.0.1), but your browser can also send
+requests on behalf of a website you have open. So:
 
-1. Only the host names 127.0.0.1 and localhost (TrustedHostMiddleware). A
-   website can point its own name at 127.0.0.1 (DNS rebinding); then the
-   name doesn't match and Progen refuses everything, reading included.
+1. Only the host names 127.0.0.1 and localhost (TrustedHostMiddleware), plus the ones
+   you name in PROGEN_EXTRA_HOSTS (e.g. my-pc.tail1234.ts.net, when tailscale serve puts
+   Progen on your private Tailscale network for your phone). A website can point its own
+   name at 127.0.0.1 (DNS rebinding); then the name doesn't match and Progen refuses
+   everything, reading included. Through an extra host you always have to sign in
+   (app/auth.py); on this computer itself you don't.
 2. Every change (POST, PUT, PATCH, DELETE) has to prove that it comes from Progen
    itself or your own script, with something another website can't send along
    without permission (CORS), and Progen doesn't give that permission:
@@ -13,7 +16,8 @@ on behalf of a website you have open. So:
      - Content-Type: application/json   (the JSON API, scripts)
      - X-Progen-Shutdown       (Stop Progen)
 3. If the browser says the request comes from another site (Origin or
-   Sec-Fetch-Site), it is refused, even when 2 checks out.
+   Sec-Fetch-Site), it is refused, even when 2 checks out. An Origin of one of
+   the allowed hosts (an extra host too) is Progen itself.
 """
 from urllib.parse import urlsplit
 
@@ -21,6 +25,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from .auth import Auth, LoginMiddleware
 from .desktop import SHUTDOWN_HEADER
 
 ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
@@ -61,7 +66,10 @@ class CsrfMiddleware:
         await self.app(scope, receive, send)
 
 
-def protect(app, allowed_hosts: list[str] = ALLOWED_HOSTS) -> None:
-    """Puts both protections on the app. Order: first the host name, then CSRF."""
+def protect(app, allowed_hosts: list[str] = ALLOWED_HOSTS, auth: Auth | None = None) -> None:
+    """Puts the protections on the app. Order: first the host name, then signing in (only with
+    extra hosts), then CSRF. The last middleware added runs first."""
     app.add_middleware(CsrfMiddleware, allowed_hosts=allowed_hosts)
+    if auth is not None and auth.enabled:
+        app.add_middleware(LoginMiddleware, auth=auth)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)

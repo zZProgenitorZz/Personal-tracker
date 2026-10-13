@@ -56,6 +56,18 @@ Write paths without quotes. A value that is already in the environment wins over
 
 The data of **all trackers** lives in one file, `data/tracker.db`. **This file is the only source of truth**: all read models are built from it at startup. Covers sit next to it in `data/covers/`. Neither is in git, so make backups (see below).
 
+### Using Progen on your phone (Tailscale)
+
+Mainly for logging chapters on the go. Progen keeps listening on `127.0.0.1` only; [Tailscale](https://tailscale.com) puts it on your **private** Tailscale network with an https address like `https://my-pc.tail1234.ts.net`. Nothing is opened to the internet.
+
+1. Install Tailscale on the PC and on the iPhone, and sign in to the same account on both.
+2. On the PC: `tailscale serve --bg 8000`. It shows your address (`https://<pc-name>.<tailnet>.ts.net`); `tailscale serve status` shows it again later.
+3. Put that host name in `.env`: `PROGEN_EXTRA_HOSTS=my-pc.tail1234.ts.net` (comma-separated for more than one, no wildcards).
+4. Set a password: `python -m app.auth set-password`. Only a scrypt hash and a random session secret go into `.env`, never the password. Restart Progen. With extra hosts but no password, Progen refuses to start and says why.
+5. On the iPhone, open the address in Safari, sign in, then Share › **Add to Home Screen**. Progen opens full screen, like an app.
+
+Through that address you always sign in (a session lasts 30 days; log out under Settings › Phone access); on the PC itself Progen stays one click without a password. Wrong passwords are rate limited. **The PC has to be on and Progen running**: turn on **Start with Windows** in Settings. Connecting Spotify still happens on the PC (its callback stays `http://127.0.0.1:8000/...`), and the API keys (Anthropic, TMDB, Spotify) never leave `.env` on the PC.
+
 ### Backups
 
 - **Making one:** Settings > *Back up now*, or `python -m app.backup` (also works when the app isn't running; `--list` shows the backups).
@@ -101,7 +113,9 @@ app/
   event_types.py       ALL_EVENT_TYPES: every domain's EVENT_TYPES in one list (main, backup, import)
   eventstore.py        SQLite event store (append, transaction, load_stream, load_type, load_all, subscribe)
   clock.py             the one clock: utc_now, local_now and today (tests patch app.clock)
-  security.py          protection against other websites (CSRF) and DNS rebinding
+  security.py          protection against other websites (CSRF) and DNS rebinding; allowed host names
+  auth.py              signing in through an extra host (your phone): password hash, session cookie, rate limit
+  auth_web.py          /login and /logout
   shutdown.py          POST /admin/shutdown: stopping cleanly, only from this computer (for stop.pyw)
   desktop.py           talking to the server from the desktop (launcher, icon, stop.pyw)
   autostart.py         Start with Windows (Run key in the registry), on/off in Settings
@@ -416,14 +430,15 @@ How it works (`app/assistant/`): `prompt.py` builds the system prompt (the fixed
 
 Progen only runs on your own computer (`127.0.0.1`), but your browser can also send requests on behalf of a website you have open. So (`app/security.py`, applies automatically to every route):
 
-- **Only `127.0.0.1` and `localhost` as an address.** A website that points its own name at 127.0.0.1 (*DNS rebinding*) gets `400` everywhere, reading included.
+- **Only `127.0.0.1` and `localhost` as an address**, plus the host names in `PROGEN_EXTRA_HOSTS` (your phone through Tailscale, see above). A website that points its own name at 127.0.0.1 (*DNS rebinding*) gets `400` everywhere, reading included.
+- **Through an extra host you sign in first** (`app/auth.py`): a scrypt password hash in `.env`, a signed session cookie (HttpOnly, SameSite=Lax, Secure over https, 30 days), rate limiting on wrong passwords. `X-Forwarded-Proto` from `tailscale serve` is only believed from 127.0.0.1, and a request that came through a proxy always needs the login, even when it claims to be `localhost`.
 - **Changes (POST, PUT, PATCH, DELETE) must show that they come from Progen or your own script**, with something another website can't send along without permission (CORS), and Progen doesn't give that:
   - `HX-Request: true`: the web page itself (htmx always sends this);
   - `Content-Type: application/json`: the JSON API and scripts (also for a `DELETE` without a body);
   - `X-Progen-Shutdown: 1`: Stop Progen.
 - **If the browser says a request comes from another site** (`Origin` or `Sec-Fetch-Site: cross-site`), it is refused, even with the right header.
 - Reading (`GET`) is always allowed; another website can't read the answers anyway (same-origin policy).
-- If Progen is ever reachable outside your own computer (see Roadmap 6), signing in is needed on top of this.
+- Progen is never opened to the internet; for your phone it goes through your private Tailscale network.
 
 ---
 
@@ -468,7 +483,8 @@ Manual entry first; automatic importing comes later (see item 5).
 
 ### 6. Security and hosting
 
-- [ ] Add an API key or password before the app becomes reachable outside the home network.
+- [x] A password before the app is reachable from another device: sign-in through Tailscale (`PROGEN_EXTRA_HOSTS`, see [Using Progen on your phone](#using-progen-on-your-phone-tailscale)).
+- [ ] Reachable without Tailscale or with the PC off: not planned for now (that needs real hosting).
 - [ ] Choose a place to run it (a Raspberry Pi at home, or a small VPS).
 - [x] Backups of `data/tracker.db` and covers, with restoring (Settings).
 

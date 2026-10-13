@@ -127,7 +127,7 @@
     </div>
     <div class="series-actions">
       <form class="chapter-form" hx-post="{{ base }}/progress" hx-swap="none">
-        <input type="number" name="chapter" step="any" min="0" required
+        <input type="number" inputmode="decimal" name="chapter" step="any" min="0" required
                value="{{ e.current_chapter|chapter }}" aria-label="Set chapter for {{ e.title }}">
         <button class="btn-icon" title="Save chapter">{{ icon('check', 15) }}</button>
       </form>

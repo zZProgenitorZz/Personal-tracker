@@ -2236,3 +2236,39 @@ label.btn:focus-within { outline: 2px solid var(--purple-hi); outline-offset: 2p
   .cover-initials { font-size: 22px; }
   .series-card { gap: 12px; }
 }
+
+
+/* Sign in (only through an extra host, e.g. your phone through Tailscale) */
+.login-panel { max-width: 420px; justify-items: stretch; }
+.login-mark { border-radius: 14px; margin-bottom: 10px; }
+.login-form { display: grid; gap: 14px; margin-top: 18px; }
+.login-form .btn { min-height: 48px; justify-content: center; }
+.login-error { margin: 0; color: var(--rose); font-size: 14px; }
+
+/* ---- iPhone: the notch, the home bar and fingers ---- */
+/* viewport-fit=cover lets the page run under the notch and the home bar; these insets keep the
+   content out from under them. On a desktop every env(safe-area-inset-*) is 0. */
+.nav { padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+.container { padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+.sunny-head { padding-top: calc(22px + env(safe-area-inset-top)); }
+.sunny-form { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+
+@media (max-width: 760px) {
+  .nav { padding: calc(12px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); }
+  .container { padding: 28px max(16px, env(safe-area-inset-right)) calc(120px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  .nav-links { bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .toasts { bottom: calc(96px + env(safe-area-inset-bottom)); }
+  .sunny-fab { bottom: calc(96px + env(safe-area-inset-bottom)); right: max(16px, env(safe-area-inset-right)); }
+  .sunny-pop { top: calc(16px + env(safe-area-inset-top)); }
+
+  /* Touch targets of at least 44×44 (Apple's minimum), and 16px text in fields so iOS doesn't zoom in. */
+  .btn-plus { min-width: 60px; min-height: 44px; justify-content: center; padding: 0 16px 0 14px; font-size: 15px; }
+  .btn-icon, .btn-close, .card-menu summary { min-width: 44px; min-height: 44px; }
+  .btn-sm, .select { min-height: 44px; }
+  .input, .select, .chapter-form input { font-size: 16px; }
+  .chapter-form input { min-height: 44px; }
+  /* A narrow card: the chapter field and the status menu each get their own row, so a chapter like
+     1840.5 still fits. */
+  .series-actions { flex-wrap: wrap; }
+  .chapter-form, .series-actions .select { flex: 1 1 120px; }
+}

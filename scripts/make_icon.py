@@ -28,6 +28,10 @@ PNG_DIR = ROOT / "app" / "static" / "icons"
 SIZES = [16, 20, 24, 32, 40, 48, 64, 128, 256]
 FAVICON_SIZES = [32, 48, 64, 96]  # from icon-small.svg; see index.html
 PNG_SIZES = [192, 256, 512]  # from icon.svg; see manifest.json
+# The iPhone home screen icon: no transparency (iOS would make it black and round the corners
+# again), so the corners get the app's background colour; iOS rounds it itself.
+APPLE_SIZE = 180
+APPLE_BACKGROUND = (7, 6, 12)  # #07060c, the theme colour
 RENDER = 512
 
 BROWSERS = [
@@ -66,6 +70,12 @@ def rendered(work: Path, svg: Path) -> Image.Image:
         return png.convert("RGBA").resize((RENDER, RENDER), Image.Resampling.LANCZOS)
 
 
+def apple_icon(image: Image.Image) -> Image.Image:
+    flat = Image.new("RGB", image.size, APPLE_BACKGROUND)
+    flat.paste(image, mask=image.getchannel("A"))
+    return flat.resize((APPLE_SIZE, APPLE_SIZE), Image.Resampling.LANCZOS)
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         image, small = rendered(Path(tmp), SVG), rendered(Path(tmp), SMALL_SVG)
@@ -74,6 +84,7 @@ def main() -> None:
     for source, sizes in [(small, FAVICON_SIZES), (image, PNG_SIZES)]:
         for size in sizes:
             source.resize((size, size), Image.Resampling.LANCZOS).save(PNG_DIR / f"icon-{size}.png", optimize=True)
+    apple_icon(image).save(PNG_DIR / f"icon-{APPLE_SIZE}.png", optimize=True)
     print(f"Wrote {ICO.relative_to(ROOT)} ({', '.join(map(str, SIZES))} px)")
     print(f"Wrote {PNG_DIR.relative_to(ROOT)}/icon-*.png: favicons {FAVICON_SIZES} from {SMALL_SVG.name}, "
           f"{PNG_SIZES} from {SVG.name}")

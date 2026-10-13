@@ -106,6 +106,7 @@ ICONS = {
              '<circle cx="9.7" cy="15.3" r="1.3" fill="currentColor" stroke="none"/>'
              '<circle cx="14.3" cy="15.3" r="1.3" fill="currentColor" stroke="none"/>',
     "send": '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
+    "log-out": '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
     "alert":'<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
 }
 templates.env.globals["ICONS"] = ICONS

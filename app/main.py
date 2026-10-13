@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import os
 import shutil
 import tempfile
 import weakref
@@ -16,6 +18,8 @@ from .assistant.commands import AssistantCommandHandler
 from .assistant.tools import TrackerData
 from .assistant.session import Sunny
 from .assistant.web import create_assistant_router
+from .auth import Auth
+from .auth_web import create_login_router
 from .autostart import Autostart, launcher_command
 from .backup import Backups, default_backup_dir
 from .covers import CoverStore
@@ -52,6 +56,8 @@ from .web import STATIC, Tracker, create_home_router, render
 from .wrapped.projections import WrappedProjection
 from .wrapped.web import create_wrapped_web_router, wrapped_teaser
 
+log = logging.getLogger("progen")
+
 # Settings such as GOOGLE_BOOKS_API_KEY. Not in git (.gitignore).
 ENV_FILE = Path(__file__).parent.parent / ".env"
 
@@ -67,6 +73,10 @@ def create_app(
     their own folder and a fake http_client, so nothing goes out.
     Settings from env_file only apply when they aren't already in the environment."""
     load_dotenv(env_file, override=False)
+    # Extra host names (your phone through Tailscale) need a password; without one Progen won't start.
+    auth = Auth.from_environment(os.environ)
+    if auth.enabled:
+        log.warning("Also reachable as %s (sign-in required there)", ", ".join(auth.extra_hosts))
     store = EventStore(db_path, ALL_EVENT_TYPES)
     if db_path == ":memory:":
         # Tests: covers and backups in a temporary folder, never in data/ or your OneDrive.
@@ -178,6 +188,7 @@ def create_app(
     app.include_router(create_home_router(trackers, wrapped=lambda: wrapped_teaser(wrapped)))
     app.include_router(create_settings_router(db_path, trackers, backups))
     app.include_router(create_shutdown_router())
+    app.include_router(create_login_router(auth))
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     app.mount("/covers", StaticFiles(directory=covers.directory), name="covers")
 
@@ -191,9 +202,11 @@ def create_app(
             response.headers.setdefault("Cache-Control", "no-cache")
         return response
 
-    # Only 127.0.0.1/localhost, and no changes from other websites (see app/security.py).
-    # Tests talk to the app as "testserver".
-    protect(app, ALLOWED_HOSTS + ["testserver"] if scratch else ALLOWED_HOSTS)
+    # Only 127.0.0.1/localhost (plus PROGEN_EXTRA_HOSTS, with sign-in), and no changes from other
+    # websites (see app/security.py). Tests talk to the app as "testserver".
+    hosts = ALLOWED_HOSTS + auth.extra_hosts + (["testserver"] if scratch else [])
+    protect(app, hosts, auth)
+    app.state.auth = auth
 
     @app.exception_handler(DomainError)
     def handle_domain_error(request: Request, exc: DomainError):
