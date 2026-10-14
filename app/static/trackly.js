@@ -458,7 +458,8 @@ function sunnyAtBottom() {
 function sunnyBusyState(busy) {
   sunnyBusy = busy;
   el("sunny-form")?.classList.toggle("is-busy", busy);
-  document.querySelectorAll(".sunny-mic").forEach((button) => { button.disabled = busy; });  // no talking over Sunny
+  // No recording while Sunny answers, but the button stays pressable: a press stops Sunny reading aloud.
+  document.querySelectorAll(".sunny-mic").forEach((button) => { button.setAttribute("aria-disabled", String(busy)); });
   wakeUpdate();
 }
 
@@ -499,6 +500,7 @@ async function askSunny(text, retry, voice = false) {
   el("sunny-log").append(bubble);
   scrollSunny();
   sunnyBusyState(true);
+  if (voice) voiceQueueStart();  // a spoken message: read the answer aloud sentence by sentence
   let finished = false;
   try {
     const response = await fetch("/ui/assistant/stream", {
@@ -523,7 +525,10 @@ async function askSunny(text, retry, voice = false) {
       while ((end = buffer.indexOf("\n")) >= 0) {
         const line = buffer.slice(0, end).trim();
         buffer = buffer.slice(end + 1);
-        if (line) finished = sunnyLine(JSON.parse(line), bubble) || finished;
+        if (!line) continue;
+        const message = JSON.parse(line);
+        if (voice && message.t === "text") voiceAppend(message.v);
+        finished = sunnyLine(message, bubble) || finished;
       }
     }
     if (!finished) throw new Error("the answer stopped halfway");
@@ -598,13 +603,13 @@ function showMic() {
 document.addEventListener("DOMContentLoaded", showMic);
 document.addEventListener("htmx:afterSwap", showMic);  // the panel body is loaded with htmx
 
-function micHint(text) {
+function micHint(text, ms = 2500) {
   const input = el("sunny-input");
   if (!input) return;
   input.dataset.idle ||= input.placeholder;
   input.placeholder = text;
   clearTimeout(micHint.timer);
-  if (text !== "Listening…") micHint.timer = setTimeout(() => { input.placeholder = input.dataset.idle; }, 2500);
+  if (text !== "Listening…") micHint.timer = setTimeout(() => { input.placeholder = input.dataset.idle; }, ms);
 }
 
 function micRecording(take, on) {
@@ -644,6 +649,7 @@ function micStart(button, pointerId, handsFree = false) {
       // Hands-free quietly ends the conversation; Safari may refuse to listen without a tap.
       voiceConversationEnd();
       if (event.error.includes("not-allowed")) micHint("Tap the mic to answer");
+      else if (event.error === "no-speech") micHint("Conversation ended", 2000);
       return;
     }
     const message = MIC_ERRORS[event.error];
@@ -669,8 +675,9 @@ function micStart(button, pointerId, handsFree = false) {
       if (micTake === take && !take.text) {
         micCancel();
         voiceConversationEnd();
+        micHint("Conversation ended", 2000);
       }
-    }, VOICE_SILENCE_MS);
+    }, voiceListenMs() || VOICE_LISTEN_DEFAULT);
   }
 }
 
@@ -711,8 +718,12 @@ function micSend(take) {
   micDone(take);
   if (!take.text) {
     take.input.value = take.before;
-    if (take.handsFree) voiceConversationEnd();
-    else micHint("Didn't catch that.");
+    if (take.handsFree) {
+      voiceConversationEnd();
+      micHint("Conversation ended", 2000);
+    } else {
+      micHint("Didn't catch that.");
+    }
     return;
   }
   if (voiceHandled(take.text)) {  // "thanks", or "yes"/"no" for an open card: not a message for Sunny
@@ -735,13 +746,13 @@ function micDone(take) {
 
 document.addEventListener("pointerdown", (event) => {
   const button = event.target.closest(".sunny-mic");
-  if (!button || !SpeechRecognizer || button.disabled) return;
+  if (!button || !SpeechRecognizer) return;
   event.preventDefault();  // no focus jump, no text selection
   voiceUnlock();  // iPhone: speech may only play after a tap
   const quiet = voiceConversation || voiceSpeaking;  // this tap stops Sunny talking or listening
   micPressed = true;
   voiceStop();
-  if (sunnyBusy || micTake) return;
+  if (sunnyBusy || micTake) return;  // while Sunny answers a press only stops it talking
   micBegin(button, event.pointerId, false, quiet);  // a short tap then just stops; no "Hold to talk" hint
 });
 document.addEventListener("pointerup", (event) => {
@@ -784,7 +795,9 @@ const SPEECH = window.speechSynthesis;
 const VOICE_RATE = 1.05;
 const VOICE_PITCH = 0.9;          // a little lower: drier
 const VOICE_RELISTEN_MS = 400;    // so the microphone doesn't hear the end of Sunny's own sentence
-const VOICE_SILENCE_MS = 7000;    // nothing said for this long: the conversation is over
+const VOICE_LISTEN_SETTING = "sunny-listen-ms";  // "After an answer, keep listening for": 0, 3000 or 5000
+const VOICE_LISTEN_DEFAULT = 3000;
+const VOICE_MIN_SENTENCE = 12;    // shorter pieces ("Hm.") wait for the next sentence, so it doesn't stutter
 const VOICE_BEST = /natural|online|enhanced|premium/i;  // Edge's and Apple's better voices
 const VOICE_SAME = "same";        // Dutch voice: "Same as English voice"
 const VOICE_MULTILINGUAL = /multilingual/i;  // e.g. Edge's Brian: reads Dutch fine too
@@ -845,33 +858,104 @@ function voicePlain(text) {
 }
 
 function voiceSay(text, then, language) {
-  // Reads `text` aloud, then calls `then` (unless voiceStop came in between).
-  const turn = ++voiceTurn;
-  const after = () => {
-    if (turn !== voiceTurn) return;
-    voiceSpeaking = false;
-    wakeUpdate();
-    then?.();
-  };
+  // Reads `text` aloud, then calls `then` (unless voiceStop came in between). The same queue as a streamed answer.
+  voiceQueueStart(language);
+  voiceAppend(text);
+  voiceFlush(then);
+}
+
+// The speech queue: one answer, read aloud as it streams. Whole sentences go to speechSynthesis (which
+// queues them itself) as soon as they are complete; `then` runs when the last one has been spoken and
+// nothing more can come. Until then voiceSpeaking stays true, so "Hey Sunny" doesn't hear Sunny itself.
+let voiceQueue = null;  // { turn, buffer, voice, lang, pending, spoke, closed, then }
+
+function voiceQueueStart(language) {
+  SPEECH?.cancel();
+  voiceQueue = { turn: ++voiceTurn, buffer: "", voice: undefined, lang: language, pending: 0, spoke: false,
+                 closed: false, then: null };
+  voiceSpeaking = true;
+  wakeUpdate();
+}
+
+function voiceAppend(delta) {
+  const queue = voiceQueue;
+  if (!queue || queue.turn !== voiceTurn || queue.closed) return;  // stopped: nothing is added any more
+  queue.buffer += delta;
+  let sentence;
+  while ((sentence = voiceSentence(queue))) voiceUtter(queue, sentence);
+}
+
+function voiceSentence(queue) {
+  // The first whole sentence in the buffer (long enough on its own), taken out of it; or "".
+  const ends = /[.!?…](?=\s)|\n/g;
+  let match;
+  while ((match = ends.exec(queue.buffer))) {
+    const cut = match.index + match[0].length;
+    if (voicePlain(queue.buffer.slice(0, cut)).length >= VOICE_MIN_SENTENCE) {
+      const sentence = queue.buffer.slice(0, cut);
+      queue.buffer = queue.buffer.slice(cut);
+      return sentence;
+    }
+  }
+  return "";
+}
+
+function voiceUtter(queue, text) {
   const plain = voicePlain(text);
-  if (!SPEECH || !plain) { after(); return; }
-  SPEECH.cancel();
+  if (!SPEECH || !plain) return;
+  if (queue.voice === undefined) {  // one voice per answer, chosen by its first sentence
+    queue.lang ||= voiceLanguage(plain);
+    queue.voice = voiceFor(queue.lang);
+  }
   const utterance = new SpeechSynthesisUtterance(plain);
-  const lang = language || voiceLanguage(plain);
-  const voice = voiceFor(lang);
-  if (voice) utterance.voice = voice;
-  utterance.lang = voice ? voice.lang : (lang === "nl" ? "nl-NL" : "en-US");
+  if (queue.voice) utterance.voice = queue.voice;
+  utterance.lang = queue.voice ? queue.voice.lang : (queue.lang === "nl" ? "nl-NL" : "en-US");
   utterance.rate = VOICE_RATE;
   utterance.pitch = VOICE_PITCH;
-  utterance.onend = after;
-  utterance.onerror = after;
-  voiceSpeaking = true;
-  wakeUpdate();  // paused while Sunny talks, or it would hear itself say "Sunny"
+  utterance.onend = utterance.onerror = () => {
+    if (queue.turn !== voiceTurn) return;
+    queue.pending--;
+    if (queue.closed && queue.pending === 0) voiceQueueDone(queue);
+  };
+  queue.pending++;
+  queue.spoke = true;
   SPEECH.speak(utterance);
+}
+
+function voiceFlush(then) {
+  // The stream is over: say what is left, then `then` once the last sentence has been spoken.
+  const queue = voiceQueue;
+  if (!queue || queue.turn !== voiceTurn) return;
+  queue.closed = true;
+  queue.then = then;
+  const rest = queue.buffer;
+  queue.buffer = "";
+  voiceUtter(queue, rest);
+  if (queue.pending === 0) voiceQueueDone(queue);
+}
+
+function voiceQueueDone(queue) {
+  if (voiceQueue !== queue) return;
+  voiceQueue = null;
+  voiceSpeaking = false;
+  wakeUpdate();
+  queue.then?.();
+}
+
+function voiceListenMs() {
+  // "After an answer, keep listening for": 0 (don't), 3000 or 5000 ms. Per device.
+  const stored = voiceLocal(VOICE_LISTEN_SETTING);
+  return stored === "" ? VOICE_LISTEN_DEFAULT : Number(stored) || 0;
+}
+
+function voiceAfterAnswer() {
+  // Keep the conversation going, or (setting "Don't") one question, one answer.
+  voiceListenMs() ? voiceListen() : voiceConversationEnd();
 }
 
 function voiceStop() {
   voiceTurn++;
+  voiceQueue = null;  // the rest of a streaming answer is dropped
   voiceSpeaking = false;
   voiceAwaitCard = false;
   SPEECH?.cancel();
@@ -911,11 +995,14 @@ function voiceReplyText(entries) {
 }
 
 function voiceTalkBack(entries) {
-  // After a spoken message: read the answer, then keep listening (not after a problem).
-  voiceConversation = true;
+  // The answer to a spoken message has streamed in: say what is left, then keep listening (or not, see
+  // Settings), never after a problem. Nothing was said while streaming (a problem, offline): read the entries.
+  const queue = voiceQueue;
+  if (!queue || queue.turn !== voiceTurn) return;  // stopped meanwhile: the mic, Escape, New chat
   const problem = entries.some((entry) => entry.classList.contains("sunny-problem"));
-  if (problem) voiceConversation = false;
-  voiceSay(voiceReplyText(entries), voiceListen);
+  if (problem || (!queue.spoke && !queue.buffer.trim())) queue.buffer = voiceReplyText(entries);
+  voiceConversation = !problem;
+  voiceFlush(problem ? voiceConversationEnd : voiceAfterAnswer);
 }
 
 function voiceOpenCard() {
@@ -970,7 +1057,7 @@ document.addEventListener("htmx:afterSettle", (event) => {
   if (!voiceAwaitCard || !/^\/ui\/assistant\/(confirm|cancel)\//.test(path)) return;
   voiceAwaitCard = false;
   const line = [...document.querySelectorAll("#sunny-log .sunny-bubble")].pop();
-  voiceSay(line ? line.textContent : "", voiceListen);
+  voiceSay(line ? line.textContent : "", voiceAfterAnswer);
 });
 
 document.addEventListener("input", (event) => {
@@ -992,6 +1079,7 @@ function voiceSettings() {
   if (!block) return;
   block.hidden = !SPEECH;
   if (!SPEECH) return;
+  el("sunny-listen").value = String(voiceListenMs());
   const voices = SPEECH.getVoices();
   for (const language of ["nl", "en"]) {
     const select = el(`sunny-voice-${language}`);
@@ -1005,6 +1093,7 @@ function voiceSettings() {
 document.addEventListener("change", (event) => {
   const select = event.target.closest("[data-voice-language]");
   if (select) voiceSave(`sunny-voice-${select.dataset.voiceLanguage}`, select.value);
+  if (event.target.id === "sunny-listen") voiceSave(VOICE_LISTEN_SETTING, event.target.value);
 });
 document.addEventListener("htmx:afterSwap", voiceSettings);
 SPEECH?.addEventListener?.("voiceschanged", voiceSettings);  // getVoices() is often empty at first

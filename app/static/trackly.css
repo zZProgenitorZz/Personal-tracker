@@ -1088,7 +1088,7 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
   -webkit-touch-callout: none;
 }
 .sunny-mic[hidden] { display: none; }
-.sunny-mic:disabled { opacity: .45; cursor: default; }
+.sunny-mic:disabled, .sunny-mic[aria-disabled="true"] { opacity: .45; cursor: default; }
 .sunny-form.is-recording .sunny-mic {
   color: #fff;
   background: rgba(139, 92, 246, .35);
@@ -1126,6 +1126,8 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
 .sunny-voices { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 12px; margin-top: 18px; }
 .sunny-voices[hidden] { display: none; }
 .sunny-voices .note { grid-column: 1 / -1; margin: 0; }
+.sunny-listen { grid-column: 1 / span 2; }
+@media (max-width: 760px) { .sunny-listen { grid-column: auto; } }
 @media (max-width: 760px) { .sunny-voices { grid-template-columns: minmax(0, 1fr); } }
 .sunny-wake-row { margin-top: 18px; }
 .sunny-wake-row[hidden] { display: none; }

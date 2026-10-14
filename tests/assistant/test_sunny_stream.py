@@ -209,3 +209,18 @@ def test_one_voice_for_both_languages_and_the_wake_word_switch(app_and_client):
     assert "is-wake-listening" in wake and "localStorage" not in wake  # stored through voiceSave
     css = client.get("/static/trackly.css").text
     assert ".sunny-fab.is-wake-listening::after" in css
+
+
+def test_the_answer_is_read_while_it_streams_and_the_listening_time_is_a_setting(app_and_client):
+    _, client = app_and_client
+    settings = client.get("/ui/assistant/settings").text
+    listen = settings.split('id="sunny-listen"', 1)[1].split("</select>", 1)[0]
+    assert '<option value="0">Don&#39;t</option>' in listen or "<option value=\"0\">Don't</option>" in listen
+    assert '<option value="3000" selected>3 seconds</option>' in listen and '<option value="5000">5 seconds</option>' in listen
+    js = client.get("/static/trackly.js").text
+    ask = js.split("async function askSunny", 1)[1].split("function sunnyLine", 1)[0]
+    assert "voiceQueueStart()" in ask and 'voice && message.t === "text") voiceAppend(message.v)' in ask
+    talk = js.split("// ---- Sunny: talking back ----", 1)[1].split("// ---- Sunny: wake word", 1)[0]
+    assert "VOICE_LISTEN_DEFAULT = 3000" in talk and "VOICE_SILENCE_MS" not in js
+    assert "function voiceAppend(" in talk and "function voiceFlush(" in talk and "SPEECH?.cancel()" in talk
+    assert 'micHint("Conversation ended", 2000)' in js

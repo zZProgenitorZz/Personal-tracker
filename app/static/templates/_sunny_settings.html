@@ -25,6 +25,12 @@
     <label class="field"><span>English voice</span>
       <select id="sunny-voice-en" class="select" data-voice-language="en"><option value="">Automatic</option></select></label>
     <button class="btn btn-ghost btn-sm" type="button" data-voice-test>{{ ui.icon('play', 14) }}Test</button>
+    <label class="field sunny-listen"><span>After an answer, keep listening for</span>
+      <select id="sunny-listen" class="select">
+        <option value="0">Don't</option>
+        <option value="3000" selected>3 seconds</option>
+        <option value="5000">5 seconds</option>
+      </select></label>
     <p class="muted note">When you talk to Sunny, the answer is read aloud with these. Saved on this device.</p>
   </div>
   {# The wake word: off by default, per device (localStorage). trackly.js shows it when the browser can listen. #}
