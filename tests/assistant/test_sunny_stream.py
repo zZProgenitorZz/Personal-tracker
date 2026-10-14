@@ -153,3 +153,42 @@ def test_hold_to_talk_is_a_hidden_mic_that_sends_through_the_same_form(app_and_c
     assert "touch-action: none" in css and "-webkit-touch-callout: none" in css and ".sunny-form.is-recording" in css
     identity = (pathlib.Path("app/assistant/identity/IDENTITY.md")).read_text(encoding="utf-8")
     assert "Exception: hold-to-talk uses the browser's own speech recognition" in identity
+
+
+# ---- Talking back ----
+
+def test_a_spoken_message_reaches_the_model_marked_as_voice_and_the_panel_shows_it_plain(app_and_client):
+    app, client = app_and_client
+    fake = FakeClient(response(text("Chapter one hundred and nineteen.")))
+    app.state.sunny.client = fake
+    reply = client.post("/ui/assistant/stream", data={"message": "where am I in Solo Leveling", "voice": "1"})
+    assert reply.status_code == 200
+    assert fake.calls[-1]["messages"][-1] == {"role": "user", "content": "(voice) where am I in Solo Leveling"}
+    panel = client.get("/ui/assistant").text
+    assert "where am I in Solo Leveling" in panel and "(voice)" not in panel
+    assert app.state.sunny.entries[0] == {"kind": "user", "text": "where am I in Solo Leveling"}
+
+
+def test_without_voice_nothing_changes(app_and_client):
+    app, client = app_and_client
+    fake = FakeClient(response(text("Chapter 119.")))
+    app.state.sunny.client = fake
+    say(client, "where am I in Solo Leveling")
+    assert fake.calls[-1]["messages"][-1] == {"role": "user", "content": "where am I in Solo Leveling"}
+
+
+def test_sunny_knows_how_to_answer_out_loud():
+    soul = pathlib.Path("app/assistant/identity/SOUL.md").read_text(encoding="utf-8")
+    assert soul.index("## When Progen doesn't get it") < soul.index("## When you're spoken to") < soul.index("## Frugal")
+    assert 'A message starting with "(voice)" was spoken' in soul and 'end with "Say yes or tap Confirm."' in soul
+
+
+def test_the_voice_settings_and_the_talking_back_block_are_there(app_and_client):
+    app, client = app_and_client
+    settings = client.get("/ui/assistant/settings").text
+    assert 'id="sunny-voices"' in settings and 'data-voice-language="nl"' in settings and "data-voice-test" in settings
+    js = client.get("/static/trackly.js").text
+    talk = js.split("// ---- Sunny: talking back ----", 1)[1].split("// ---- Sunny: notices", 1)[0]
+    assert "speechSynthesis" in talk and "voiceschanged" in talk and "localStorage" in talk
+    assert "requestSubmit" not in talk and "fetch(" not in talk  # no second way to send
+    assert "Deleting needs a click." in talk and '"sunny-delete"' in talk

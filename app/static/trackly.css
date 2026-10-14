@@ -1122,6 +1122,11 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
 .model-text b { font-size: 14.5px; font-weight: 600; }
 .model-price { color: var(--muted); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sunny-key { display: flex; align-items: center; gap: 6px; margin: 14px 0 0; }
+/* Settings › Sunny: the voices for reading answers aloud (per device) */
+.sunny-voices { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 12px; margin-top: 18px; }
+.sunny-voices[hidden] { display: none; }
+.sunny-voices .note { grid-column: 1 / -1; margin: 0; }
+@media (max-width: 760px) { .sunny-voices { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 760px) {
   .model-option { grid-template-columns: 18px minmax(0, 1fr); }
   .model-price { grid-column: 2; }

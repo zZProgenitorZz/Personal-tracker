@@ -98,20 +98,22 @@ class Sunny:
         is already in the conversation."""
         return next(value for kind, value in self.send_stream(text, retry) if kind == "entries")
 
-    def send_stream(self, text: str, retry: bool) -> Iterator[tuple[str, Any]]:
+    def send_stream(self, text: str, retry: bool, voice: bool = False) -> Iterator[tuple[str, Any]]:
         """The same as send(), as it comes: the agent's ("text", delta) and ("status", line) events,
-        and at the end ("entries", the new entries)."""
+        and at the end ("entries", the new entries). With voice the message was spoken and the answer
+        is read aloud: the model gets "(voice) ..." (see SOUL.md), the panel shows the plain text."""
         with self._lock:
             history = list(self.history)
+        said = f"(voice) {text}" if voice else text
         reply = None
-        for kind, value in Agent(self.client, self.data, self.settings.settings).ask_stream(text, history):
+        for kind, value in Agent(self.client, self.data, self.settings.settings).ask_stream(said, history):
             if kind == "reply":
                 reply = value
             else:
                 yield kind, value  # outside the lock: Confirm, Cancel and New chat keep working
-        yield "entries", self._remember(text, retry, reply)
+        yield "entries", self._remember(text, retry, reply, said)
 
-    def _remember(self, text: str, retry: bool, reply) -> list[dict]:
+    def _remember(self, text: str, retry: bool, reply, said: str) -> list[dict]:
         with self._lock:
             if not retry:
                 self.entries.append({"kind": "user", "text": text})
@@ -131,7 +133,7 @@ class Sunny:
                 new.append({"kind": "card", "proposal": proposal})
                 remembered += f"\n[Proposed, waiting for Progen's Confirm: {labels(reply.actions)}]"
             self.entries.extend(new)
-            self.history += [{"role": "user", "content": text}, {"role": "assistant", "content": remembered}]
+            self.history += [{"role": "user", "content": said}, {"role": "assistant", "content": remembered}]
             return new
 
     # ---- Confirm and Cancel ----

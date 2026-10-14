@@ -416,6 +416,7 @@ function openSunny() {
 }
 
 function closeSunny() {
+  voiceStop();  // see "talking back": stop reading aloud and listening
   const panel = el("sunny-panel");
   if (!panel.classList.contains("is-open")) return;
   panel.classList.remove("is-open");
@@ -478,7 +479,10 @@ document.addEventListener("submit", (event) => {
   bubble.textContent = text;
   el("sunny-log").append(bubble);
   scrollSunny();
-  askSunny(text, false);
+  const voice = micSpokenNext;  // set by micSend just before requestSubmit
+  micSpokenNext = false;
+  if (!voice) voiceConversationEnd();  // typing ends a voice conversation
+  askSunny(text, false, voice);
 });
 
 document.addEventListener("click", (event) => {
@@ -489,7 +493,7 @@ document.addEventListener("click", (event) => {
   el("sunny-input")?.focus();
 });
 
-async function askSunny(text, retry) {
+async function askSunny(text, retry, voice = false) {
   const bubble = fromTemplate("sunny-thinking");
   el("sunny-log").append(bubble);
   scrollSunny();
@@ -499,7 +503,7 @@ async function askSunny(text, retry) {
     const response = await fetch("/ui/assistant/stream", {
       method: "POST",
       headers: { "HX-Request": "true" },  // a change: the CSRF check wants to see it comes from the page
-      body: new URLSearchParams({ message: text, retry: retry ? "1" : "" }),
+      body: new URLSearchParams({ message: text, retry: retry ? "1" : "", voice: voice ? "1" : "" }),
     });
     if (response.status === 401) {  // signed out (through your phone): to the login page
       finished = true;
@@ -530,10 +534,12 @@ async function askSunny(text, retry) {
       again.dataset.sunnyFresh = "1";
       bubble.replaceWith(problem);
       scrollSunny();
+      finished = [problem];
     }
   } finally {
     sunnyBusyState(false);
   }
+  if (voice && Array.isArray(finished)) voiceTalkBack(finished);  // a spoken message gets a spoken answer
 }
 
 function sunnyLine(message, bubble) {
@@ -553,7 +559,7 @@ function sunnyLine(message, bubble) {
     bubble.replaceWith(...entries);
     entries.forEach((entry) => htmx.process(entry));
     scrollSunny();
-    return true;
+    return entries;  // the new entries, for reading them aloud after a spoken message
   }
   if (follow) scrollSunny();  // only when you were already at the bottom
   return false;
@@ -582,6 +588,7 @@ const MIC_ERRORS = {
   "network": "Speech recognition needs the internet.",
 };
 let micTake = null;  // the recording in progress
+let micSpokenNext = false;  // the next submit came from the microphone (see "talking back")
 
 function showMic() {
   document.querySelectorAll(".sunny-mic").forEach((button) => { button.hidden = !SpeechRecognizer; });
@@ -604,13 +611,15 @@ function micRecording(take, on) {
   if (on) micHint("Listening…");
 }
 
-function micStart(button, pointerId) {
+function micStart(button, pointerId, handsFree = false) {
+  // handsFree: in a voice conversation, after Sunny has spoken. No holding: the end of the sentence sends.
   const input = el("sunny-input");
   const recognition = new SpeechRecognizer();
   recognition.lang = navigator.language || "en-US";  // Dutch and English mixed; find_item copes with typos
   recognition.interimResults = true;                 // what is heard shows up live in the field
-  recognition.continuous = true;                     // a pause halfway doesn't stop it; letting go does
-  const take = { recognition, button, input, before: input.value, started: Date.now(), text: "", state: "recording" };
+  recognition.continuous = !handsFree;               // holding: a pause doesn't stop it, letting go does
+  const take = { recognition, button, input, before: input.value, started: Date.now(), text: "", state: "recording",
+                 handsFree };
   recognition.onresult = (event) => {
     if (take.state === "cancelled" || take.state === "failed") return;
     take.text = [...event.results].map((result) => result[0].transcript).join("").trim();
@@ -620,27 +629,46 @@ function micStart(button, pointerId) {
     if (take.state === "cancelled" || event.error === "aborted") return;
     take.state = "failed";
     input.value = take.before;
+    if (handsFree) {
+      // Hands-free quietly ends the conversation; Safari may refuse to listen without a tap.
+      voiceConversationEnd();
+      if (event.error.includes("not-allowed")) micHint("Tap the mic to answer");
+      return;
+    }
     const message = MIC_ERRORS[event.error];
     message ? showToast(message) : micHint("Didn't catch that.");
   };
   recognition.onend = () => micEnd(take);
   try {
-    button.setPointerCapture(pointerId);
+    if (!handsFree) button.setPointerCapture(pointerId);
     recognition.start();
   } catch {
-    showToast("Speech recognition didn't start. Try again.");
+    if (handsFree) {
+      voiceConversationEnd();
+      micHint("Tap the mic to answer");
+    } else {
+      showToast("Speech recognition didn't start. Try again.");
+    }
     return;
   }
   micTake = take;
   micRecording(take, true);
+  if (handsFree) {
+    take.silence = setTimeout(() => {  // nothing said for a while: the conversation is over
+      if (micTake === take && !take.text) {
+        micCancel();
+        voiceConversationEnd();
+      }
+    }, VOICE_SILENCE_MS);
+  }
 }
 
 function micRelease() {
   const take = micTake;
-  if (!take || !["recording", "ended"].includes(take.state)) return;
+  if (!take || take.handsFree || !["recording", "ended"].includes(take.state)) return;
   if (Date.now() - take.started < MIC_MIN_MS) {
     micCancel();
-    micHint("Hold to talk");
+    if (!take.quiet) micHint("Hold to talk");
   } else if (take.state === "ended") {
     micSend(take);  // the recognizer already stopped by itself while you held on
   } else {
@@ -659,8 +687,8 @@ function micCancel() {
 }
 
 function micEnd(take) {
-  if (take.state === "stopping") {
-    micSend(take);
+  if (take.state === "stopping" || (take.handsFree && take.state === "recording")) {
+    micSend(take);  // let go, or (hands-free) the end of the sentence
   } else if (take.state === "recording") {
     take.state = "ended";  // stopped by itself (Safari after a long pause): sent when you let go
   } else {
@@ -672,14 +700,21 @@ function micSend(take) {
   micDone(take);
   if (!take.text) {
     take.input.value = take.before;
-    micHint("Didn't catch that.");
+    if (take.handsFree) voiceConversationEnd();
+    else micHint("Didn't catch that.");
+    return;
+  }
+  if (voiceHandled(take.text)) {  // "thanks", or "yes"/"no" for an open card: not a message for Sunny
+    take.input.value = take.before;
     return;
   }
   take.input.value = take.text;
+  micSpokenNext = true;  // a spoken message: Sunny answers out loud and keeps listening
   el("sunny-form").requestSubmit();  // the one way to send: the submit handler above
 }
 
 function micDone(take) {
+  clearTimeout(take.silence);
   if (micTake !== take) return;
   micTake = null;
   micRecording(take, false);
@@ -688,32 +723,259 @@ function micDone(take) {
 
 document.addEventListener("pointerdown", (event) => {
   const button = event.target.closest(".sunny-mic");
-  if (!button || !SpeechRecognizer || sunnyBusy || micTake || button.disabled) return;
+  if (!button || !SpeechRecognizer || button.disabled) return;
   event.preventDefault();  // no focus jump, no text selection
+  voiceUnlock();  // iPhone: speech may only play after a tap
+  const quiet = voiceConversation || voiceSpeaking;  // this tap stops Sunny talking or listening
+  voiceStop();
+  if (sunnyBusy || micTake) return;
   micStart(button, event.pointerId);
+  if (micTake) micTake.quiet = quiet;  // a short tap then just stops; no "Hold to talk" hint
 });
 document.addEventListener("pointerup", (event) => {
   if (micTake && event.target.closest(".sunny-mic")) micRelease();
 });
 document.addEventListener("pointermove", (event) => {
   // With pointer capture there is no pointerleave while holding, so sliding off is checked here.
-  if (!micTake || !["recording", "ended"].includes(micTake.state)) return;
+  if (!micTake || micTake.handsFree || !["recording", "ended"].includes(micTake.state)) return;
   const box = micTake.button.getBoundingClientRect();
   const off = event.clientX < box.left - MIC_SLIDE_OFF || event.clientX > box.right + MIC_SLIDE_OFF
     || event.clientY < box.top - MIC_SLIDE_OFF || event.clientY > box.bottom + MIC_SLIDE_OFF;
   if (off) micCancel();
 });
-document.addEventListener("pointercancel", () => { if (micTake) micCancel(); });
+document.addEventListener("pointercancel", () => { if (micTake && !micTake.handsFree) micCancel(); });
 document.addEventListener("contextmenu", (event) => {
   if (event.target.closest(".sunny-mic")) event.preventDefault();  // a long press is not a menu
 });
 window.addEventListener("keydown", (event) => {
   // Before the panel's own Escape handler: Escape while recording only cancels the recording.
-  if (event.key === "Escape" && micTake) {
-    event.stopPropagation();
-    micCancel();
-  }
+  // It also stops Sunny reading aloud and ends a voice conversation.
+  if (event.key !== "Escape") return;
+  const recording = Boolean(micTake);
+  voiceStop();
+  if (recording) event.stopPropagation();
 }, true);
+
+
+// ---- Sunny: talking back ----
+// After a spoken message (never a typed one) the browser reads Sunny's answer aloud (speechSynthesis,
+// free and on the device), then listens again without holding: a voice conversation. It ends on
+// silence, a closing word ("thanks"), a tap on the mic, Escape, closing the panel or typing. A bare
+// "yes" or "no" for an open card clicks its Confirm or Cancel button; deleting always needs a click.
+// The voices are picked per language, or chosen in Settings › Sunny (stored on this device).
+
+const SPEECH = window.speechSynthesis;
+const VOICE_RATE = 1.05;
+const VOICE_PITCH = 0.9;          // a little lower: drier
+const VOICE_RELISTEN_MS = 400;    // so the microphone doesn't hear the end of Sunny's own sentence
+const VOICE_SILENCE_MS = 7000;    // nothing said for this long: the conversation is over
+const VOICE_BEST = /natural|online|enhanced|premium/i;  // Edge's and Apple's better voices
+const VOICE_TEST = { nl: "Hoi Progen. Dit is mijn stem.", en: "Hello, Progen. This is my voice." };
+const NL_WORDS = new Set("de het een je niet ik van dat en op te met voor maar ook nog wel er zijn heb geen wat hoe jij mijn naar dan al deze die hoofdstuk niks".split(" "));
+const EN_WORDS = new Set("the a an you not i of that and to it on for with this was no what how my your have just are chapter nothing all".split(" "));
+const CLOSERS = new Set(["stop", "klaar", "dat was het", "laat maar", "thanks", "thank you", "bedankt", "thats all"]);
+const YES = new Set(["ja", "ja doe maar", "doe maar", "yes", "yep", "confirm", "bevestig", "ok", "oké", "okay", "go"]);
+const NO = new Set(["nee", "no", "cancel", "annuleer", "laat maar zitten"]);
+let voiceConversation = false;  // listening again after Sunny has spoken
+let voiceSpeaking = false;
+let voiceTurn = 0;              // bumped by voiceStop, so a cancelled sentence doesn't start listening
+let voiceUnlocked = false;
+let voiceAwaitCard = false;     // a spoken Confirm/Cancel: read Sunny's short line when it arrives
+
+function voiceLocal(name) {
+  try { return localStorage.getItem(name) || ""; } catch { return ""; }
+}
+
+function voiceSave(name, value) {
+  try { value ? localStorage.setItem(name, value) : localStorage.removeItem(name); } catch { /* not stored */ }
+}
+
+function voiceWords(text) {
+  // "That's all!" -> "thats all": lower case, no punctuation, single spaces
+  return text.toLowerCase().replace(/['’]/g, "").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+}
+
+function voiceLanguage(text) {
+  const words = voiceWords(text).split(" ");
+  const nl = words.filter((w) => NL_WORDS.has(w)).length;
+  const en = words.filter((w) => EN_WORDS.has(w)).length;
+  return nl > en ? "nl" : "en";
+}
+
+function voiceFor(language) {
+  if (!SPEECH) return null;
+  const voices = SPEECH.getVoices();
+  const chosen = voiceLocal(`sunny-voice-${language}`);
+  if (chosen) {
+    const own = voices.find((v) => v.voiceURI === chosen);
+    if (own) return own;
+  }
+  const fitting = voices.filter((v) => v.lang.toLowerCase().startsWith(language));
+  return fitting.find((v) => VOICE_BEST.test(v.name)) || fitting[0] || null;
+}
+
+function voicePlain(text) {
+  // What a person would say: links become their text, no markdown, list markers or arrows.
+  return text.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/[*_`#]+/g, "")
+    .replace(/^\s*(?:[-•]|\d+[.)])\s+/gm, "").replace(/\s*[→·]\s*/g, ", ").replace(/\s+/g, " ").trim();
+}
+
+function voiceSay(text, then, language) {
+  // Reads `text` aloud, then calls `then` (unless voiceStop came in between).
+  const turn = ++voiceTurn;
+  const after = () => { if (turn === voiceTurn) { voiceSpeaking = false; then?.(); } };
+  const plain = voicePlain(text);
+  if (!SPEECH || !plain) { after(); return; }
+  SPEECH.cancel();
+  const utterance = new SpeechSynthesisUtterance(plain);
+  const lang = language || voiceLanguage(plain);
+  const voice = voiceFor(lang);
+  if (voice) utterance.voice = voice;
+  utterance.lang = voice ? voice.lang : (lang === "nl" ? "nl-NL" : "en-US");
+  utterance.rate = VOICE_RATE;
+  utterance.pitch = VOICE_PITCH;
+  utterance.onend = after;
+  utterance.onerror = after;
+  voiceSpeaking = true;
+  SPEECH.speak(utterance);
+}
+
+function voiceStop() {
+  voiceTurn++;
+  voiceSpeaking = false;
+  voiceAwaitCard = false;
+  SPEECH?.cancel();
+  voiceConversationEnd();
+  if (micTake) micCancel();
+}
+
+function voiceConversationEnd() {
+  voiceConversation = false;
+  if (micTake?.handsFree) micCancel();
+}
+
+function voiceUnlock() {
+  // iPhone: Safari only plays speech after a tap. An empty sentence during the first tap unlocks it.
+  if (voiceUnlocked || !SPEECH) return;
+  voiceUnlocked = true;
+  SPEECH.speak(new SpeechSynthesisUtterance(""));
+}
+
+function voiceListen() {
+  // Hands-free: the same recognizer as hold to talk, started without a tap.
+  const button = document.querySelector(".sunny-mic");
+  if (!voiceConversation || sunnyBusy || micTake || !button || button.hidden) return;
+  setTimeout(() => {
+    if (voiceConversation && !sunnyBusy && !micTake) micStart(button, null, true);
+  }, VOICE_RELISTEN_MS);
+}
+
+function voiceReplyText(entries) {
+  // What Sunny said in these entries: bubbles and problems, not buttons or cards.
+  return entries.map((entry) => {
+    if (entry.classList.contains("sunny-problem")) return entry.querySelector(".sunny-problem-body p")?.textContent;
+    if (entry.classList.contains("sunny-bubble")) return entry.textContent;
+    return "";
+  }).filter(Boolean).join(" ");
+}
+
+function voiceTalkBack(entries) {
+  // After a spoken message: read the answer, then keep listening (not after a problem).
+  voiceConversation = true;
+  const problem = entries.some((entry) => entry.classList.contains("sunny-problem"));
+  if (problem) voiceConversation = false;
+  voiceSay(voiceReplyText(entries), voiceListen);
+}
+
+function voiceOpenCard() {
+  // The open card of Sunny's last answer: a pending card with nothing from Progen after it.
+  const log = el("sunny-log");
+  const card = log ? [...log.querySelectorAll(".sunny-card.is-pending")].pop() : null;
+  if (!card) return null;
+  let next = card.nextElementSibling;
+  while (next) {
+    if (next.classList.contains("from-user")) return null;
+    next = next.nextElementSibling;
+  }
+  return card;
+}
+
+function voiceHandled(text) {
+  // Spoken words that are not a message for Sunny. True when handled here.
+  const words = voiceWords(text);
+  if (voiceConversation && CLOSERS.has(words)) {
+    voiceConversationEnd();
+    return true;
+  }
+  const card = voiceOpenCard();
+  if (!card || words.split(" ").length > 4 || !(YES.has(words) || NO.has(words))) return false;
+  const confirm = card.querySelector('[hx-post^="/ui/assistant/confirm/"]');
+  if (YES.has(words) && confirm?.dataset.confirmKind === "sunny-delete") {
+    voiceConversationEnd();
+    sunnyLocalLine("Deleting needs a click.");  // never delete by voice
+    return true;
+  }
+  const button = YES.has(words) ? confirm : card.querySelector('[hx-post^="/ui/assistant/cancel/"]');
+  if (!button) return false;
+  voiceConversation = true;
+  voiceAwaitCard = true;  // read Sunny's short line ("Done.") when the card has been swapped
+  button.click();         // the same htmx button: the same route and the same toast
+  return true;
+}
+
+function sunnyLocalLine(text) {
+  // A fixed line from Sunny, shown and read aloud here: no API call.
+  const bubble = document.createElement("div");
+  bubble.className = "sunny-msg from-sunny sunny-bubble";
+  bubble.textContent = text;
+  el("sunny-log").append(bubble);
+  scrollSunny();
+  voiceSay(text, null, "en");
+}
+
+document.addEventListener("htmx:afterSettle", (event) => {
+  // After a spoken Confirm or Cancel: read Sunny's short line, then keep listening.
+  const path = event.detail.pathInfo?.requestPath || "";
+  if (!voiceAwaitCard || !/^\/ui\/assistant\/(confirm|cancel)\//.test(path)) return;
+  voiceAwaitCard = false;
+  const line = [...document.querySelectorAll("#sunny-log .sunny-bubble")].pop();
+  voiceSay(line ? line.textContent : "", voiceListen);
+});
+
+document.addEventListener("input", (event) => {
+  if (event.isTrusted && event.target.id === "sunny-input") voiceConversationEnd();  // typing ends it
+});
+
+document.addEventListener("click", (event) => {
+  if (event.target.closest('[hx-post="/ui/assistant/reset"]')) voiceStop();  // New chat
+  const test = event.target.closest("[data-voice-test]");
+  if (test) {
+    voiceUnlock();
+    voiceSay(VOICE_TEST.nl, () => voiceSay(VOICE_TEST.en, null, "en"), "nl");
+  }
+});
+
+// Settings › Sunny: a Dutch and an English voice from this device (or Automatic), kept in localStorage.
+function voiceSettings() {
+  const block = el("sunny-voices");
+  if (!block) return;
+  block.hidden = !SPEECH;
+  if (!SPEECH) return;
+  const voices = SPEECH.getVoices();
+  for (const language of ["nl", "en"]) {
+    const select = el(`sunny-voice-${language}`);
+    const chosen = voiceLocal(`sunny-voice-${language}`);
+    const fitting = voices.filter((v) => v.lang.toLowerCase().startsWith(language));
+    select.replaceChildren(new Option("Automatic", ""),
+      ...fitting.map((v) => new Option(`${v.name} (${v.lang})`, v.voiceURI, false, v.voiceURI === chosen)));
+  }
+}
+document.addEventListener("change", (event) => {
+  const select = event.target.closest("[data-voice-language]");
+  if (select) voiceSave(`sunny-voice-${select.dataset.voiceLanguage}`, select.value);
+});
+document.addEventListener("htmx:afterSwap", voiceSettings);
+SPEECH?.addEventListener?.("voiceschanged", voiceSettings);  // getVoices() is often empty at first
 
 
 // ---- Sunny: notices on the button ----

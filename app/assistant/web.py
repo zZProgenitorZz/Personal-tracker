@@ -47,10 +47,11 @@ def create_assistant_router(sunny: Sunny) -> APIRouter:
         return body(request)
 
     @router.post("/stream")
-    def stream(message: str = Form(""), retry: str = Form("")):
+    def stream(message: str = Form(""), retry: str = Form(""), voice: str = Form("")):
         """A message from Progen, answered as it comes: one JSON line per event (NDJSON),
         {"t": "text"|"status", "v": ...}, and last {"t": "done", "html": the new entries, rendered as
-        everywhere}. With retry (the Try again button) the message is already in the conversation.
+        everywhere}. With retry (the Try again button) the message is already in the conversation;
+        with voice it was spoken (hold to talk) and the answer will be read aloud.
         A POST, so the CSRF check applies: the panel sends HX-Request."""
         text = message.strip()
 
@@ -60,7 +61,7 @@ def create_assistant_router(sunny: Sunny) -> APIRouter:
             elif not text:
                 yield _done([])
             else:
-                for kind, value in sunny.send_stream(text, retry=bool(retry)):
+                for kind, value in sunny.send_stream(text, retry=bool(retry), voice=voice == "1"):
                     yield _done(value) if kind == "entries" else _line({"t": kind, "v": value})
 
         return StreamingResponse(lines(), media_type="application/x-ndjson")

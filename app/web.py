@@ -105,6 +105,7 @@ ICONS = {
     "sunny": '<path d="M12 2c1.4 3.6 7 6.3 7 12.5a7 7 0 0 1-14 0c0-2.9 1.4-5 3-6.5.2 1.9 1 3 2.2 3.3C9.6 8 10.4 4.6 12 2Z"/>'
              '<circle cx="9.7" cy="15.3" r="1.3" fill="currentColor" stroke="none"/>'
              '<circle cx="14.3" cy="15.3" r="1.3" fill="currentColor" stroke="none"/>',
+    "play": '<polygon points="6 3 20 12 6 21 6 3"/>',
     "mic": '<path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/>',
     "send": '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
     "log-out": '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',

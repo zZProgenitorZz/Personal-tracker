@@ -17,4 +17,14 @@
     {{ ui.icon('check-circle' if key_found else 'alert', 14) }}
     {%- if key_found %}API key found{% else %}No API key in .env{% endif %} · prices per 1M tokens (input / output)
   </p>
+  {# Talking back: the voices of this device, filled in by trackly.js and kept in this browser only
+     (the voices differ per device). Hidden when the browser can't speak. #}
+  <div id="sunny-voices" class="sunny-voices" hidden>
+    <label class="field"><span>Dutch voice</span>
+      <select id="sunny-voice-nl" class="select" data-voice-language="nl"><option value="">Automatic</option></select></label>
+    <label class="field"><span>English voice</span>
+      <select id="sunny-voice-en" class="select" data-voice-language="en"><option value="">Automatic</option></select></label>
+    <button class="btn btn-ghost btn-sm" type="button" data-voice-test>{{ ui.icon('play', 14) }}Test</button>
+    <p class="muted note">When you talk to Sunny, the answer is read aloud with these. Saved on this device.</p>
+  </div>
 </div>
