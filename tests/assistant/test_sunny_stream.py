@@ -188,7 +188,24 @@ def test_the_voice_settings_and_the_talking_back_block_are_there(app_and_client)
     settings = client.get("/ui/assistant/settings").text
     assert 'id="sunny-voices"' in settings and 'data-voice-language="nl"' in settings and "data-voice-test" in settings
     js = client.get("/static/trackly.js").text
-    talk = js.split("// ---- Sunny: talking back ----", 1)[1].split("// ---- Sunny: notices", 1)[0]
+    talk = js.split("// ---- Sunny: talking back ----", 1)[1].split("// ---- Sunny: wake word", 1)[0]
     assert "speechSynthesis" in talk and "voiceschanged" in talk and "localStorage" in talk
     assert "requestSubmit" not in talk and "fetch(" not in talk  # no second way to send
     assert "Deleting needs a click." in talk and '"sunny-delete"' in talk
+
+
+def test_one_voice_for_both_languages_and_the_wake_word_switch(app_and_client):
+    _, client = app_and_client
+    settings = client.get("/ui/assistant/settings").text
+    row = settings.split('id="sunny-wake-row"', 1)[1].split("</label>", 1)[0]
+    assert " hidden>" in row and 'Listen for "Hey Sunny"' in row and 'id="sunny-wake"' in row
+    assert "Microsoft&#39;s speech service the whole time" in row or "Microsoft's speech service the whole time" in row
+    js = client.get("/static/trackly.js").text
+    assert '"Same as English voice", VOICE_SAME' in js and "VOICE_MULTILINGUAL = /multilingual/i" in js
+    wake = js.split("// ---- Sunny: wake word ----", 1)[1].split("// ---- Sunny: notices", 1)[0]
+    assert '"sunless"' in wake and '"hey"' in wake and "function wakeUpdate()" in wake
+    assert "requestSubmit()" in wake and "fetch(" not in wake  # the same way to send as hands-free
+    assert '"visibilitychange"' in wake and "voiceSpeaking" in wake and 'startsWith("#settings")' in wake
+    assert "is-wake-listening" in wake and "localStorage" not in wake  # stored through voiceSave
+    css = client.get("/static/trackly.css").text
+    assert ".sunny-fab.is-wake-listening::after" in css

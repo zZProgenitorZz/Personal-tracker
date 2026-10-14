@@ -459,6 +459,7 @@ function sunnyBusyState(busy) {
   sunnyBusy = busy;
   el("sunny-form")?.classList.toggle("is-busy", busy);
   document.querySelectorAll(".sunny-mic").forEach((button) => { button.disabled = busy; });  // no talking over Sunny
+  wakeUpdate();
 }
 
 function fromTemplate(id) {
@@ -589,6 +590,7 @@ const MIC_ERRORS = {
 };
 let micTake = null;  // the recording in progress
 let micSpokenNext = false;  // the next submit came from the microphone (see "talking back")
+let micPressed = false;     // the mic button is held down right now
 
 function showMic() {
   document.querySelectorAll(".sunny-mic").forEach((button) => { button.hidden = !SpeechRecognizer; });
@@ -609,6 +611,15 @@ function micRecording(take, on) {
   el("sunny-form")?.classList.toggle("is-recording", on);
   take.button.setAttribute("aria-pressed", String(on));
   if (on) micHint("Listening…");
+}
+
+function micBegin(button, pointerId, handsFree, quiet = false) {
+  // Only one recognizer at a time: the wake word listener has to be really stopped first.
+  wakeHalt(() => {
+    if (micTake || sunnyBusy || (!handsFree && !micPressed)) return;  // let go before it was free
+    micStart(button, pointerId, handsFree);
+    if (micTake) micTake.quiet = quiet;
+  });
 }
 
 function micStart(button, pointerId, handsFree = false) {
@@ -719,6 +730,7 @@ function micDone(take) {
   micTake = null;
   micRecording(take, false);
   if (take.input.placeholder === "Listening…") take.input.placeholder = take.input.dataset.idle;
+  wakeUpdate();
 }
 
 document.addEventListener("pointerdown", (event) => {
@@ -727,12 +739,13 @@ document.addEventListener("pointerdown", (event) => {
   event.preventDefault();  // no focus jump, no text selection
   voiceUnlock();  // iPhone: speech may only play after a tap
   const quiet = voiceConversation || voiceSpeaking;  // this tap stops Sunny talking or listening
+  micPressed = true;
   voiceStop();
   if (sunnyBusy || micTake) return;
-  micStart(button, event.pointerId);
-  if (micTake) micTake.quiet = quiet;  // a short tap then just stops; no "Hold to talk" hint
+  micBegin(button, event.pointerId, false, quiet);  // a short tap then just stops; no "Hold to talk" hint
 });
 document.addEventListener("pointerup", (event) => {
+  micPressed = false;
   if (micTake && event.target.closest(".sunny-mic")) micRelease();
 });
 document.addEventListener("pointermove", (event) => {
@@ -743,7 +756,10 @@ document.addEventListener("pointermove", (event) => {
     || event.clientY < box.top - MIC_SLIDE_OFF || event.clientY > box.bottom + MIC_SLIDE_OFF;
   if (off) micCancel();
 });
-document.addEventListener("pointercancel", () => { if (micTake && !micTake.handsFree) micCancel(); });
+document.addEventListener("pointercancel", () => {
+  micPressed = false;
+  if (micTake && !micTake.handsFree) micCancel();
+});
 document.addEventListener("contextmenu", (event) => {
   if (event.target.closest(".sunny-mic")) event.preventDefault();  // a long press is not a menu
 });
@@ -770,6 +786,8 @@ const VOICE_PITCH = 0.9;          // a little lower: drier
 const VOICE_RELISTEN_MS = 400;    // so the microphone doesn't hear the end of Sunny's own sentence
 const VOICE_SILENCE_MS = 7000;    // nothing said for this long: the conversation is over
 const VOICE_BEST = /natural|online|enhanced|premium/i;  // Edge's and Apple's better voices
+const VOICE_SAME = "same";        // Dutch voice: "Same as English voice"
+const VOICE_MULTILINGUAL = /multilingual/i;  // e.g. Edge's Brian: reads Dutch fine too
 const VOICE_TEST = { nl: "Hoi Progen. Dit is mijn stem.", en: "Hello, Progen. This is my voice." };
 const NL_WORDS = new Set("de het een je niet ik van dat en op te met voor maar ook nog wel er zijn heb geen wat hoe jij mijn naar dan al deze die hoofdstuk niks".split(" "));
 const EN_WORDS = new Set("the a an you not i of that and to it on for with this was no what how my your have just are chapter nothing all".split(" "));
@@ -804,6 +822,12 @@ function voiceLanguage(text) {
 
 function voiceFor(language) {
   if (!SPEECH) return null;
+  if (language === "nl") {
+    // One voice for both languages: chosen in Settings, or automatic when the English voice is multilingual.
+    const dutch = voiceLocal("sunny-voice-nl");
+    const english = dutch === VOICE_SAME || !dutch ? voiceFor("en") : null;
+    if (dutch === VOICE_SAME || (english && VOICE_MULTILINGUAL.test(english.name))) return english;
+  }
   const voices = SPEECH.getVoices();
   const chosen = voiceLocal(`sunny-voice-${language}`);
   if (chosen) {
@@ -823,7 +847,12 @@ function voicePlain(text) {
 function voiceSay(text, then, language) {
   // Reads `text` aloud, then calls `then` (unless voiceStop came in between).
   const turn = ++voiceTurn;
-  const after = () => { if (turn === voiceTurn) { voiceSpeaking = false; then?.(); } };
+  const after = () => {
+    if (turn !== voiceTurn) return;
+    voiceSpeaking = false;
+    wakeUpdate();
+    then?.();
+  };
   const plain = voicePlain(text);
   if (!SPEECH || !plain) { after(); return; }
   SPEECH.cancel();
@@ -837,6 +866,7 @@ function voiceSay(text, then, language) {
   utterance.onend = after;
   utterance.onerror = after;
   voiceSpeaking = true;
+  wakeUpdate();  // paused while Sunny talks, or it would hear itself say "Sunny"
   SPEECH.speak(utterance);
 }
 
@@ -852,6 +882,7 @@ function voiceStop() {
 function voiceConversationEnd() {
   voiceConversation = false;
   if (micTake?.handsFree) micCancel();
+  wakeUpdate();  // the conversation is over: listen for "Hey Sunny" again (if that's on)
 }
 
 function voiceUnlock() {
@@ -866,7 +897,7 @@ function voiceListen() {
   const button = document.querySelector(".sunny-mic");
   if (!voiceConversation || sunnyBusy || micTake || !button || button.hidden) return;
   setTimeout(() => {
-    if (voiceConversation && !sunnyBusy && !micTake) micStart(button, null, true);
+    if (voiceConversation && !sunnyBusy && !micTake) micBegin(button, null, true);
   }, VOICE_RELISTEN_MS);
 }
 
@@ -966,7 +997,8 @@ function voiceSettings() {
     const select = el(`sunny-voice-${language}`);
     const chosen = voiceLocal(`sunny-voice-${language}`);
     const fitting = voices.filter((v) => v.lang.toLowerCase().startsWith(language));
-    select.replaceChildren(new Option("Automatic", ""),
+    const same = language === "nl" ? [new Option("Same as English voice", VOICE_SAME, false, chosen === VOICE_SAME)] : [];
+    select.replaceChildren(new Option("Automatic", ""), ...same,
       ...fitting.map((v) => new Option(`${v.name} (${v.lang})`, v.voiceURI, false, v.voiceURI === chosen)));
   }
 }
@@ -976,6 +1008,191 @@ document.addEventListener("change", (event) => {
 });
 document.addEventListener("htmx:afterSwap", voiceSettings);
 SPEECH?.addEventListener?.("voiceschanged", voiceSettings);  // getVoices() is often empty at first
+
+
+// ---- Sunny: wake word ----
+// "Hey Sunny" or "Sunless" opens Sunny without the button (Settings › Sunny, off by default, per device).
+// A light listener of its own that only looks for the wake word: no input field, no bubbles. It runs
+// while Progen is open and visible and nothing else uses the microphone; wakeUpdate() decides, and
+// is called whenever that may change. The browser's speech service hears the audio the whole time.
+// After the wake word it hands over to the voice conversation above (hands-free, "yes", "thanks").
+
+const WAKE = {
+  names: ["sunny", "sonny", "sunnie"],                         // only as the first word, or after a greeting
+  greetings: ["hey", "hi", "hee", "he", "hé", "oké"],          // "hey sunny", "oké sunny", ...
+  anywhere: ["sunless", "sun less", "sunlis", "sunlit"],       // rare enough to count anywhere
+};
+const WAKE_SETTING = "sunny-wake";
+const WAKE_RESTART_MS = 300;
+const WAKE_MAX_BACKOFF_MS = 10000;
+const WAKE_TITLE = 'Listening for "Hey Sunny"';
+let wake = null;          // the running listener: { recognition, ended: [callbacks], woken }
+let wakeTimer = null;
+let wakeFailures = 0;
+let wakeEverStarted = false;
+
+function wakeOn() {
+  return voiceLocal(WAKE_SETTING) === "1";
+}
+
+function wakeMatch(transcript) {
+  // The text after the wake word, or null. Per sentence, so "sunny" can be "the first word".
+  for (const sentence of transcript.split(/[.!?]+/)) {
+    const words = voiceWords(sentence).split(" ").filter(Boolean);
+    let start = -1;
+    if (WAKE.names.includes(words[0])) start = 1;
+    else if (WAKE.greetings.includes(words[0]) && WAKE.names.includes(words[1])) start = 2;
+    for (const phrase of WAKE.anywhere) {
+      const parts = phrase.split(" ");
+      const at = words.findIndex((_, i) => parts.every((part, j) => words[i + j] === part));
+      if (at >= 0 && (start < 0 || at + parts.length < start)) start = at + parts.length;
+    }
+    if (start >= 0) return words.slice(start).join(" ");
+  }
+  return null;
+}
+
+function wakeShouldRun() {
+  return wakeOn() && Boolean(SpeechRecognizer) && Boolean(el("sunny-form")) && !micTake && !micPressed
+    && !voiceSpeaking && !voiceConversation && !voiceAwaitCard && !sunnyBusy
+    && document.visibilityState !== "hidden" && !location.hash.startsWith("#settings");
+}
+
+function wakeUpdate() {
+  if (wake?.woken) return;  // handling a wake word right now
+  if (!wakeShouldRun()) {
+    clearTimeout(wakeTimer);
+    wakeTimer = null;
+    if (wake) wakeHalt();
+    return;
+  }
+  if (wake || wakeTimer) return;
+  const delay = Math.min(WAKE_MAX_BACKOFF_MS, WAKE_RESTART_MS * 2 ** wakeFailures);
+  wakeTimer = setTimeout(() => { wakeTimer = null; wakeStart(); }, delay);
+}
+
+function wakeStart() {
+  if (wake || !wakeShouldRun()) return;
+  const recognition = new SpeechRecognizer();
+  recognition.lang = navigator.language || "en-US";
+  recognition.continuous = true;
+  recognition.interimResults = true;  // react to the first guess, not the end of the sentence
+  const listener = { recognition, ended: [], woken: null };
+  recognition.onstart = () => {
+    wakeEverStarted = true;
+    wakeSign(true);
+  };
+  recognition.onresult = (event) => {
+    if (listener.woken) {
+      // Woken: wait until the sentence with the wake word is finished, for a command in the same breath.
+      const result = event.results[listener.woken.index];
+      if (!result) return;
+      listener.woken.rest = wakeMatch(result[0].transcript) ?? listener.woken.rest;
+      if (result.isFinal) wakeAct(listener);
+      return;
+    }
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const rest = wakeMatch(event.results[i][0].transcript);
+      if (rest === null) continue;
+      wakeFailures = 0;
+      listener.woken = { index: i, rest };
+      openSunny();
+      if (event.results[i].isFinal) wakeAct(listener);
+      return;
+    }
+  };
+  recognition.onerror = (event) => {
+    if (event.error === "aborted" || event.error === "no-speech") return;  // a normal end
+    if (event.error.includes("not-allowed")) {
+      wakeSave(false);
+      if (wakeEverStarted) {
+        micHint("Tap the mic to talk");  // Safari: no restart without a tap
+      } else {
+        showToast("Microphone blocked. Allow it in the browser's site settings.");
+      }
+      return;
+    }
+    wakeFailures++;  // network, audio-capture, ...: try again later and later
+  };
+  recognition.onend = () => {
+    wakeSign(false);
+    if (wake === listener) wake = null;
+    listener.ended.splice(0).forEach((then) => then());
+    if (listener.woken && !listener.acted) wakeAct(listener);  // ended before the sentence was final
+    else wakeUpdate();
+  };
+  wake = listener;
+  try {
+    recognition.start();
+  } catch {
+    wake = null;
+    wakeFailures++;
+    wakeUpdate();
+  }
+}
+
+function wakeHalt(then) {
+  // Stops the listener; `then` runs once the browser has really let go of the microphone.
+  const listener = wake;
+  if (!listener) { then?.(); return; }
+  if (then) listener.ended.push(then);
+  if (!listener.stopping) {
+    listener.stopping = true;
+    listener.recognition.abort();
+  }
+}
+
+function wakeAct(listener) {
+  // Hand over to the voice conversation: the command said in the same breath, or "Yes?" and listen.
+  if (listener.acted) return;
+  listener.acted = true;
+  const rest = listener.woken.rest.trim();
+  listener.woken = null;
+  voiceConversation = true;
+  const go = () => {
+    const input = el("sunny-input");
+    if (!input || !el("sunny-form")) { voiceConversationEnd(); return; }
+    if (rest) {
+      if (voiceHandled(rest)) return;
+      input.value = rest;
+      micSpokenNext = true;  // the same way as hands-free: voice=1, the same submit handler
+      el("sunny-form").requestSubmit();
+    } else {
+      voiceSay("Yes?", voiceListen, "en");
+    }
+  };
+  wake === listener ? wakeHalt(go) : go();
+}
+
+function wakeSign(listening) {
+  // A small, calm ring on Sunny's button: you can always see the microphone is on.
+  const fab = el("sunny-fab");
+  if (!fab) return;
+  fab.classList.toggle("is-wake-listening", listening);
+  fab.title = listening ? WAKE_TITLE : "Ask Sunny";
+}
+
+function wakeSave(on) {
+  voiceSave(WAKE_SETTING, on ? "1" : "");
+  const toggle = el("sunny-wake");
+  if (toggle) toggle.checked = on;
+  wakeUpdate();
+}
+
+document.addEventListener("change", (event) => {
+  if (event.target.id === "sunny-wake") wakeSave(event.target.checked);
+});
+document.addEventListener("htmx:afterSwap", () => {
+  const toggle = el("sunny-wake");
+  if (toggle) {
+    toggle.checked = wakeOn();
+    el("sunny-wake-row").hidden = !SpeechRecognizer;
+  }
+  wakeUpdate();  // the panel body (with the form) may have just arrived
+});
+document.addEventListener("visibilitychange", wakeUpdate);  // hidden or minimised: not listening
+window.addEventListener("hashchange", wakeUpdate);           // paused on Settings
+document.addEventListener("DOMContentLoaded", wakeUpdate);
 
 
 // ---- Sunny: notices on the button ----

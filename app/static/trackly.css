@@ -1127,6 +1127,20 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
 .sunny-voices[hidden] { display: none; }
 .sunny-voices .note { grid-column: 1 / -1; margin: 0; }
 @media (max-width: 760px) { .sunny-voices { grid-template-columns: minmax(0, 1fr); } }
+.sunny-wake-row { margin-top: 18px; }
+.sunny-wake-row[hidden] { display: none; }
+/* Listening for "Hey Sunny": a thin, calm ring around Sunny's button, so the microphone is never on unseen. */
+.sunny-fab.is-wake-listening::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(45, 212, 191, .65);
+  pointer-events: none;
+  animation: sunny-wake 3.2s ease-in-out infinite;
+}
+@keyframes sunny-wake { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .sunny-fab.is-wake-listening::after { animation: none !important; } }
 @media (max-width: 760px) {
   .model-option { grid-template-columns: 18px minmax(0, 1fr); }
   .model-price { grid-column: 2; }

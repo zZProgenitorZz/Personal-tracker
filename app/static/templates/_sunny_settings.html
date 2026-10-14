@@ -27,4 +27,13 @@
     <button class="btn btn-ghost btn-sm" type="button" data-voice-test>{{ ui.icon('play', 14) }}Test</button>
     <p class="muted note">When you talk to Sunny, the answer is read aloud with these. Saved on this device.</p>
   </div>
+  {# The wake word: off by default, per device (localStorage). trackly.js shows it when the browser can listen. #}
+  <label id="sunny-wake-row" class="switch-row sunny-wake-row" hidden>
+    <span>
+      <b>Listen for "Hey Sunny"</b>
+      <span class="muted">While Progen is open, the microphone listens for "Hey Sunny" or "Sunless". In Edge the audio
+        goes to Microsoft's speech service the whole time; in Safari to Apple.</span>
+    </span>
+    <input id="sunny-wake" class="switch" type="checkbox" aria-label='Listen for "Hey Sunny"'>
+  </label>
 </div>
