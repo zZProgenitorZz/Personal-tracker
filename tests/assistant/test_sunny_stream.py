@@ -1,5 +1,6 @@
 """Sunny's answer as it comes: the agent's stream, the NDJSON route and the panel. Fake client, no API."""
 import datetime as dt
+import pathlib
 
 import anthropic
 import httpx2
@@ -132,3 +133,23 @@ def test_the_panel_sends_itself_and_shows_that_sunny_is_busy(app_and_client):
     assert "/ui/assistant/stream" in js and '"HX-Request": "true"' in js and ".textContent +=" in js
     css = client.get("/static/trackly.css").text
     assert "sunny-flicker" in css and "prefers-reduced-motion" in css and ".sunny-typing" not in css
+
+
+def test_hold_to_talk_is_a_hidden_mic_that_sends_through_the_same_form(app_and_client):
+    app, client = app_and_client
+    app.state.sunny.client = FakeClient()
+    body = client.get("/ui/assistant").text
+    form = body.split('id="sunny-form"', 1)[1].split("</form>", 1)[0]
+    mic = form.split('class="btn btn-ghost btn-sm sunny-mic"', 1)[1].split("</button>", 1)[0]
+    assert form.index("sunny-input") < form.index("sunny-mic") < form.index("sunny-send")  # between field and Send
+    assert 'type="button"' in mic and 'aria-label="Hold to talk"' in mic and 'aria-pressed="false"' in mic
+    assert " hidden>" in mic and '<svg class="icon"' in mic  # only shown when the browser can listen
+    js = client.get("/static/trackly.js").text
+    assert "window.SpeechRecognition || window.webkitSpeechRecognition" in js
+    talk = js.split("// ---- Sunny: hold to talk ----", 1)[1].split("// ---- Sunny: notices", 1)[0]
+    assert 'el("sunny-form").requestSubmit()' in talk and "fetch(" not in talk  # no second way to send
+    assert "setPointerCapture" in talk and "MIC_MIN_MS = 300" in talk and "alert(" not in talk
+    css = client.get("/static/trackly.css").text
+    assert "touch-action: none" in css and "-webkit-touch-callout: none" in css and ".sunny-form.is-recording" in css
+    identity = (pathlib.Path("app/assistant/identity/IDENTITY.md")).read_text(encoding="utf-8")
+    assert "Exception: hold-to-talk uses the browser's own speech recognition" in identity

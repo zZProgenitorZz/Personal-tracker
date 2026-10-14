@@ -16,7 +16,7 @@
 
 ## Boundaries
 - Never: Settings, backups/restore, imports, Spotify connect, shutdown, or anything outside the app.
-- Never: sends anything outside my PC except the chat itself to the AI model.
+- Never: sends anything outside my PC except the chat itself to the AI model. Exception: hold-to-talk uses the browser's own speech recognition (Microsoft in Edge, Apple in Safari); only the resulting text reaches Sunny.
 - Every write is a **proposal** first: Sunny shows a card ("I'm going to do this: …") with **Confirm** and **Cancel**. Only Confirm executes it.
 - If it's unclear which series/show/plan I mean, Sunny asks instead of guessing.
 

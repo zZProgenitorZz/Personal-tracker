@@ -27,6 +27,9 @@
 <form id="sunny-form" class="sunny-form" autocomplete="off">
   <input id="sunny-input" class="input" name="message" maxlength="2000"
          placeholder="Ask or log something…" aria-label="Message to Sunny" enterkeyhint="send">
+  {# Hold to talk: trackly.js shows it only when the browser has speech recognition. #}
+  <button class="btn btn-ghost btn-sm sunny-mic" type="button" aria-label="Hold to talk" title="Hold to talk"
+          aria-pressed="false" hidden>{{ ui.icon('mic', 18) }}</button>
   <button class="btn btn-primary btn-sm sunny-send" aria-label="Send">{{ ui.icon('send', 16) }}<span
           class="sunny-spinner" aria-hidden="true"></span></button>
 </form>

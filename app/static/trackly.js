@@ -457,6 +457,7 @@ function sunnyAtBottom() {
 function sunnyBusyState(busy) {
   sunnyBusy = busy;
   el("sunny-form")?.classList.toggle("is-busy", busy);
+  document.querySelectorAll(".sunny-mic").forEach((button) => { button.disabled = busy; });  // no talking over Sunny
 }
 
 function fromTemplate(id) {
@@ -563,6 +564,156 @@ document.addEventListener("htmx:afterSwap", (event) => {
     scrollSunny();
   }
 });
+
+
+// ---- Sunny: hold to talk ----
+// The browser's own speech recognition (Microsoft's service in Edge, Apple's in Safari): hold the mic,
+// speak, let go, and the text is sent as if typed (through the same submit handler, so busy check,
+// bubble and streaming are the same). Only that text reaches Sunny. Without support no button.
+// Escape, pointercancel or sliding off the button cancels; a tap shorter than MIC_MIN_MS sends nothing.
+
+const SpeechRecognizer = window.SpeechRecognition || window.webkitSpeechRecognition;
+const MIC_MIN_MS = 300;
+const MIC_SLIDE_OFF = 24;  // px outside the button that still counts as "on it"
+const MIC_ERRORS = {
+  "not-allowed": "Microphone blocked. Allow it in the browser's site settings.",
+  "service-not-allowed": "Microphone blocked. Allow it in the browser's site settings.",
+  "audio-capture": "No microphone found.",
+  "network": "Speech recognition needs the internet.",
+};
+let micTake = null;  // the recording in progress
+
+function showMic() {
+  document.querySelectorAll(".sunny-mic").forEach((button) => { button.hidden = !SpeechRecognizer; });
+}
+document.addEventListener("DOMContentLoaded", showMic);
+document.addEventListener("htmx:afterSwap", showMic);  // the panel body is loaded with htmx
+
+function micHint(text) {
+  const input = el("sunny-input");
+  if (!input) return;
+  input.dataset.idle ||= input.placeholder;
+  input.placeholder = text;
+  clearTimeout(micHint.timer);
+  if (text !== "Listening…") micHint.timer = setTimeout(() => { input.placeholder = input.dataset.idle; }, 2500);
+}
+
+function micRecording(take, on) {
+  el("sunny-form")?.classList.toggle("is-recording", on);
+  take.button.setAttribute("aria-pressed", String(on));
+  if (on) micHint("Listening…");
+}
+
+function micStart(button, pointerId) {
+  const input = el("sunny-input");
+  const recognition = new SpeechRecognizer();
+  recognition.lang = navigator.language || "en-US";  // Dutch and English mixed; find_item copes with typos
+  recognition.interimResults = true;                 // what is heard shows up live in the field
+  recognition.continuous = true;                     // a pause halfway doesn't stop it; letting go does
+  const take = { recognition, button, input, before: input.value, started: Date.now(), text: "", state: "recording" };
+  recognition.onresult = (event) => {
+    if (take.state === "cancelled" || take.state === "failed") return;
+    take.text = [...event.results].map((result) => result[0].transcript).join("").trim();
+    input.value = take.text;
+  };
+  recognition.onerror = (event) => {
+    if (take.state === "cancelled" || event.error === "aborted") return;
+    take.state = "failed";
+    input.value = take.before;
+    const message = MIC_ERRORS[event.error];
+    message ? showToast(message) : micHint("Didn't catch that.");
+  };
+  recognition.onend = () => micEnd(take);
+  try {
+    button.setPointerCapture(pointerId);
+    recognition.start();
+  } catch {
+    showToast("Speech recognition didn't start. Try again.");
+    return;
+  }
+  micTake = take;
+  micRecording(take, true);
+}
+
+function micRelease() {
+  const take = micTake;
+  if (!take || !["recording", "ended"].includes(take.state)) return;
+  if (Date.now() - take.started < MIC_MIN_MS) {
+    micCancel();
+    micHint("Hold to talk");
+  } else if (take.state === "ended") {
+    micSend(take);  // the recognizer already stopped by itself while you held on
+  } else {
+    take.state = "stopping";  // wait for the last result and "end", then send
+    take.recognition.stop();
+  }
+}
+
+function micCancel() {
+  const take = micTake;
+  if (!take) return;
+  take.state = "cancelled";
+  take.input.value = take.before;
+  take.recognition.abort();
+  micDone(take);
+}
+
+function micEnd(take) {
+  if (take.state === "stopping") {
+    micSend(take);
+  } else if (take.state === "recording") {
+    take.state = "ended";  // stopped by itself (Safari after a long pause): sent when you let go
+  } else {
+    micDone(take);  // cancelled or failed
+  }
+}
+
+function micSend(take) {
+  micDone(take);
+  if (!take.text) {
+    take.input.value = take.before;
+    micHint("Didn't catch that.");
+    return;
+  }
+  take.input.value = take.text;
+  el("sunny-form").requestSubmit();  // the one way to send: the submit handler above
+}
+
+function micDone(take) {
+  if (micTake !== take) return;
+  micTake = null;
+  micRecording(take, false);
+  if (take.input.placeholder === "Listening…") take.input.placeholder = take.input.dataset.idle;
+}
+
+document.addEventListener("pointerdown", (event) => {
+  const button = event.target.closest(".sunny-mic");
+  if (!button || !SpeechRecognizer || sunnyBusy || micTake || button.disabled) return;
+  event.preventDefault();  // no focus jump, no text selection
+  micStart(button, event.pointerId);
+});
+document.addEventListener("pointerup", (event) => {
+  if (micTake && event.target.closest(".sunny-mic")) micRelease();
+});
+document.addEventListener("pointermove", (event) => {
+  // With pointer capture there is no pointerleave while holding, so sliding off is checked here.
+  if (!micTake || !["recording", "ended"].includes(micTake.state)) return;
+  const box = micTake.button.getBoundingClientRect();
+  const off = event.clientX < box.left - MIC_SLIDE_OFF || event.clientX > box.right + MIC_SLIDE_OFF
+    || event.clientY < box.top - MIC_SLIDE_OFF || event.clientY > box.bottom + MIC_SLIDE_OFF;
+  if (off) micCancel();
+});
+document.addEventListener("pointercancel", () => { if (micTake) micCancel(); });
+document.addEventListener("contextmenu", (event) => {
+  if (event.target.closest(".sunny-mic")) event.preventDefault();  // a long press is not a menu
+});
+window.addEventListener("keydown", (event) => {
+  // Before the panel's own Escape handler: Escape while recording only cancels the recording.
+  if (event.key === "Escape" && micTake) {
+    event.stopPropagation();
+    micCancel();
+  }
+}, true);
 
 
 // ---- Sunny: notices on the button ----
