@@ -178,7 +178,7 @@ def test_a_passing_problem_does_not_stick_when_opening(app_and_client):
 def test_confirm_still_works_after_a_problem(app_and_client):
     app, client = app_and_client
     sid = client.get("/reading/library").json()[0]["series_id"]
-    app.state.sunny.client = FakeClient(response(tool("set_reading_progress", {"series_id": sid, "chapter": 120})),
+    app.state.sunny.client = FakeClient(response(tool("set_reading_progress", {"series_id": sid, "chapter": 200})),
                                         response(text("Confirm it.")))
     card = say(client, "120")
     proposal = card.split('id="sunny-card-', 1)[1].split('"', 1)[0]
@@ -186,4 +186,4 @@ def test_confirm_still_works_after_a_problem(app_and_client):
     say(client, "and 121?")
     confirmed = client.post(f"/ui/assistant/confirm/{proposal}")  # local: no API needed
     assert confirmed.headers["HX-Trigger"] == "reading-changed"
-    assert client.get("/reading/library").json()[0]["current_chapter"] == 120
+    assert client.get("/reading/library").json()[0]["current_chapter"] == 200

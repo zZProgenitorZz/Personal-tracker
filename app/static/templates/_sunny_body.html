@@ -1,13 +1,14 @@
 {% import "_macros.html" as ui %}
 {% import "_sunny_macros.html" as sunny %}
 {# The contents of Sunny's panel (#sunny-body in index.html): the conversation and the input field. #}
-{% if not available %}
-<div class="sunny-log">{{ sunny.bubble({"kind": "unavailable"}) }}</div>
-{% else %}
 <div id="sunny-log" class="sunny-log" aria-live="polite">
+  {% if not available %}{{ sunny.bubble({"kind": "unavailable"}) }}{% endif %}
   {% if banner %}{{ sunny.problem(banner, banner=true) }}{% endif %}
   {% if not entries %}
-  <p class="sunny-intro muted">Ask about your tracker, or tell me what to log. Nothing changes until you confirm.</p>
+  <p class="sunny-intro muted">Ask about your tracker, or tell me what to log.
+    {% if not available %}Without a key I can still log chapters, like "Solo Leveling 120".
+    {% elif quick_saves %}Chapters are saved right away (with Undo); other changes wait for your confirm.
+    {% else %}Nothing changes until you confirm.{% endif %}</p>
   {% endif %}
   {% for item in entries %}{{ sunny.entry(item) }}{% endfor %}
 </div>
@@ -33,4 +34,3 @@
   <button class="btn btn-primary btn-sm sunny-send" aria-label="Send">{{ ui.icon('send', 16) }}<span
           class="sunny-spinner" aria-hidden="true"></span></button>
 </form>
-{% endif %}

@@ -33,6 +33,21 @@
       </select></label>
     <p class="muted note">When you talk to Sunny, the answer is read aloud with these. Saved on this device.</p>
   </div>
+  {# Trust stage 2: chapter updates saved right away with Undo (a server setting: it decides what the server does). #}
+  <label class="switch-row sunny-switch">
+    <span>
+      <b>Save chapter updates right away (with Undo)</b>
+      <span class="muted">"Solo Leveling 120" is saved at once, without asking Claude when Sunny is sure. Statuses,
+        new titles, plans and deleting still wait for Confirm.</span>
+    </span>
+    <input class="switch" type="checkbox" name="enabled" value="on"{% if quick_saves %} checked{% endif %}
+           hx-post="/ui/assistant/quick-saves" hx-trigger="change" hx-swap="none" aria-label="Save chapter updates right away">
+  </label>
+  {# A short tone when the microphone starts and stops listening for a message; per device (localStorage). #}
+  <label id="sunny-sounds-row" class="switch-row sunny-switch" hidden>
+    <span><b>Sounds</b><span class="muted">A short tone when Sunny starts listening, and another when it sends.</span></span>
+    <input id="sunny-sounds" class="switch" type="checkbox" aria-label="Sounds when listening">
+  </label>
   {# The wake word: off by default, per device (localStorage). trackly.js shows it when the browser can listen. #}
   <label id="sunny-wake-row" class="switch-row sunny-wake-row" hidden>
     <span>
@@ -42,4 +57,19 @@
     </span>
     <input id="sunny-wake" class="switch" type="checkbox" aria-label='Listen for "Hey Sunny"'>
   </label>
+  {# Nicknames: how speech recognition heard a title, for the series it means (events, so in backups). #}
+  <div class="sunny-nicknames">
+    <p class="field-title"><b>Nicknames</b> <span class="muted">How Sunny learned to hear your titles.</span></p>
+    {% if nicknames %}
+    <ul>
+      {% for heard, title in nicknames %}
+      <li><span>"{{ heard }}" → {{ title }}</span>
+        <button class="btn-link" type="button" hx-post="/ui/assistant/aliases/remove" hx-vals='{{ {"heard": heard}|tojson }}'
+                hx-swap="none" aria-label="Forget the nickname {{ heard }}">Remove</button></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted note">None yet. When a misheard title is corrected, Sunny remembers it here.</p>
+    {% endif %}
+  </div>
 </div>

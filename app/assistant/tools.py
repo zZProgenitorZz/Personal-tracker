@@ -12,7 +12,6 @@ import datetime as dt
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from rapidfuzz import fuzz, process
 
 from ..planner.commands import AddPlan, EditPlan, MarkPlanDone, PlannerCommandHandler, RemovePlan, ReschedulePlan, SkipPlan
 from ..planner.parse import describe, describe_repeat, nice_day, parse
@@ -22,12 +21,18 @@ from ..reading.commands import ChangeStatus, LogProgress, ReadingCommandHandler,
 from ..reading.events import KIND_LABELS, STATUS_LABELS, Kind, Status
 from ..reading.projections import LibraryProjection, ReadingActivityProjection, ReadingHistoryProjection
 from ..listening.projections import ListeningActivityProjection, TopArtistsProjection, TopTracksProjection
+from .commands import AddAlias
 from .notices import visible
+from .quick import MAX_STEP, title_score
 from ..watching.commands import AddShow, ChangeShowStatus, RemoveShow, WatchingCommandHandler
 from ..watching.events import WATCH_KIND_LABELS, WATCH_STATUS_LABELS, WatchKind, WatchStatus
 from ..watching.projections import WatchHistoryProjection, WatchlistProjection
 
 PROPOSED = "proposed, waiting for Progen's confirmation"
+# A small chapter step forward, with quick saves on (Settings › Sunny): saved without a card.
+QUICK_SAVED = ("saved right away if this is your only change in this answer (Progen sees Undo); "
+               "otherwise it waits for Progen's Confirm with the rest")
+FIND_CUTOFF = 60
 MAX_ROWS = 40  # never the whole library in one answer
 MAX_PLANS = 100  # plans_between: at most this many occurrences (repeats expanded)
 
@@ -43,6 +48,7 @@ class PendingAction:
     label: str                  # "Solo Leveling · chapter 119 → 120"
     changed: str                # htmx event after Confirm, e.g. "reading-changed"
     delete_name: str | None = None  # when removing: the name, for the extra confirmation
+    quick: bool = False         # a small chapter step forward: may be saved right away, with Undo
 
 
 @dataclass
@@ -63,9 +69,13 @@ class TrackerData:
     now: Callable[[], dt.datetime]   # local time, like the planner
     # Notices put away with "Not today": (key, local date). Sunny's session shares this set.
     dismissed: set = field(default_factory=set)
+    aliases: Any = None              # AliasProjection: nicknames for series, by how they sound
+    assistant: Any = None            # AssistantCommandHandler, for remember_alias (Sunny sets it)
+    quick_saves: Callable[[], bool] = lambda: True  # the setting (Sunny sets it)
 
     def handler(self, domain: str):
-        return {"reading": self.reading, "watching": self.watching, "planner": self.planner}[domain]
+        return {"reading": self.reading, "watching": self.watching, "planner": self.planner,
+                "assistant": self.assistant}[domain]
 
 
 # ---- The schemas ----
@@ -143,6 +153,9 @@ TOOL_DEFINITIONS = [
     _write("plan_edit", "Change a plan's title and/or note (null keeps it).",
            {"plan_id": {"type": "string"}, "title": _nullable({"type": "string"}),
             "note": _nullable({"type": "string"})}),
+    _write("remember_alias", "Remember how speech recognition heard a title, as a nickname for that series "
+                             "(after Progen told you which one was meant).",
+           {"heard": {"type": "string"}, "series_id": {"type": "string"}}),
     _write("delete_item", "Delete a series, show or plan. Progen gets an extra confirmation with the name.",
            {"domain": {"type": "string", "enum": ["reading", "watching", "plan"]}, "id": {"type": "string"}}),
 ]
@@ -214,9 +227,17 @@ def find_item(args: dict, data: TrackerData) -> list[dict]:
                             "status": e.status.value}) for e in data.watchlist.all()]
     if domain in (None, "plan"):
         rows += [(p.title, _plan_row(p, today)) for p in data.agenda.all()]
-    matches = process.extract(args["query"], [title for title, _ in rows], scorer=fuzz.WRatio,
-                              processor=str.lower, limit=5, score_cutoff=60)
-    return [rows[index][1] for _, _, index in matches]
+    query = args["query"]
+    # A nickname first (it sounds the same), then how close each title is, typed or sounding alike.
+    nickname = data.aliases.series_for(query) if data.aliases is not None and domain in (None, "reading") else None
+    scored = []
+    for title, row in rows:
+        exact = nickname is not None and row["domain"] == "reading" and row["id"] == nickname
+        score = 100.0 if exact else title_score(query, title)
+        if score >= FIND_CUTOFF:
+            scored.append((score, title, row))
+    scored.sort(key=lambda item: (-item[0], item[1].lower()))
+    return [{**row, "score": round(score)} for score, _, row in scored[:5]]
 
 
 def _status(domain: str, value: str | None):
@@ -340,8 +361,10 @@ def set_reading_progress(args: dict, data: TrackerData) -> PendingAction:
         raise ToolError("A chapter can't be negative")
     if chapter == entry.current_chapter:
         raise ToolError(f"{entry.title} is already at chapter {chapter:g}; nothing to change")
+    quick = entry.current_chapter < chapter <= entry.current_chapter + MAX_STEP
     return PendingAction("reading", LogProgress(entry.series_id, chapter),
-                         f"{entry.title} · chapter {entry.current_chapter:g} → {chapter:g}", "reading-changed")
+                         f"{entry.title} · chapter {entry.current_chapter:g} → {chapter:g}", "reading-changed",
+                         quick=quick)
 
 
 def set_status(args: dict, data: TrackerData) -> PendingAction:
@@ -434,6 +457,16 @@ def plan_edit(args: dict, data: TrackerData) -> PendingAction:
                          f"{plan.title} · " + ", ".join(changes), "planner-changed")
 
 
+def remember_alias(args: dict, data: TrackerData) -> PendingAction:
+    entry, heard = _series(data, args["series_id"]), args["heard"].strip()
+    if not heard:
+        raise ToolError("'heard' is the title as it was heard, e.g. 'solo leaving'")
+    if data.aliases is not None and data.aliases.series_for(heard) == entry.series_id:
+        raise ToolError(f"'{heard}' is already a nickname for {entry.title}")
+    return PendingAction("assistant", AddAlias(heard, entry.series_id), f'Nickname · "{heard}" → {entry.title}',
+                         "assistant-changed")
+
+
 def delete_item(args: dict, data: TrackerData) -> PendingAction:
     domain, item_id = args["domain"], args["id"]
     if domain == "reading":
@@ -451,7 +484,7 @@ def delete_item(args: dict, data: TrackerData) -> PendingAction:
 READ_TOOLS = {f.__name__: f for f in (find_item, library, listening_stats, plans_between, history_between, notices,
                                       item_history)}
 WRITE_TOOLS = {f.__name__: f for f in (set_reading_progress, set_status, add_item, add_plan, plan_done, plan_skip,
-                                       plan_reschedule, plan_edit, delete_item)}
+                                       plan_reschedule, plan_edit, remember_alias, delete_item)}
 
 def run_tool(name: str, args: dict, data: TrackerData) -> tuple[Any, PendingAction | None]:
     """(result, None) for a read tool; (PROPOSED, PendingAction) for a write tool."""
@@ -459,7 +492,8 @@ def run_tool(name: str, args: dict, data: TrackerData) -> tuple[Any, PendingActi
         if name in READ_TOOLS:
             return READ_TOOLS[name](args, data), None
         if name in WRITE_TOOLS:
-            return PROPOSED, WRITE_TOOLS[name](args, data)
+            pending = WRITE_TOOLS[name](args, data)
+            return (QUICK_SAVED if pending.quick and data.quick_saves() else PROPOSED), pending
     except (KeyError, TypeError, ValueError) as exc:
         if isinstance(exc, ToolError):
             raise

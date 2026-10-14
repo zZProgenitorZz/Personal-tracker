@@ -86,7 +86,7 @@ def test_tools_are_strict_and_the_last_one_carries_the_cache_marker():
     names = [t["name"] for t in TOOL_DEFINITIONS]
     assert names == ["find_item", "library", "listening_stats", "plans_between", "history_between", "notices",
                      "item_history", "set_reading_progress", "set_status", "add_item", "add_plan", "plan_done",
-                     "plan_skip", "plan_reschedule", "plan_edit", "delete_item"]
+                     "plan_skip", "plan_reschedule", "plan_edit", "remember_alias", "delete_item"]
     assert names == list(READ_TOOLS) + list(WRITE_TOOLS)
     strict = {t["name"]: t["strict"] for t in TOOL_DEFINITIONS}
     assert all(strict[name] for name in WRITE_TOOLS) and not any(strict[name] for name in READ_TOOLS)
@@ -317,11 +317,11 @@ def test_a_read_tool_round_then_the_answer(data):
 
 def test_a_write_tool_becomes_a_pending_action(data):
     sid = series_id(data, "Solo Leveling")
-    client = FakeClient(response(tool("set_reading_progress", {"series_id": sid, "chapter": 120})),
-                        response(text("Chapter 120 it is. Confirm and it's done.")))
+    client = FakeClient(response(tool("set_reading_progress", {"series_id": sid, "chapter": 200})),
+                        response(text("Chapter 200 it is. Confirm and it's done.")))
     before = data.store.count()
-    reply = Agent(client, data).ask("Read 120 of Solo Leveling", [])
-    assert [a.label for a in reply.actions] == ["Solo Leveling · chapter 119 → 120"]
+    reply = Agent(client, data).ask("Read 200 of Solo Leveling", [])
+    assert [a.label for a in reply.actions] == ["Solo Leveling · chapter 119 → 200"]
     assert client.calls[1]["messages"][-1]["content"][0]["content"] == "proposed, waiting for Progen's confirmation"
     assert data.store.count() == before  # nothing saved until Confirm
 

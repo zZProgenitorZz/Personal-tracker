@@ -1129,7 +1129,15 @@ h2 { font: 600 17px/1.2 var(--font-display); letter-spacing: -.01em; }
 .sunny-listen { grid-column: 1 / span 2; }
 @media (max-width: 760px) { .sunny-listen { grid-column: auto; } }
 @media (max-width: 760px) { .sunny-voices { grid-template-columns: minmax(0, 1fr); } }
-.sunny-wake-row { margin-top: 18px; }
+.sunny-wake-row, .sunny-switch { margin-top: 18px; }
+.sunny-switch[hidden] { display: none; }
+.sunny-nicknames { margin-top: 18px; }
+.sunny-nicknames .field-title { margin: 0 0 8px; }
+.sunny-nicknames ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.sunny-nicknames li { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }
+/* Saved right away: the Undo button under Sunny's line */
+.sunny-undo { align-self: flex-start; margin-top: -4px; }
+.sunny-undo .btn { padding: 6px 12px; font-size: 13px; }
 .sunny-wake-row[hidden] { display: none; }
 /* Listening for "Hey Sunny": a thin, calm ring around Sunny's button, so the microphone is never on unseen. */
 .sunny-fab.is-wake-listening::after {

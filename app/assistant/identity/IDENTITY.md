@@ -22,5 +22,5 @@
 
 ## Trust stages (step T from the video)
 1. **Now:** everything that writes needs Confirm.
-2. **Later (my choice):** simple logs (e.g. chapter +1) without Confirm, with an Undo button.
+2. **Now, for chapter updates:** a small step forward (at most 50 chapters) is saved without Confirm, with an Undo button (Settings › Sunny, on by default). Everything else still needs Confirm.
 3. **Even later:** a "heartbeat", e.g. a morning summary of my day.

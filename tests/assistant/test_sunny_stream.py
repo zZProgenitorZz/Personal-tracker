@@ -80,12 +80,12 @@ def test_the_stream_route_sends_text_lines_and_last_the_rendered_answer(app_and_
 def test_a_proposal_card_is_in_the_done_html(app_and_client):
     app, client = app_and_client
     app.state.sunny.client = FakeClient(response(tool("set_reading_progress", {"series_id": solo_id(client),
-                                                                                "chapter": 120})),
+                                                                                "chapter": 200})),
                                         response(text("Confirm it.")))
     lines = stream_lines(client, "read 120")
     assert {"t": "status", "v": "Looking that up…"} in lines
     html = lines[-1]["html"]
-    assert "Solo Leveling · chapter 119 → 120" in html and 'hx-post="/ui/assistant/confirm/' in html
+    assert "Solo Leveling · chapter 119 → 200" in html and 'hx-post="/ui/assistant/confirm/' in html
 
 
 def test_an_api_error_ends_in_the_problem_balloon_without_the_half_answer(app_and_client):

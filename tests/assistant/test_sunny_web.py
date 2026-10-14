@@ -48,7 +48,8 @@ def test_button_and_panel_live_in_the_shell_and_hide_on_settings(app_and_client)
 def test_without_a_key_there_is_one_tidy_line(app_and_client):
     _, client = app_and_client  # in the tests there is never a real client
     body = client.get("/ui/assistant").text
-    assert "Add ANTHROPIC_API_KEY to .env to summon Sunny from the shadows" in body and "<form" not in body
+    assert "Add ANTHROPIC_API_KEY to .env to summon Sunny from the shadows" in body
+    assert '<form id="sunny-form"' in body  # chapters can still be logged without a key
     assert "ANTHROPIC_API_KEY" in say(client, "hi")
 
 
@@ -73,16 +74,16 @@ def test_a_question_gets_a_bubble_and_the_chat_stays(app_and_client):
 def test_a_proposal_is_a_card_and_nothing_is_saved_before_confirm(app_and_client):
     app, client = app_and_client
     sid = solo_id(client)
-    give_sunny(app, response(tool("set_reading_progress", {"series_id": sid, "chapter": 120})),
-               response(text("Chapter 120. Confirm it.")))
-    reply = say(client, "read 120 of solo leveling")
-    assert "Solo Leveling · chapter 119 → 120" in reply and "Confirm" in reply and "Cancel" in reply
+    give_sunny(app, response(tool("set_reading_progress", {"series_id": sid, "chapter": 200})),
+               response(text("Chapter 200. Confirm it.")))
+    reply = say(client, "read 200 of solo leveling")
+    assert "Solo Leveling · chapter 119 → 200" in reply and "Confirm" in reply and "Cancel" in reply
     assert client.get("/reading/library").json()[0]["current_chapter"] == 119
 
     confirmed = client.post(f"/ui/assistant/confirm/{card_id(reply)}")
     assert confirmed.headers["HX-Trigger"] == "reading-changed"
     assert "toast" in confirmed.text and "hx-swap-oob" in confirmed.text
-    assert client.get("/reading/library").json()[0]["current_chapter"] == 120
+    assert client.get("/reading/library").json()[0]["current_chapter"] == 200
     again = client.post(f"/ui/assistant/confirm/{card_id(reply)}")  # not twice
     assert "HX-Trigger" not in again.headers
 
@@ -123,7 +124,7 @@ def test_delete_asks_once_more_with_the_name(app_and_client):
 
 def test_a_failed_action_is_reported_not_crashed(app_and_client):
     app, client = app_and_client
-    give_sunny(app, response(tool("set_reading_progress", {"series_id": solo_id(client), "chapter": 120})),
+    give_sunny(app, response(tool("set_reading_progress", {"series_id": solo_id(client), "chapter": 200})),
                response(text("ok")))
     reply = say(client, "120")
     client.delete(f"/ui/reading/series/{solo_id(client)}")  # gone in the meantime
@@ -142,11 +143,11 @@ def test_new_chat_clears_everything(app_and_client):
 
 def test_the_history_sent_along_is_text_only_and_mentions_confirms(app_and_client):
     app, client = app_and_client
-    fake = give_sunny(app, response(tool("set_reading_progress", {"series_id": solo_id(client), "chapter": 120})),
+    fake = give_sunny(app, response(tool("set_reading_progress", {"series_id": solo_id(client), "chapter": 200})),
                       response(text("Confirm it.")), response(text("And 121 next time.")))
     reply = say(client, "120")
     client.post(f"/ui/assistant/confirm/{card_id(reply)}")
     say(client, "and the next one too")
     sent = fake.calls[-1]["messages"]
     assert all(isinstance(m["content"], str) for m in sent[:-1])  # no thinking blocks or tool output from earlier turns
-    assert any("Confirm" in m["content"] and "chapter 119 → 120" in m["content"] for m in sent)
+    assert any("Confirm" in m["content"] and "chapter 119 → 200" in m["content"] for m in sent)

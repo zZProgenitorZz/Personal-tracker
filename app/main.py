@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import clock
 from .assistant.commands import AssistantCommandHandler
+from .assistant.projections import AliasProjection
 from .assistant.tools import TrackerData
 from .assistant.session import Sunny
 from .assistant.web import create_assistant_router
@@ -107,8 +108,9 @@ def create_app(
     planner_activity = PlannerActivityProjection()
     # What happened when, removed items included: for Sunny's history tools.
     reading_history, watch_history = ReadingHistoryProjection(), WatchHistoryProjection()
+    aliases = AliasProjection()  # Sunny's nicknames for misheard titles
     projections = [library, activity, watchlist, watch_activity, recent_plays, listen_activity, top_artists, top_tracks,
-                   wrapped, agenda, planner_activity, reading_history, watch_history]
+                   wrapped, agenda, planner_activity, reading_history, watch_history, aliases]
 
     def rebuild() -> None:
         """Rebuilds the read models from all events (at startup and after a restore)."""
@@ -178,7 +180,7 @@ def create_app(
     sunny = Sunny(TrackerData(library=library, watchlist=watchlist, listening=listen_activity,
                               top_artists=top_artists, top_tracks=top_tracks, agenda=agenda,
                               reading_activity=activity, reading_history=reading_history, watch_history=watch_history, reading=handler,
-                              watching=watching, planner=planner, now=lambda: clock.local_now()),
+                              watching=watching, planner=planner, now=lambda: clock.local_now(), aliases=aliases),
                   AssistantCommandHandler(store), use_real_client=scratch is None)
     app.state.sunny = sunny
     app.include_router(create_assistant_router(sunny))

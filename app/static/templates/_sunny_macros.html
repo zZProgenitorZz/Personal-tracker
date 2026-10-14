@@ -6,6 +6,13 @@
 <div class="sunny-msg from-user">{{ entry.text }}</div>
 {% elif entry.kind == "sunny" %}
 <div class="sunny-msg from-sunny sunny-bubble{% if entry.error %} is-error{% endif %}">{{ entry.text }}</div>
+{% if entry.undo %}
+{# Saved right away: Undo sets it back, once, until the next log (trackly.js removes older buttons). #}
+<div class="sunny-undo" id="sunny-undo-{{ entry.undo }}">
+  <button class="btn btn-ghost btn-sm" type="button" hx-post="/ui/assistant/undo/{{ entry.undo }}" hx-target="#sunny-log"
+          hx-swap="beforeend" data-sunny-undo>{{ ui.icon('undo', 14) }}Undo</button>
+</div>
+{% endif %}
 {% elif entry.kind == "unavailable" %}
 <p class="sunny-unavailable">{{ ui.icon('sunny', 16) }}Add ANTHROPIC_API_KEY to .env to summon Sunny from the shadows</p>
 {% endif %}

@@ -482,9 +482,11 @@ document.addEventListener("submit", (event) => {
   el("sunny-log").append(bubble);
   scrollSunny();
   const voice = micSpokenNext;  // set by micSend just before requestSubmit
+  const alts = micAltsNext;    // and what else the recognizer heard
   micSpokenNext = false;
+  micAltsNext = [];
   if (!voice) voiceConversationEnd();  // typing ends a voice conversation
-  askSunny(text, false, voice);
+  askSunny(text, false, voice, alts);
 });
 
 document.addEventListener("click", (event) => {
@@ -495,7 +497,7 @@ document.addEventListener("click", (event) => {
   el("sunny-input")?.focus();
 });
 
-async function askSunny(text, retry, voice = false) {
+async function askSunny(text, retry, voice = false, alts = []) {
   const bubble = fromTemplate("sunny-thinking");
   el("sunny-log").append(bubble);
   scrollSunny();
@@ -506,7 +508,8 @@ async function askSunny(text, retry, voice = false) {
     const response = await fetch("/ui/assistant/stream", {
       method: "POST",
       headers: { "HX-Request": "true" },  // a change: the CSRF check wants to see it comes from the page
-      body: new URLSearchParams({ message: text, retry: retry ? "1" : "", voice: voice ? "1" : "" }),
+      body: new URLSearchParams({ message: text, retry: retry ? "1" : "", voice: voice ? "1" : "",
+                                  alts: alts.length ? JSON.stringify(alts) : "" }),
     });
     if (response.status === 401) {  // signed out (through your phone): to the login page
       finished = true;
@@ -562,7 +565,11 @@ function sunnyLine(message, bubble) {
     const holder = document.createElement("div");
     holder.innerHTML = message.html;
     const entries = [...holder.children];
+    if (holder.querySelector("[data-sunny-undo]")) {
+      document.querySelectorAll("#sunny-log .sunny-undo").forEach((old) => old.remove());  // Undo works once
+    }
     bubble.replaceWith(...entries);
+    (message.changed || []).forEach((name) => htmx.trigger(document.body, name));
     entries.forEach((entry) => htmx.process(entry));
     scrollSunny();
     return entries;  // the new entries, for reading them aloud after a spoken message
@@ -595,6 +602,8 @@ const MIC_ERRORS = {
 };
 let micTake = null;  // the recording in progress
 let micSpokenNext = false;  // the next submit came from the microphone (see "talking back")
+let micAltsNext = [];       // and what else the recognizer heard (at most MIC_ALTS)
+const MIC_ALTS = 2;
 let micPressed = false;     // the mic button is held down right now
 
 function showMic() {
@@ -615,7 +624,20 @@ function micHint(text, ms = 2500) {
 function micRecording(take, on) {
   el("sunny-form")?.classList.toggle("is-recording", on);
   take.button.setAttribute("aria-pressed", String(on));
-  if (on) micHint("Listening…");
+  if (on) {
+    micHint("Listening…");
+    micSound("start");
+  }
+}
+
+function micGuesses(results) {
+  // The recognizer's other guesses for the whole message: alternative k of every part, if it differs.
+  const guesses = [];
+  for (let k = 1; k <= MIC_ALTS; k++) {
+    const guess = [...results].map((result) => (result[k] || result[0]).transcript).join("").trim();
+    if (guess && !guesses.includes(guess)) guesses.push(guess);
+  }
+  return guesses;
 }
 
 function micBegin(button, pointerId, handsFree, quiet = false) {
@@ -633,12 +655,14 @@ function micStart(button, pointerId, handsFree = false) {
   const recognition = new SpeechRecognizer();
   recognition.lang = navigator.language || "en-US";  // Dutch and English mixed; find_item copes with typos
   recognition.interimResults = true;                 // what is heard shows up live in the field
+  recognition.maxAlternatives = 3;                   // titles are often misheard: the other guesses help
   recognition.continuous = !handsFree;               // holding: a pause doesn't stop it, letting go does
   const take = { recognition, button, input, before: input.value, started: Date.now(), text: "", state: "recording",
                  handsFree };
   recognition.onresult = (event) => {
     if (take.state === "cancelled" || take.state === "failed") return;
     take.text = [...event.results].map((result) => result[0].transcript).join("").trim();
+    take.alts = micGuesses(event.results).filter((guess) => guess !== take.text);
     input.value = take.text;
   };
   recognition.onerror = (event) => {
@@ -726,12 +750,14 @@ function micSend(take) {
     }
     return;
   }
-  if (voiceHandled(take.text)) {  // "thanks", or "yes"/"no" for an open card: not a message for Sunny
+  micSound("stop");
+  if (voiceHandled(take.text)) {  // "thanks", "undo", or "yes"/"no" for an open card: not a message for Sunny
     take.input.value = take.before;
     return;
   }
   take.input.value = take.text;
   micSpokenNext = true;  // a spoken message: Sunny answers out loud and keeps listening
+  micAltsNext = take.alts || [];
   el("sunny-form").requestSubmit();  // the one way to send: the submit handler above
 }
 
@@ -807,6 +833,7 @@ const EN_WORDS = new Set("the a an you not i of that and to it on for with this 
 const CLOSERS = new Set(["stop", "klaar", "dat was het", "laat maar", "thanks", "thank you", "bedankt", "thats all"]);
 const YES = new Set(["ja", "ja doe maar", "doe maar", "yes", "yep", "confirm", "bevestig", "ok", "oké", "okay", "go"]);
 const NO = new Set(["nee", "no", "cancel", "annuleer", "laat maar zitten"]);
+const UNDO = new Set(["undo", "ongedaan", "terug", "oeps", "nee fout", "wrong"]);  // presses the last Undo button
 let voiceConversation = false;  // listening again after Sunny has spoken
 let voiceSpeaking = false;
 let voiceTurn = 0;              // bumped by voiceStop, so a cancelled sentence doesn't start listening
@@ -971,10 +998,56 @@ function voiceConversationEnd() {
 
 function voiceUnlock() {
   // iPhone: Safari only plays speech after a tap. An empty sentence during the first tap unlocks it.
+  micSoundContext()?.resume?.();  // the same for the listening sounds
   if (voiceUnlocked || !SPEECH) return;
   voiceUnlocked = true;
   SPEECH.speak(new SpeechSynthesisUtterance(""));
 }
+
+// Listening sounds: a short rising pair of tones when the microphone starts listening for a message,
+// a falling pair when it sends. Made here with Web Audio (no files); not for the background wake
+// listener. Settings › Sunny › Sounds, on by default, per device.
+const SOUND_TONES = { start: [660, 990], stop: [990, 660] };
+const SOUND_TONE_MS = 60;     // two tones: about 120 ms together
+const SOUND_VOLUME = 0.05;
+let soundContext = null;
+
+function micSoundContext() {
+  const Context = window.AudioContext || window.webkitAudioContext;
+  if (!Context) return null;
+  try { soundContext ||= new Context(); } catch { return null; }
+  return soundContext;
+}
+
+function micSound(kind) {
+  if (voiceLocal("sunny-sounds") === "0") return;
+  const context = micSoundContext();
+  if (!context) return;
+  const start = context.currentTime + 0.01;
+  SOUND_TONES[kind].forEach((frequency, i) => {
+    const tone = context.createOscillator();
+    const gain = context.createGain();
+    const at = start + (i * SOUND_TONE_MS) / 1000;
+    tone.type = "sine";
+    tone.frequency.value = frequency;
+    gain.gain.setValueAtTime(0, at);
+    gain.gain.linearRampToValueAtTime(SOUND_VOLUME, at + 0.01);  // soft edges: no clicks
+    gain.gain.linearRampToValueAtTime(0, at + SOUND_TONE_MS / 1000);
+    tone.connect(gain).connect(context.destination);
+    tone.start(at);
+    tone.stop(at + SOUND_TONE_MS / 1000 + 0.02);
+  });
+}
+
+document.addEventListener("change", (event) => {
+  if (event.target.id === "sunny-sounds") voiceSave("sunny-sounds", event.target.checked ? "" : "0");
+});
+document.addEventListener("htmx:afterSwap", () => {
+  const toggle = el("sunny-sounds");
+  if (!toggle) return;
+  toggle.checked = voiceLocal("sunny-sounds") !== "0";
+  el("sunny-sounds-row").hidden = !SpeechRecognizer;
+});
 
 function voiceListen() {
   // Hands-free: the same recognizer as hold to talk, started without a tap.
@@ -1025,6 +1098,13 @@ function voiceHandled(text) {
     voiceConversationEnd();
     return true;
   }
+  const undo = [...document.querySelectorAll("#sunny-log [data-sunny-undo]")].pop();
+  if (undo && UNDO.has(words) && words.split(" ").length <= 3) {
+    voiceConversation = true;
+    voiceAwaitCard = true;  // read "Undone. Back to 119." when it arrives
+    undo.click();
+    return true;
+  }
   const card = voiceOpenCard();
   if (!card || words.split(" ").length > 4 || !(YES.has(words) || NO.has(words))) return false;
   const confirm = card.querySelector('[hx-post^="/ui/assistant/confirm/"]');
@@ -1054,7 +1134,7 @@ function sunnyLocalLine(text) {
 document.addEventListener("htmx:afterSettle", (event) => {
   // After a spoken Confirm or Cancel: read Sunny's short line, then keep listening.
   const path = event.detail.pathInfo?.requestPath || "";
-  if (!voiceAwaitCard || !/^\/ui\/assistant\/(confirm|cancel)\//.test(path)) return;
+  if (!voiceAwaitCard || !/^\/ui\/assistant\/(confirm|cancel|undo)\//.test(path)) return;
   voiceAwaitCard = false;
   const line = [...document.querySelectorAll("#sunny-log .sunny-bubble")].pop();
   voiceSay(line ? line.textContent : "", voiceAfterAnswer);
@@ -1166,6 +1246,7 @@ function wakeStart() {
   recognition.lang = navigator.language || "en-US";
   recognition.continuous = true;
   recognition.interimResults = true;  // react to the first guess, not the end of the sentence
+  recognition.maxAlternatives = 3;
   const listener = { recognition, ended: [], woken: null };
   recognition.onstart = () => {
     wakeEverStarted = true;
@@ -1177,6 +1258,7 @@ function wakeStart() {
       const result = event.results[listener.woken.index];
       if (!result) return;
       listener.woken.rest = wakeMatch(result[0].transcript) ?? listener.woken.rest;
+      listener.woken.alts = [...result].slice(1).map((alt) => wakeMatch(alt.transcript)).filter(Boolean);
       if (result.isFinal) wakeAct(listener);
       return;
     }
@@ -1236,6 +1318,7 @@ function wakeAct(listener) {
   if (listener.acted) return;
   listener.acted = true;
   const rest = listener.woken.rest.trim();
+  const alts = (listener.woken.alts || []).filter((alt) => alt.trim() && alt.trim() !== rest).slice(0, MIC_ALTS);
   listener.woken = null;
   voiceConversation = true;
   const go = () => {
@@ -1245,6 +1328,7 @@ function wakeAct(listener) {
       if (voiceHandled(rest)) return;
       input.value = rest;
       micSpokenNext = true;  // the same way as hands-free: voice=1, the same submit handler
+      micAltsNext = alts;
       el("sunny-form").requestSubmit();
     } else {
       voiceSay("Yes?", voiceListen, "en");

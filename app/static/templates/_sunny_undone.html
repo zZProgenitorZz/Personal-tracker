@@ -1,0 +1,4 @@
+{% import "_sunny_macros.html" as sunny %}
+{# After Undo: Sunny's short line in the log, and the Undo button goes (out of band). #}
+{{ sunny.bubble({"kind": "sunny", "text": note}) }}
+<span id="sunny-undo-{{ undo_id }}" hx-swap-oob="delete"></span>
