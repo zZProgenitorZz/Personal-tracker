@@ -23,10 +23,10 @@
 
   <section class="panel">
     <div class="panel-head"><h2>Steps per day</h2><span class="muted">Last {{ steps_bars|length }} days</span></div>
-    <div class="bars" style="grid-template-columns: repeat({{ steps_bars|length }}, minmax(0, 1fr))">
+    <div class="bars bars-steps" style="grid-template-columns: repeat({{ steps_bars|length }}, minmax(0, 1fr))">
       {% for d in steps_bars %}
-      <div class="bar{% if loop.last %} is-current{% endif %}" title="{{ d.day.strftime('%a %d %b') }}: {{ d.value }} steps">
-        <span class="bar-value"></span>
+      <div class="bar{% if loop.last %} is-current{% endif %}" title="{{ d.day.strftime('%a %d %b') }}: {{ '{:,}'.format(d.value) }} steps">
+        <span class="bar-value">{{ d.value|compact_number }}</span>
         <div class="bar-track"><div class="bar-fill" style="height: {{ d.height }}%"></div></div>
         <span class="bar-label">{{ d.label }}</span>
       </div>

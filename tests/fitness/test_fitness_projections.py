@@ -69,9 +69,10 @@ def test_an_open_visit_is_in_progress_and_counts_once_it_is_ten_minutes_old():
     assert v.in_progress and v.minutes == 40
 
 
-def test_a_visit_closed_after_more_than_four_hours_is_unknown_too():
-    [v] = gym_with(*visit(DAY, at(8), at(14))).visits(NOW)
-    assert v.minutes is None and v.end == at(14)
+def test_a_flickering_visit_that_adds_up_to_over_four_hours_is_unknown_and_stays_open():
+    gym = gym_with(GymArrived(DAY, at(8)), GymLeft(DAY, at(10)), GymArrived(DAY, at(10, 10)), GymLeft(DAY, at(13)))
+    [v] = gym.visits(NOW)
+    assert (v.start, v.end, v.minutes) == (at(8), None, None)
 
 
 def test_a_departure_after_midnight_closes_the_visit_of_the_arrival_day():
@@ -108,6 +109,38 @@ def test_a_second_arrival_during_the_same_visit_is_the_same_visit():
 def test_an_arrival_long_after_an_unclosed_one_is_a_new_visit():
     gym = gym_with(GymArrived(DAY, at(8)), GymArrived(DAY, at(18)), GymLeft(DAY, at(19)))
     assert [(v.start, v.minutes) for v in gym.visits(NOW)] == [(at(8), None), (at(18), 60)]
+
+
+def test_a_departure_that_flickers_inside_the_building_does_not_split_the_visit():
+    gym = gym_with(GymArrived(DAY, at(18)), GymLeft(DAY, at(18, 40)), GymArrived(DAY, at(18, 42)), GymLeft(DAY, at(19, 30)))
+    [v] = gym.visits(NOW)
+    assert (v.start, v.end, v.minutes) == (at(18), at(19, 30), 90)
+    assert gym.per_day(NOW) == {DAY: 1}
+
+
+def test_the_flicker_is_resolved_before_the_short_visits_are_dropped():
+    gym = gym_with(GymArrived(DAY, at(18)), GymLeft(DAY, at(18, 2)), GymArrived(DAY, at(18, 3)), GymLeft(DAY, at(19, 30)))
+    [v] = gym.visits(NOW)
+    assert (v.start, v.end, v.minutes) == (at(18), at(19, 30), 90)  # not 18:03
+
+
+def test_two_real_visits_more_than_fifteen_minutes_apart_stay_two():
+    gym = gym_with(*visit(DAY, at(8), at(9)), *visit(DAY, at(9, 16), at(10)))
+    assert [(v.start, v.minutes) for v in gym.visits(NOW)] == [(at(8), 60), (at(9, 16), 44)]
+    assert len(gym_with(*visit(DAY, at(8), at(9)), *visit(DAY, at(9, 15), at(10))).visits(NOW)) == 1  # exactly 15 joins
+
+
+def test_a_departure_of_the_next_day_does_not_close_an_old_open_visit():
+    day2 = DAY + dt.timedelta(days=1)
+    gym = gym_with(GymArrived(DAY, at(18)), GymLeft(day2, at(19, day=day2)))  # the arrival of day 2 was missed
+    [v] = gym.visits(NOW)
+    assert (v.day, v.start, v.end, v.minutes, v.in_progress) == (DAY, at(18), None, None, False)
+
+
+def test_a_visit_that_is_in_progress_still_works_after_a_flicker():
+    gym = gym_with(GymArrived(DAY, at(18)), GymLeft(DAY, at(18, 20)), GymArrived(DAY, at(18, 25)))
+    [v] = gym.visits(at(18, 50))
+    assert (v.start, v.end, v.minutes, v.in_progress) == (at(18), None, 50, True)
 
 
 # ---- Weeks ----

@@ -166,6 +166,7 @@ def test_the_dashboard_shows_this_week(client):
     assert "Steps per day" in page and "Gym visits per week" in page
     assert "Tue 13 Oct" in page and "18:00–19:30 · 1 h 30 min" in page
     assert page.count('class="bar-fill"') == 14 + 8
+    assert '<span class="bar-value">8k</span>' in page and 'Tue 13 Oct: 8,000 steps' in page
 
 
 def test_the_history_lists_the_days_newest_first(client):
@@ -194,6 +195,14 @@ def test_fitness_is_on_the_home_screen_and_in_settings(client):
 def test_the_shell_has_the_fitness_link(client):
     assert 'data-page="fitness"' in client.get("/").text
     assert "fitness: { add: null" in client.get("/static/trackly.js").text
+
+
+def test_steps_above_the_bars_are_short_and_the_tooltip_has_separators(client):
+    send_steps(client, ("2026-10-15", 8123), ("2026-10-16", 12_000), ("2026-10-14", 640))
+    page = client.get("/ui/fitness/dashboard", headers=HTMX).text
+    assert '<span class="bar-value">8.1k</span>' in page and '<span class="bar-value">12k</span>' in page
+    assert '<span class="bar-value">640</span>' in page
+    assert "Thu 15 Oct: 8,123 steps" in page and "Fri 16 Oct: 12,000 steps" in page
 
 
 # ---- Wrapped ----

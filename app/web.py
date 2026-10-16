@@ -15,6 +15,7 @@ from fastapi import APIRouter, Request, UploadFile
 from fastapi.templating import Jinja2Templates
 
 from . import clock
+from .charts import compact_number
 from .covers import MAX_BYTES, CoverError, CoverStore, too_large
 
 STATIC = Path(__file__).parent / "static"
@@ -63,7 +64,8 @@ def nice_date(moment: datetime, seconds: bool = False) -> str:
     return f"{moment:%a} {moment.day} {moment:%b %Y} · {time}"
 
 
-templates.env.filters.update(chapter=chapter, ago=ago, quiet_for=quiet_for, hue=hue, initials=initials, nice_date=nice_date)
+templates.env.filters.update(chapter=chapter, ago=ago, quiet_for=quiet_for, hue=hue, initials=initials, nice_date=nice_date,
+                             compact_number=compact_number)
 
 # Line icons (Lucide style), used through the macro ui.icon(name).
 ICONS = {

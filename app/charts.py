@@ -7,6 +7,15 @@ def percent(n: float, top: float) -> int:
     return round(100 * n / top) if top else 0
 
 
+def compact_number(n: float) -> str:
+    """Short enough to sit above a narrow bar: 0 -> '', 999 -> '999', 8123 -> '8.1k', 12000 -> '12k'."""
+    if not n:
+        return ""
+    if n < 1000:
+        return f"{n:g}"
+    return f"{n / 1000:.1f}".removesuffix(".0") + "k"
+
+
 def weekday_initial(day: date) -> str:
     return day.strftime("%a")[0]
 

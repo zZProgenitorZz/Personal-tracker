@@ -6,6 +6,7 @@ from .events import GymArrived, GymLeft, StepsRecorded
 
 MIN_VISIT = dt.timedelta(minutes=10)  # shorter is just walking past
 MAX_VISIT = dt.timedelta(hours=4)     # longer (or still open) and the departure was most likely missed
+REJOIN_GAP = dt.timedelta(minutes=15)  # an arrival this soon after a departure: the location flickered
 
 
 def monday_of(day: dt.date) -> dt.date:
@@ -45,7 +46,9 @@ class Visit:
 class GymProjection:
     """The gym visits. Arrivals and departures may have come in late, twice and in any order, so they
     are sorted by time and each arrival is paired with the next departure. A departure without an
-    arrival before it is ignored. Short visits don't count, and a visit without a (believable)
+    arrival before it is ignored, and so is one more than MAX_VISIT after the open arrival (that visit
+    stays open). An arrival within REJOIN_GAP of a departure continues that visit (the location
+    flickers inside a building), before short visits are dropped. Short visits don't count, and a visit without a (believable)
     departure counts as a visit of unknown duration. What is "now" decides that, so the visits are
     worked out per question."""
 
@@ -65,14 +68,20 @@ class GymProjection:
     def _pairs(self) -> list[tuple[dt.datetime, dt.datetime | None]]:
         """(arrival, departure or None), oldest first. A visit runs across midnight like any other."""
         moments = sorted([(t, False) for t in self._arrivals] + [(t, True) for t in self._departures])
-        pairs, start = [], None
+        pairs: list[tuple[dt.datetime, dt.datetime | None]] = []
+        start = None
         for moment, is_departure in moments:
             if is_departure:
-                if start is not None:
-                    pairs.append((start, moment))
-                    start = None
+                if start is None:
+                    continue  # a departure without an arrival before it
+                # Too long after the arrival it is no departure of this visit: that one never got closed.
+                pairs.append((start, moment if moment - start <= MAX_VISIT else None))
+                start = None
             elif start is None:
-                start = moment
+                if pairs and pairs[-1][1] is not None and moment - pairs[-1][1] <= REJOIN_GAP:
+                    start = pairs.pop()[0]  # the location flickered: the same visit goes on
+                else:
+                    start = moment
             elif moment - start > MAX_VISIT:  # the departure of the earlier visit never came
                 pairs.append((start, None))
                 start = moment
