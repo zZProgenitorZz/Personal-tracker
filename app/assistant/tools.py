@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 
+from ..fitness.projections import GymProjection, StepsProjection
 from ..planner.commands import AddPlan, EditPlan, MarkPlanDone, PlannerCommandHandler, RemovePlan, ReschedulePlan, SkipPlan
 from ..planner.parse import describe, describe_repeat, nice_day, parse
 from ..planner.projections import AgendaProjection
@@ -60,6 +61,8 @@ class TrackerData:
     top_artists: TopArtistsProjection
     top_tracks: TopTracksProjection
     agenda: AgendaProjection
+    steps: StepsProjection           # Fitness is read only: it all comes in from the iPhone
+    gym: GymProjection
     reading_activity: ReadingActivityProjection
     reading_history: ReadingHistoryProjection
     watch_history: WatchHistoryProjection
@@ -104,7 +107,8 @@ def _enum(*values) -> dict:
 
 
 DATE = {"type": "string", "description": "YYYY-MM-DD"}
-DOMAIN = _enum("reading", "watching")
+DOMAIN = _enum("reading", "watching")  # the domains the write tools can change
+HISTORY_DOMAIN = _enum("reading", "watching", "fitness")  # fitness is read only, so not in DOMAIN
 ANY_STATUS = _enum(*(s.value for s in Status), *(s.value for s in WatchStatus))  # checked against the domain
 ANY_KIND = _enum(*(k.value for k in Kind), *(k.value for k in WatchKind))         # the kind decides the domain
 LIMIT = {"type": "integer", "description": "How many, e.g. 5"}
@@ -124,10 +128,12 @@ TOOL_DEFINITIONS = [
                              "first place (only when tied).", {"from": DATE, "to": DATE, "limit": _nullable(LIMIT)}),
     _tool("plans_between", "Every planned time between two dates (inclusive), repeats worked out.",
           {"from": DATE, "to": DATE}),
-    _tool("history_between", "What was read and watched between two dates (inclusive): chapters, status changes, "
-                             "finished shows, totals. Shows added as already completed have no finish date. "
-                             "Watching has no episodes, only status periods.",
-          {"from": DATE, "to": DATE, "domain": _nullable(DOMAIN)}),
+    _tool("history_between", "What was read, watched and done between two dates (inclusive): chapters, status changes, "
+                             "finished shows, gym visits and steps per day, totals. Shows added as already completed "
+                             "have no finish date. Watching has no episodes, only status periods. Fitness: visits "
+                             "(minutes null = departure missed) and daily steps, the latest 40 rows; totals cover "
+                             "the whole period.",
+          {"from": DATE, "to": DATE, "domain": _nullable(HISTORY_DOMAIN)}),
     _tool("notices", "What needs Progen's attention today.", {}),
     _tool("item_history", "The full history of one series or show (removed earlier versions included): added, "
                           "status changes with dates, times completed, reading days and chapters.",
@@ -324,6 +330,15 @@ def history_between(args: dict, data: TrackerData) -> dict:
                                "finished_on": r.finished_on.isoformat() if r.finished_on else None,
                                "rewatch": r.rewatch} for r in rows[:MAX_ROWS]]
         totals["finished"] += sum(r.finished_on is not None for r in rows)
+    visits, steps = data.gym.between(start, end, data.now()), data.steps.between(start, end)
+    if domain == "fitness" or (domain is None and (visits or steps)):  # unasked for, only when there is something
+        result["fitness"] = {
+            "gym_visits": [{"day": v.day.isoformat(), "start": f"{v.start:%H:%M}",
+                            "end": f"{v.end:%H:%M}" if v.end else None, "minutes": v.minutes}
+                           for v in visits[-MAX_ROWS:]],
+            "steps": [{"day": day.isoformat(), "steps": n} for day, n in list(steps.items())[-MAX_ROWS:]]}
+        totals.update(gym_visits=len(visits), gym_minutes=sum(v.minutes or 0 for v in visits),
+                      steps=sum(steps.values()), days_with_steps=len(steps))
     return {**result, "totals": totals}
 
 

@@ -27,6 +27,10 @@ from .covers import CoverStore
 from .domain import DomainError
 from .event_types import ALL_EVENT_TYPES
 from .eventstore import EventStore
+from .fitness.api import create_fitness_router
+from .fitness.commands import FitnessCommandHandler
+from .fitness.projections import GymProjection, StepsProjection
+from .fitness.web import create_fitness_web_router, fitness_summary
 from .listening.api import create_listening_router
 from .listening.commands import ListeningCommandHandler
 from .listening.import_web import ImportJob, create_import_router
@@ -106,11 +110,12 @@ def create_app(
     wrapped = WrappedProjection()  # year in review across all trackers, from the same events
     agenda = AgendaProjection()
     planner_activity = PlannerActivityProjection()
+    steps, gym = StepsProjection(), GymProjection()
     # What happened when, removed items included: for Sunny's history tools.
     reading_history, watch_history = ReadingHistoryProjection(), WatchHistoryProjection()
     aliases = AliasProjection()  # Sunny's nicknames for misheard titles
     projections = [library, activity, watchlist, watch_activity, recent_plays, listen_activity, top_artists, top_tracks,
-                   wrapped, agenda, planner_activity, reading_history, watch_history, aliases]
+                   wrapped, agenda, planner_activity, steps, gym, reading_history, watch_history, aliases]
 
     def rebuild() -> None:
         """Rebuilds the read models from all events (at startup and after a restore)."""
@@ -129,6 +134,7 @@ def create_app(
     watching = WatchingCommandHandler(store, watchlist)
     listening = ListeningCommandHandler(store)
     planner = PlannerCommandHandler(store)
+    fitness = FitnessCommandHandler(store)
     # Spotify tokens and the last sync in separate files: not in the event store and not in a backup.
     spotify = Spotify.from_environment(http, TokenFile(Path(data_dir) / "spotify_token.json"))
     listening_sync = ListeningSync(spotify, listening, recent_plays, Path(data_dir) / "spotify_sync.json",
@@ -140,6 +146,7 @@ def create_app(
         Tracker("listening", "Listening", "music", "listening-changed",
                 lambda: listening_summary(recent_plays, listen_activity, top_artists)),
         Tracker("planner", "Planner", "calendar", "planner-changed", lambda: planner_summary(agenda)),
+        Tracker("fitness", "Fitness", "dumbbell", "fitness-changed", lambda: fitness_summary(steps, gym)),
     ]
 
     @asynccontextmanager
@@ -175,16 +182,18 @@ def create_app(
     # Importing your whole Spotify history (Settings); the projections follow along live.
     app.include_router(create_import_router(ImportJob(store, backups)))
     app.include_router(create_planner_router(planner, agenda))
+    app.include_router(create_fitness_router(fitness, steps, gym))
     # Sunny, the assistant: reads the projections, only writes after Confirm through the same handlers.
     # Never a real client in the tests (":memory:"); they give it a fake client themselves.
     sunny = Sunny(TrackerData(library=library, watchlist=watchlist, listening=listen_activity,
-                              top_artists=top_artists, top_tracks=top_tracks, agenda=agenda,
+                              top_artists=top_artists, top_tracks=top_tracks, agenda=agenda, steps=steps, gym=gym,
                               reading_activity=activity, reading_history=reading_history, watch_history=watch_history, reading=handler,
                               watching=watching, planner=planner, now=lambda: clock.local_now(), aliases=aliases),
                   AssistantCommandHandler(store), use_real_client=scratch is None)
     app.state.sunny = sunny
     app.include_router(create_assistant_router(sunny))
     app.include_router(create_planner_web_router(planner, agenda))
+    app.include_router(create_fitness_web_router(steps, gym))
     app.include_router(create_wrapped_web_router(wrapped))
     # Wrapped isn't a tracker (not in Settings or backups), only a card on the home screen.
     app.include_router(create_home_router(trackers, wrapped=lambda: wrapped_teaser(wrapped)))

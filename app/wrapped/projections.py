@@ -1,4 +1,4 @@
-"""Wrapped: a year in review across Reading, Watching and Listening.
+"""Wrapped: a year in review across Reading, Watching, Listening and Fitness.
 
 Read only. This projection builds itself from the events that already exist, so it
 works right away with all old data and has no events or commands of its own. Days,
@@ -8,7 +8,9 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 
+from .. import clock
 from ..domain import title_key
+from ..fitness.projections import GymProjection, StepsProjection
 from ..listening.events import TrackPlayed
 from ..listening.projections import listened_ms
 from ..reading.events import (
@@ -72,6 +74,11 @@ class YearReview:
     months: list[MonthRow]
     busiest_month: MonthRow | None
     most_active_day: tuple[date, float] | None
+    # Fitness (not in the months or the most active day: steps would drown everything else)
+    gym_visits: int = 0
+    gym_hours: float = 0
+    steps_total: int = 0
+    best_steps_day: tuple[date, int] | None = None
 
     @property
     def watched_total(self) -> int:
@@ -83,7 +90,8 @@ class YearReview:
 
     @property
     def has_data(self) -> bool:
-        return bool(self.chapters or self.finished or self.listen_minutes or self.series_started)
+        return bool(self.chapters or self.finished or self.listen_minutes or self.series_started
+                    or self.gym_visits or self.steps_total)
 
 
 @dataclass
@@ -138,10 +146,14 @@ class WrappedProjection:
         self._shows: dict[str, Title] = {}
         self._show_genres: dict[str, list[str]] = {}
         self._tracks: dict[str, tuple[str, tuple[str, ...]]] = {}
+        # Fitness follows the same rules as its own tracker (short visits don't count): the same projections.
+        self._steps, self._gym = StepsProjection(), GymProjection()
 
     # ---- Handling events ----
 
     def apply(self, event) -> None:
+        self._steps.apply(event)
+        self._gym.apply(event)
         if isinstance(event, (SeriesStarted, ProgressLogged, StatusChanged, GenresChanged, SeriesRemoved)):
             self._apply_reading(event)
             self._just_added = event if isinstance(event, SeriesStarted) else None
@@ -212,7 +224,8 @@ class WrappedProjection:
 
     def years(self) -> list[int]:
         """Years with data, newest first."""
-        return sorted((y for y in self._years if self.year(y).has_data), reverse=True)
+        fitness_years = {day.year for day in self._steps.per_day()} | {v.day.year for v in self._gym.visits(clock.local_now())}
+        return sorted((y for y in {*self._years, *fitness_years} if self.year(y).has_data), reverse=True)
 
     def year(self, number: int) -> YearReview:
         y = self._years.get(number) or _Year()
@@ -254,6 +267,9 @@ class WrappedProjection:
             months.append(MonthRow(m, MONTH_NAMES[m - 1], chapters, finished, minutes, score))
         busiest_month = max((row for row in months if row.activity), key=lambda row: row.activity, default=None)
 
+        steps = {day: n for day, n in self._steps.per_day().items() if day.year == number}
+        visits = [v for v in self._gym.visits(clock.local_now()) if v.day.year == number]
+
         return YearReview(
             year=number,
             chapters=sum(y.chapters_per_day.values()),
@@ -273,4 +289,8 @@ class WrappedProjection:
             months=months,
             busiest_month=busiest_month,
             most_active_day=_busiest(activity),
+            gym_visits=len(visits),
+            gym_hours=sum(v.minutes or 0 for v in visits) / 60,
+            steps_total=sum(steps.values()),
+            best_steps_day=_busiest(steps),
         )

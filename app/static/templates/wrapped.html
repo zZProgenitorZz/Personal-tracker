@@ -15,13 +15,13 @@
 {%- endmacro %}
 
 <div class="page" hx-disinherit="*" hx-get="/ui/wrapped?year={{ year }}{% if compare %}&amp;compare=1{% endif %}"
-     hx-trigger="reading-changed from:body, watching-changed from:body, listening-changed from:body" hx-swap="outerHTML">
+     hx-trigger="reading-changed from:body, watching-changed from:body, listening-changed from:body, fitness-changed from:body" hx-swap="outerHTML">
   <header class="page-head">
     <div>
       <p class="eyebrow">Wrapped</p>
       <h1>Your <span class="grad-text">{{ year }}</span></h1>
       <p class="lede">
-        {%- if r.has_data %}Everything you read, watched and listened to in {{ year }}.
+        {%- if r.has_data %}Everything you read, watched, listened to and trained in {{ year }}.
         {%- else %}Nothing tracked in {{ year }} yet.{% endif -%}
       </p>
     </div>
@@ -130,6 +130,24 @@
       </ol>
       {% else %}
       <p class="wrapped-empty">Nothing played in {{ year }}.</p>
+      {% endif %}
+    </section>
+
+    {# ---- Fitness ---- #}
+    <section class="panel accent-green">
+      <div class="panel-head"><h2>{{ ui.icon('dumbbell', 18) }}Fitness</h2><a class="link" href="#fitness">Open {{ ui.icon('arrow-right', 15) }}</a></div>
+      {% if r.gym_visits or r.steps_total %}
+      <div class="wrapped-numbers">
+        <div><b>{{ r.gym_visits }}</b><span>gym visits</span></div>
+        <div><b>{{ r.gym_hours|round(1)|chapter }}</b><span>gym hours</span></div>
+        <div><b>{{ '{:,}'.format(r.steps_total) }}</b><span>steps</span></div>
+      </div>
+      {% if r.best_steps_day %}
+      <h3 class="wrapped-sub">Best steps day</h3>
+      <p>{{ r.best_steps_day[0].strftime('%a %d %b') }} · {{ r.best_steps_day[1] }} steps</p>
+      {% endif %}
+      {% else %}
+      <p class="wrapped-empty">No gym visits or steps in {{ year }}.</p>
       {% endif %}
     </section>
   </div>

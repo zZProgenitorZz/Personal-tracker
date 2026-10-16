@@ -7,6 +7,8 @@ through Tailscale). On this computer itself (127.0.0.1 / localhost) Progen stays
   ends every session): HttpOnly, SameSite=Lax, Secure over https, valid for 30 days.
 - Wrong passwords are rate limited per client.
 - Extra hosts without a password: create_app refuses to start (AuthConfigError).
+- The one exception to the session: the ingest paths (/fitness/ingest/...) also accept the bearer token
+  PROGEN_INGEST_TOKEN, because an iPhone Shortcut has no session cookie. Nothing else does.
 """
 import base64
 import getpass
@@ -29,6 +31,8 @@ SESSION_SECONDS = SESSION_DAYS * 24 * 60 * 60
 EXTRA_HOSTS_ENV = "PROGEN_EXTRA_HOSTS"
 PASSWORD_HASH_ENV = "PROGEN_PASSWORD_HASH"
 SECRET_ENV = "PROGEN_SESSION_SECRET"
+INGEST_TOKEN_ENV = "PROGEN_INGEST_TOKEN"
+INGEST_PREFIX = "/fitness/ingest/"  # the only paths a bearer token is good for
 SCRYPT = {"n": 2 ** 14, "r": 8, "p": 1}  # about 16 MB and a few dozen ms per check
 MAX_FAILURES = 5                 # wrong passwords per client ...
 FAILURE_WINDOW = 15 * 60         # ... within this many seconds, then wait until the window has passed
@@ -111,13 +115,15 @@ class Auth:
     extra_hosts: list[str]
     password_hash: str = ""
     secret: str = ""
+    ingest_token: str = ""
     clock: object = time.time
     _failures: dict = field(default_factory=lambda: defaultdict(deque))
 
     @classmethod
     def from_environment(cls, environ) -> "Auth":
         auth = cls(parse_extra_hosts(environ.get(EXTRA_HOSTS_ENV)),
-                   (environ.get(PASSWORD_HASH_ENV) or "").strip(), (environ.get(SECRET_ENV) or "").strip())
+                   (environ.get(PASSWORD_HASH_ENV) or "").strip(), (environ.get(SECRET_ENV) or "").strip(),
+                   (environ.get(INGEST_TOKEN_ENV) or "").strip())
         if auth.extra_hosts and not (auth.password_hash and auth.secret):
             raise AuthConfigError(
                 f"{EXTRA_HOSTS_ENV} is set ({', '.join(auth.extra_hosts)}), but there is no password, so anyone "
@@ -137,6 +143,19 @@ class Auth:
 
     def valid(self, token: str | None) -> bool:
         return session_valid(token, self.secret, self.password_hash, self.clock())
+
+    def ingest_refusal(self, headers: dict[str, str]) -> JSONResponse | None:
+        """None if the request carries the ingest token; otherwise the response to refuse it with."""
+        if not self.ingest_token:
+            return JSONResponse({"detail": f"Ingest isn't set up. Put {INGEST_TOKEN_ENV}=<a long random token> in "
+                                           f".env (python -c \"import secrets; print(secrets.token_urlsafe(32))\") "
+                                           f"and restart Progen."}, status_code=503)
+        scheme, _, supplied = headers.get("authorization", "").partition(" ")
+        if scheme.lower() == "bearer" and hmac.compare_digest(supplied.strip().encode("utf-8"),
+                                                              self.ingest_token.encode("utf-8")):
+            return None
+        return JSONResponse({"detail": "Missing or wrong ingest token"}, status_code=401,
+                            headers={"WWW-Authenticate": "Bearer"})
 
     # ---- Rate limiting ----
 
@@ -222,6 +241,13 @@ class LoginMiddleware:
         path = scope["path"]
         if signed_in or not needs_login(self.auth, headers) or path.startswith(EXEMPT_PATHS):
             await self.app(scope, receive, send)
+            return
+        if path.startswith(INGEST_PREFIX):  # a Shortcut: the token instead of a session
+            refusal = self.auth.ingest_refusal(headers)
+            if refusal is None:
+                await self.app(scope, receive, send)
+            else:
+                await refusal(scope, receive, send)
             return
         target = path + (f"?{scope['query_string'].decode('latin-1')}" if scope.get("query_string") else "")
         login = f"/login?next={quote(target, safe='')}"

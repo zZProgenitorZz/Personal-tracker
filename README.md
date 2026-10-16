@@ -1,6 +1,6 @@
 # Personal-tracker
 
-A personal API that collects data about my own life in one place, under my own control. It started with tracking what I read (**Reading**: novels and manhwa); then came **Watching** (films, series and anime) and **Listening** (what I listen to on Spotify). Sleep, fitness and other trackers may follow.
+A personal API that collects data about my own life in one place, under my own control. It started with tracking what I read (**Reading**: novels and manhwa); then came **Watching** (films, series and anime), **Listening** (what I listen to on Spotify), **Planner** and **Fitness** (steps and gym visits, sent by my iPhone). Sleep and other trackers may follow.
 
 The home screen (`#home`) shows a card per tracker. A click takes you to that tracker's own space, with the tabs Dashboard, Library and Progress (`#reading`, `#watching/library`, ...).
 
@@ -114,7 +114,7 @@ app/
   eventstore.py        SQLite event store (append, transaction, load_stream, load_type, load_all, subscribe)
   clock.py             the one clock: utc_now, local_now and today (tests patch app.clock)
   security.py          protection against other websites (CSRF) and DNS rebinding; allowed host names
-  auth.py              signing in through an extra host (your phone): password hash, session cookie, rate limit
+  auth.py              signing in through an extra host (your phone): password hash, session cookie, rate limit; the ingest token
   auth_web.py          /login and /logout
   shutdown.py          POST /admin/shutdown: stopping cleanly, only from this computer (for stop.pyw)
   desktop.py           talking to the server from the desktop (launcher, icon, stop.pyw)
@@ -168,6 +168,13 @@ app/
     ics.py             a plan as .ics for your iPhone (RFC 5545)
     api.py             /planner endpoints (JSON), including /planner/due for the notifications
     web.py             /ui/planner endpoints (HTML fragments for htmx)
+  fitness/
+    events.py          StepsRecorded, GymArrived, GymLeft (+ EVENT_TYPES)
+    aggregate.py       StepsDay, GymDay
+    commands.py        RecordSteps, ArriveAtGym, LeaveGym + FitnessCommandHandler (handle_many: all or nothing)
+    projections.py     StepsProjection, GymProjection (visits, streak), week_totals
+    api.py             /fitness endpoints (JSON), including /fitness/ingest/steps and /fitness/ingest/gym for the iPhone
+    web.py             /ui/fitness endpoints (HTML fragments for htmx; read only)
   assistant/
     identity/          Sunny's design: IDENTITY, SOUL, USER (the system prompt), TOOLS and OUTCOME
     prompt.py          the system prompt (cacheable fixed part + today's date)
@@ -187,7 +194,7 @@ scripts/
 tests/
   test_eventstore.py, test_api.py, test_web.py
   test_covers.py, test_cover_flow.py
-  reading/, watching/, listening/, planner/, wrapped/, assistant/  given/when/then tests per rule
+  reading/, watching/, listening/, planner/, fitness/, wrapped/, assistant/  given/when/then tests per rule
 data/                  tracker.db, covers/ and the spotify_* files (not in git)
 ```
 
@@ -353,15 +360,87 @@ Days: vandaag/today, morgen/tomorrow, overmorgen, weekdays in full or short (ma 
 
 **Notifications in Windows:** every minute the icon by the clock asks `GET /planner/due?since=…` (read only, no event) and shows new reminders as notifications, for example "Tomorrow: Tandarts at 14:00" or "In 3 hours: Tandarts at 14:00". The icon remembers what it already reported in memory; after a restart it reports nothing from before the start. **This only works while Progen is running**: so turn on **Start with Windows** in Settings.
 
+## Fitness (done)
+
+Steps and gym visits, **without logging anything by hand**: your iPhone sends them itself, through Apple Shortcuts and Tailscale (`#fitness`, tabs **Dashboard** and **History**; no forms and no add button). Steps per day come from Apple Health; the gym (SportCity has no API) is two location automations, "arrived" and "left", that note every message in a file on the iPhone (`gym.txt`) and resend the last lines every night, so nothing is lost when the PC is off; the duration follows from those.
+
+| Part        | Contents |
+| ----------- | ------ |
+| Events      | `StepsRecorded(day, steps, at)` in stream `steps-<day>`; `GymArrived(day, arrived_at, at)` and `GymLeft(day, left_at, at)` in stream `gym-<day>` |
+| Commands    | `RecordSteps(day, steps)`, `ArriveAtGym(arrived_at)`, `LeaveGym(left_at)` + `FitnessCommandHandler` (also `handle_many`, all or nothing) |
+| Read models | `StepsProjection` (steps per day), `GymProjection` (visits, per week, streak), `week_totals` (visits, gym hours, steps) |
+| Ingest      | `POST /fitness/ingest/steps` and `POST /fitness/ingest/gym` (JSON, see below) |
+
+`day`, `arrived_at` and `left_at` are **local time** (the PC's clock, like Planner); `at` is UTC. A time with an offset (`2026-10-16T18:30:00+02:00`) is converted to local time on arrival.
+
+Rules:
+
+1. The same number of steps for a day again produces no event; another number produces a new `StepsRecorded`, and the last one counts. Negative, more than 200,000 or a day that hasn't happened yet is a `DomainError`.
+2. Gym messages come in late, twice and in any order (the iPhone resends its last lines), so the aggregate only drops duplicates: an arrival or departure within 1 minute of a known one of the same kind produces no event. There are no order rules: a departure may be saved before its arrival. Each message lands in the stream of the day of its own time (`gym-<day>`).
+3. Several visits on one day are fine: each pair of arrival and departure is a visit.
+4. The read model sorts all times and pairs each arrival with the next departure (so a visit that runs past midnight is one visit, on the day of the arrival). A departure without an arrival before it is ignored; a second arrival during the same visit is the same visit.
+5. A moment more than 5 minutes in the future is a `DomainError` (the phone's clock may run a little ahead).
+6. In the read model a visit shorter than 10 minutes doesn't count (walking past). A visit that is still open after 4 hours, or was closed after more than 4 hours, counts as a visit of **unknown duration** (the departure was missed): it is a visit, but adds no gym hours. A visit that began less than 4 hours ago is "at the gym now".
+7. The gym streak counts weeks (Monday to Sunday) in a row with at least one visit; the current week doesn't break it while it has no visit yet.
+
+**Ingest endpoints** (what the Shortcuts call, `app/fitness/api.py`):
+
+```bash
+# Steps per day, at most 31 days per request; all or nothing (one bad day refuses the whole request)
+curl -X POST https://<pc-name>.<tailnet>.ts.net/fitness/ingest/steps -H "Authorization: Bearer <token>" \
+     -H "Content-Type: application/json" -d '{"days": [{"day": "2026-10-16", "steps": 8123}]}'
+# -> {"recorded": 1, "unchanged": 0}
+
+# Arrivals and departures, at most 50 per request, any order, sent again is fine; "at" is required (ISO 8601 with an offset)
+curl -X POST https://<pc-name>.<tailnet>.ts.net/fitness/ingest/gym -H "Authorization: Bearer <token>" \
+     -H "Content-Type: application/json" \
+     -d '{"events": [{"event": "arrived", "at": "2026-10-16T18:30:00+02:00"}, {"event": "left", "at": "2026-10-16T19:45:00+02:00"}]}'
+# -> {"recorded": 2, "unchanged": 0}
+```
+
+`GET /fitness/steps` and `GET /fitness/visits` read the read models.
+
+**The token** (`PROGEN_INGEST_TOKEN` in `.env`, `app/auth.py`): through Tailscale you have to sign in, and a Shortcut has no session cookie. So the `/fitness/ingest/...` paths, and only those, also accept `Authorization: Bearer <token>` (compared with `hmac.compare_digest`). No or a wrong token is a `401`; no token in `.env` is a `503` that says what to do. The token opens nothing else, the CSRF rules stay as they are (a Shortcut sends `Content-Type: application/json`), and on the PC itself nothing changes. The token lives in `.env`, so it is not in a backup; treat it like the password.
+
+### Setting up the iPhone (Shortcuts)
+
+The names below are the English iOS names, with the Dutch ones in brackets; the exact labels differ a bit per iOS version. Below, `<address>` is your full Tailscale address, `https://<pc-name>.<tailnet>.ts.net` (the one from `tailscale serve status`).
+
+1. **Make a token** on the PC: `python -c "import secrets; print(secrets.token_urlsafe(32))"`. Put it in `.env` as `PROGEN_INGEST_TOKEN=<the token>` and restart Progen. Tailscale and `PROGEN_EXTRA_HOSTS` have to be set up already (see [Using Progen on your phone](#using-progen-on-your-phone-tailscale)).
+2. **Steps, every night.** Shortcuts › **Automation** (Automatisering) › **+** › **Personal Automation** › **Time of Day** (Tijdstip): every day at 23:30, **Run Immediately** (Voer direct uit). Actions:
+   1. **Find Health Samples** (Zoek naar gezondheidsgegevens): type *Steps*, start date *is in the last 7 days*, **Group By** *Day*.
+   2. **Repeat with Each** (Herhaal met elk item) over those results. Inside: a **Dictionary** (Woordenboek) with `day` (Text) = the item's start date (**Format Date**, custom format `yyyy-MM-dd`) and `steps` (Number) = its value, then **Add to Variable** (Voeg toe aan variabele) `days`. **End Repeat**.
+   3. **Combine Text** (Voeg tekst samen): input `days`, separator *Custom* `,`. A JSON array field in *Get Contents of URL* can't take a list variable, so build the body as text: a **Text** action with `{"days":[` followed by the Combined Text and `]}`.
+   4. **Get Contents of URL** (Haal inhoud van URL op): `<address>/fitness/ingest/steps`, method **POST**, headers `Authorization` = `Bearer <token>` and `Content-Type` = `application/json`, **Request Body** *File* (Bestand) = the Text from the previous step.
+
+   Sending the last 7 days every night means days when the PC was off are filled in the next time by themselves, and a number that changes later is corrected.
+3. **Gym, arriving.** **Personal Automation** › **Arrive** (Aankomen): pick the address of SportCity (radius about 100–150 m), **Run Immediately**. Actions:
+   1. **Current Date** (Huidige datum) → **Format Date**: *ISO 8601*, **Include Time** on (it gives the offset, like `2026-10-16T18:30:00+02:00`).
+   2. **Append to Text File** (Voeg toe aan tekstbestand): iCloud Drive › Shortcuts (Opdrachten) › `gym.txt`, the text `arrived ` followed by the formatted date, on a new line. Writing the line comes first, so it is never lost.
+   3. **Get Contents of URL**: `<address>/fitness/ingest/gym`, **POST**, header `Authorization` = `Bearer <token>`, **Request Body** *JSON* with one field `events` of type **Array**, holding one **Dictionary** with `event` (Text) = `arrived` and `at` (Text) = the formatted date. This is exactly what the server expects: `{"events": [{"event": "arrived" | "left", "at": "<ISO 8601 with offset>"}]}`, at most 50 items, and `at` is **required** (a request without it is refused with a 422). If the PC is off this request fails, which does no harm: the nightly automation (step 5) sends the line again.
+4. **Gym, leaving.** The same with **Leave** (Vertrekken), the line `left <date>` and `event` = `left`.
+5. **Gym, every night.** One more automation (**Time of Day**, for example 23:35, **Run Immediately**): **Get File** (Haal bestand op) `gym.txt` › **Get Text from Input**, **Split Text** on *New Lines*, **Get Item from List** › *Last Items*, 30. **Repeat with Each** line: **Split Text** on *Custom* ` ` (a space), then a **Text** action `{"event":"<first item>","at":"<last item>"}` and **Add to Variable** `events`. After **End Repeat**, the same as in step 2: **Combine Text** (`events`, separator `,`), a **Text** `{"events":[<Combined Text>]}`, and **Get Contents of URL** to `<address>/fitness/ingest/gym` (**POST**, headers `Authorization` and `Content-Type: application/json`, **Request Body** *File* = that Text). The lines may arrive late, twice and in any order: Progen drops what it already knows (within a minute), so resending is harmless.
+6. **Test it** from the PC with the `curl` examples above (the `.ts.net` address tests the token too; on the PC itself, `http://127.0.0.1:8000`, no token is needed). Run an automation once from Shortcuts and look at the answer: `{"recorded": ...}` shows what changed.
+
+Tips:
+
+- Turn off **Smart Punctuation** (Settings › General › Keyboard): curly quotes in a hand-typed `Text` action break the JSON.
+- In the Tailscale app, turn on **VPN On Demand**, so the iPhone is connected when an automation runs.
+- A radius of about 100–150 m works best for Arrive/Leave; smaller and the trigger is missed, bigger and it fires too early.
+- After **End Repeat** the preview shows the repeated items, but the variable itself is fine.
+
+**Limitation, honestly:** the iPhone has to reach the PC, and nothing is sent while it can't. Everything comes in as soon as the nightly automation runs while the PC is on and Tailscale is connected: gym lines stay in `gym.txt` (only the last 30 are sent, so a gap of more than 30 lines is lost), steps are resent for the last 7 days. Until then the dashboard is simply behind, and an arrival whose departure hasn't come in yet counts as a visit of unknown duration (or as "at the gym now" for 4 hours). If the PC stays off for a week, the lines older than 30 are lost.
+
 ## Wrapped
 
-A year in review across Reading, Watching and Listening (`#wrapped`, or the Wrapped card on the home screen). Read only: no events or commands of its own. `WrappedProjection` is built from the events that already exist, so it works right away with all old data, and follows along live after that. Wrapped isn't a tracker: it isn't in Settings or the navigation bar and has no backup of its own (everything is already in the events).
+A year in review across Reading, Watching, Listening and Fitness (`#wrapped`, or the Wrapped card on the home screen). Read only: no events or commands of its own. `WrappedProjection` is built from the events that already exist, so it works right away with all old data, and follows along live after that. Wrapped isn't a tracker: it isn't in Settings or the navigation bar and has no backup of its own (everything is already in the events).
 
 | Tracker   | What is counted per year |
 | --------- | ---------------------------- |
 | Reading   | Chapters read, top 5 series, genres, newly started, finished, longest reading streak |
 | Watching  | Finished per kind, genres of what you finished, their covers |
 | Listening | Minutes (and hours), top 5 artists, top 5 tracks, busiest listening day |
+| Fitness   | Gym visits, gym hours (visits of unknown duration add none), total steps, best steps day (not in the months or the most active day: steps would drown everything else) |
 | Together  | Chapters / finished / minutes per month, busiest month, most active day, the years with data |
 
 Rules:
@@ -405,6 +484,7 @@ What Sunny can do:
 - **Answer questions from your own data**, without confirmation because nothing changes: "which track did I listen to most from 1 Sep to 15 Oct?", "how long haven't I read X?", "do I have plans next month?".
 - **Track and change things in one sentence**: "I'm at chapter 120 of Solo Leveling", "set Severance to dropped", "I'm rewatching Frieren", "elke ma 12:00 gym". Sunny turns that into actions and first shows them as a **card** with one line per action (`Solo Leveling · chapter 119 → 120`, `New plan · gym · from Mon 12 Oct · 12:00 · every Mon`).
 - **Nothing is saved before you click Confirm.** Confirm runs the actions through the same command handlers as the rest of the app (ordinary events, with a toast and a refresh of the open page); Cancel does nothing. **Removing** asks for confirmation once more after Confirm, with the name included.
+- **Answer questions about Fitness** too: `history_between` with domain `fitness` (or without a domain) gives gym visits and steps per day for a period, with totals ("how often was I at the gym in September?"). Fitness is read only for Sunny: it all comes in from the iPhone, so there is no write tool.
 - Never: Settings, backups, imports, connecting Spotify or shutting down. Sunny doesn't make up titles or numbers; whatever isn't in your tracker, it says so.
 
 **Chapters without the API, with Undo:** a short message like "Solo Leveling 120", "ik ben bij hoofdstuk 120 van Solo Leveling" or "Hey Sunny, Solo Leveling one hundred twenty" is logged straight away by `app/assistant/quick.py` (no Claude, no tokens, also without a key) when the title clearly matches one series, also when it sounds alike ("solo leaving"), and the step forward is at most 50 chapters; otherwise Claude handles it. Such a chapter update, also when Claude proposes it as its only change, is saved right away with an **Undo** button (or say "undo"/"oeps"); everything else still waits for Confirm. Settings › Sunny › **Save chapter updates right away** turns that off. When a quick log was wrong and you log the right series with the same chapter, Sunny remembers what it heard as a **nickname** (Settings › Sunny lists them, with Remove). The microphone sends its other guesses along, so Sunny can work out a misheard title, and a short tone plays when it starts and stops listening (**Sounds**, per device).
@@ -444,6 +524,7 @@ Progen only runs on your own computer (`127.0.0.1`), but your browser can also s
   - `HX-Request: true`: the web page itself (htmx always sends this);
   - `Content-Type: application/json`: the JSON API and scripts (also for a `DELETE` without a body);
   - `X-Progen-Shutdown: 1`: Stop Progen.
+- **The ingest token** (`PROGEN_INGEST_TOKEN`): a Shortcut has no session cookie, so through an extra host `/fitness/ingest/...`, and only those paths, also accept `Authorization: Bearer <token>` instead of the login. See [Fitness](#fitness-done).
 - **If the browser says a request comes from another site** (`Origin` or `Sec-Fetch-Site: cross-site`), it is refused, even with the right header.
 - Reading (`GET`) is always allowed; another website can't read the answers anyway (same-origin policy).
 - Progen is never opened to the internet; for your phone it goes through your private Tailscale network.
@@ -472,9 +553,9 @@ Manual entry first; automatic importing comes later (see item 5).
 
 ### 3. Fitness domain
 
-- [ ] Make an event model.
-- [ ] Possible events: `WorkoutLogged` (kind, duration, optionally distance or sets).
-- [ ] Possible read models: WorkoutHistory, totals per week.
+- [x] Make an event model (see [Fitness](#fitness-done)): steps per day and gym visits, sent by the iPhone, nothing logged by hand.
+- [x] Events `StepsRecorded`, `GymArrived`, `GymLeft`; read models steps per day, gym visits, week totals and the gym streak.
+- [ ] Possible later: workouts with a kind, duration or sets (`WorkoutLogged`), if the gym visits aren't enough.
 
 ### 4. Dashboard
 

@@ -14,3 +14,9 @@ def local_now() -> dt.datetime:
 def today() -> dt.date:
     """The local date."""
     return local_now().date()
+
+
+def to_local(moment: dt.datetime) -> dt.datetime:
+    """A moment with a UTC offset (an iPhone's "2026-10-16T18:30:00+02:00") as this PC's local time
+    without a time zone. A moment without an offset is taken to be local time already."""
+    return moment.astimezone().replace(tzinfo=None) if moment.tzinfo else moment

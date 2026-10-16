@@ -13,6 +13,7 @@ const TRACKERS = {
   watching: { add: "Add title", tabs: ["dashboard", "library", "progress"] },
   listening: { add: null, tabs: ["dashboard", "history", "progress"] },  // plays come from Spotify
   planner: { add: null, tabs: ["week", "upcoming", "day", "someday"] },  // entry goes through the field at the top
+  fitness: { add: null, tabs: ["dashboard", "history"] },  // steps and gym visits come from the iPhone
 };
 const OLD_ADDRESSES = { dashboard: "reading", library: "reading/library", progress: "reading/progress" };
 

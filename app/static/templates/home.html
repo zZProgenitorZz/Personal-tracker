@@ -1,6 +1,6 @@
 {% import "_macros.html" as ui %}
 {# Home screen: one card per tracker. Refreshes after a change in any tracker. #}
-<div class="page" hx-disinherit="*" hx-get="/ui/home" hx-trigger="reading-changed from:body, watching-changed from:body, listening-changed from:body, planner-changed from:body" hx-swap="outerHTML">
+<div class="page" hx-disinherit="*" hx-get="/ui/home" hx-trigger="reading-changed from:body, watching-changed from:body, listening-changed from:body, planner-changed from:body, fitness-changed from:body" hx-swap="outerHTML">
   <header class="page-head">
     <div>
       <p class="eyebrow">{{ greeting }}</p>

@@ -1,0 +1,80 @@
+{% import "_macros.html" as ui %}
+<div class="page" hx-disinherit="*" hx-get="/ui/fitness/dashboard" hx-trigger="fitness-changed from:body" hx-swap="outerHTML">
+  {{ ui.tracker_tabs('fitness', 'dashboard', tabs) }}
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Fitness</p>
+      <h1>How active <span class="grad-text">you've been</span></h1>
+      <p class="lede">
+        {%- if week.visits %}{{ week.visits }} gym visit{{ '' if week.visits == 1 else 's' }} this week.
+        {%- elif has_data %}No gym visits yet this week.
+        {%- else %}Steps and gym visits arrive by themselves from your iPhone.{% endif -%}
+      </p>
+    </div>
+  </header>
+
+  {% if has_data %}
+  <section class="stats" aria-label="This week">
+    {{ ui.stat('dumbbell', 'purple', week.visits, 'Gym visits this week') }}
+    {{ ui.stat('clock', 'teal', week.gym_hours|chapter, 'Gym hours this week') }}
+    {{ ui.stat('trending', 'amber', week.average_steps, 'Average steps this week') }}
+    {{ ui.stat('flame', 'green', streak, 'Weeks in a row at the gym') }}
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Steps per day</h2><span class="muted">Last {{ steps_bars|length }} days</span></div>
+    <div class="bars" style="grid-template-columns: repeat({{ steps_bars|length }}, minmax(0, 1fr))">
+      {% for d in steps_bars %}
+      <div class="bar{% if loop.last %} is-current{% endif %}" title="{{ d.day.strftime('%a %d %b') }}: {{ d.value }} steps">
+        <span class="bar-value"></span>
+        <div class="bar-track"><div class="bar-fill" style="height: {{ d.height }}%"></div></div>
+        <span class="bar-label">{{ d.label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <div class="two-col spaced">
+    <section class="panel">
+      <div class="panel-head"><h2>Gym visits per week</h2><span class="muted">Last {{ visit_weeks|length }} weeks</span></div>
+      <div class="bars">
+        {% for w in visit_weeks %}
+        <div class="bar{% if loop.last %} is-current{% endif %}" title="Week of {{ w.start.strftime('%d %b') }}: {{ w.value|int }} visits">
+          <span class="bar-value">{{ w.value|int if w.value else '' }}</span>
+          <div class="bar-track"><div class="bar-fill" style="height: {{ w.height }}%"></div></div>
+          <span class="bar-label">{{ w.label }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Latest visits</h2>
+        <a class="link" href="#fitness/history">History {{ ui.icon('arrow-right', 15) }}</a>
+      </div>
+      {% if recent %}
+      <ol class="play-list">
+        {% for v in recent %}
+        <li>
+          <span class="play-icon">{{ ui.icon('dumbbell', 15) }}</span>
+          <div class="play-text">
+            <b>{{ v.start.strftime('%a %d %b') }}</b>
+            <span>{{ v.start.strftime('%H:%M') }}{% if v.end %}–{{ v.end.strftime('%H:%M') }}{% endif %} · {% if v.in_progress %}at the gym now{% else %}{{ duration(v.minutes) }}{% endif %}</span>
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+      {% else %}<p class="muted">No gym visits yet.</p>{% endif %}
+    </section>
+  </div>
+  {% else %}
+  <section class="panel">
+    <div class="empty">
+      <div class="empty-icon">{{ ui.icon('dumbbell', 22) }}</div>
+      <h3>Nothing here yet</h3>
+      <p>Progen logs nothing by hand. Set up the Shortcuts on your iPhone (see the README, section Fitness) and the steps and gym visits appear here.</p>
+    </div>
+  </section>
+  {% endif %}
+</div>

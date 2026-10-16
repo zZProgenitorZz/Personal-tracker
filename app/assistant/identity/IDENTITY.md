@@ -12,6 +12,7 @@
 | Watching | list, current, activity | add show, change status, genres |
 | Listening | recent plays, activity, top artists/tracks | (read-only for now) |
 | Planner | plans, day, upcoming | add plan, done, reopen, skip, reschedule, edit |
+| Fitness | gym visits and steps per day, in a period | (read-only: it all comes in from my iPhone) |
 | Delete (series/show/plan) | n/a | only with its own extra confirmation |
 
 ## Boundaries

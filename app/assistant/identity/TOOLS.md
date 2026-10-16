@@ -11,7 +11,7 @@ One agent, one lane: Sunny only works on the tracker data. Tools call the existi
 | `library` | `domain` (reading/watching), optional `status` (checked against that domain) | library projection (title, chapter, status, `updated_at`) or watchlist projection (title, kind, status) |
 | `listening_stats` | `from`, `to`, optional `limit` (5, max 25) | listening projections: minutes, days listened, total `plays`, top artists and top tracks; `top_track_tie` / `top_artist_tie` = how many share first place (only when tied, counted over the whole period) |
 | `plans_between` | `from`, `to` | agenda, repeats worked out |
-| `history_between` | `from`, `to`, optional `domain` (reading/watching) | reading and watch history projections: chapters (first → last), status changes, finished shows, totals |
+| `history_between` | `from`, `to`, optional `domain` (reading/watching/fitness) | reading and watch history projections: chapters (first → last), status changes, finished shows, totals; fitness: gym visits (day, start, end, minutes; null = departure missed) and steps per day, latest 40 rows, totals over the whole period. Without a domain, fitness is only included when there is something. Fitness has no write tool and isn't in the write tools' `domain` |
 | `notices` | none | the same notices as on Sunny's button (overdue plans, a streak about to end, dusty titles, an old backlog), minus the ones put away with "Not today"; fixed lines, no AI |
 | `item_history` | `domain` (reading/watching), `id` from `find_item` | the same history: added, every status change with its date, times completed/rewatched, reading days; earlier removed versions included |
 

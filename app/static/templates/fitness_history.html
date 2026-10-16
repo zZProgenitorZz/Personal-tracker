@@ -1,0 +1,36 @@
+{% import "_macros.html" as ui %}
+<div class="page" hx-disinherit="*" hx-get="/ui/fitness/history" hx-trigger="fitness-changed from:body" hx-swap="outerHTML">
+  {{ ui.tracker_tabs('fitness', 'history', tabs) }}
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Fitness · History</p>
+      <h1>Day by <span class="grad-text">day</span></h1>
+      <p class="lede">Steps and gym visits of the last {{ days }} days, newest first.</p>
+    </div>
+  </header>
+
+  <section class="panel">
+    {% if rows %}
+    <ol class="play-list">
+      {% for row in rows %}
+      <li>
+        <span class="play-icon">{{ ui.icon('dumbbell' if row.visits else 'trending', 15) }}</span>
+        <div class="play-text">
+          <b>{{ row.day.strftime('%a %d %b') }}</b>
+          <span>
+            {%- if row.steps is not none %}{{ row.steps }} steps{% endif -%}
+            {%- for v in row.visits %}{% if row.steps is not none or not loop.first %} · {% endif %}gym {{ v.start.strftime('%H:%M') }}{% if v.end %}–{{ v.end.strftime('%H:%M') }}{% endif %} ({% if v.in_progress %}now{% else %}{{ duration(v.minutes) }}{% endif %}){% endfor -%}
+          </span>
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <div class="empty">
+      <div class="empty-icon">{{ ui.icon('dumbbell', 22) }}</div>
+      <h3>Nothing yet</h3>
+      <p>Steps and gym visits arrive from your iPhone by themselves (see the README, section Fitness).</p>
+    </div>
+    {% endif %}
+  </section>
+</div>

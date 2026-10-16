@@ -13,6 +13,9 @@ from app.assistant.tools import (
     MAX_STRICT_TOOLS, READ_TOOLS, TOOL_DEFINITIONS, WRITE_TOOLS, ToolError, TrackerData, run_tool,
 )
 from app.eventstore import EventStore
+from app import clock
+from app.fitness.commands import ArriveAtGym, FitnessCommandHandler, LeaveGym, RecordSteps
+from app.fitness.projections import GymProjection, StepsProjection
 from app.listening.commands import ListeningCommandHandler, RecordPlay
 from app.listening.events import TrackPlayed
 from app.listening.projections import ListeningActivityProjection, TopArtistsProjection, TopTracksProjection
@@ -39,8 +42,9 @@ def data():
                                        AgendaProjection())
     reading_activity, reading_history, watch_history = (ReadingActivityProjection(), ReadingHistoryProjection(),
                                                         WatchHistoryProjection())
+    steps, gym = StepsProjection(), GymProjection()
     for projection in (library, watchlist, listen, artists, tracks, agenda, reading_activity, reading_history,
-                       watch_history):
+                       watch_history, steps, gym):
         store.subscribe(projection.apply)
     reading, watching, planner = ReadingCommandHandler(store, library), WatchingCommandHandler(store, watchlist), \
         PlannerCommandHandler(store)
@@ -51,7 +55,7 @@ def data():
     ListeningCommandHandler(store).handle(RecordPlay(dt.datetime(2026, 10, 1, 12, tzinfo=dt.timezone.utc),
                                                      "spotify:track:x", "Midnight City", ["M83"], "Hurry Up", "a", 240_000))
     tracker = TrackerData(library=library, watchlist=watchlist, listening=listen,
-                          top_artists=artists, top_tracks=tracks, agenda=agenda, reading_activity=reading_activity,
+                          top_artists=artists, top_tracks=tracks, agenda=agenda, steps=steps, gym=gym, reading_activity=reading_activity,
                           reading_history=reading_history,
                           watch_history=watch_history, reading=reading, watching=watching,
                           planner=planner, now=lambda: dt.datetime(2026, 10, 11, 10, 0))
@@ -268,6 +272,41 @@ def test_history_between_is_compact_json_for_reading_and_watching(data):
     json.dumps(result)
     only, _ = run_tool("history_between", {"from": today, "to": today, "domain": "watching"}, data)
     assert set(only) == {"watching", "totals"}
+
+
+def test_history_between_includes_fitness(data, monkeypatch):
+    monkeypatch.setattr(clock, "local_now", lambda: dt.datetime(2026, 10, 11, 10, 0))
+    fitness = FitnessCommandHandler(data.store)
+    for command in (RecordSteps(dt.date(2026, 10, 9), 8000), RecordSteps(dt.date(2026, 10, 10), 12_000),
+                    RecordSteps(dt.date(2026, 9, 1), 500),  # outside the period
+                    ArriveAtGym(dt.datetime(2026, 10, 10, 18, 0)), LeaveGym(dt.datetime(2026, 10, 10, 19, 15)),
+                    ArriveAtGym(dt.datetime(2026, 10, 11, 7, 0)), LeaveGym(dt.datetime(2026, 10, 11, 7, 4))):
+        fitness.handle(command)
+    result, pending = run_tool("history_between", {"from": "2026-10-05", "to": "2026-10-11", "domain": "fitness"}, data)
+    assert pending is None and set(result) == {"fitness", "totals"}
+    assert result["fitness"] == {
+        "gym_visits": [{"day": "2026-10-10", "start": "18:00", "end": "19:15", "minutes": 75}],  # 4 minutes: walking past
+        "steps": [{"day": "2026-10-09", "steps": 8000}, {"day": "2026-10-10", "steps": 12_000}]}
+    assert result["totals"] == {"finished": 0, "gym_visits": 1, "gym_minutes": 75, "steps": 20_000, "days_with_steps": 2}
+    json.dumps(result)
+    # Without a domain it comes along when there is something, and stays out of the way when there isn't.
+    everything, _ = run_tool("history_between", {"from": "2026-10-05", "to": "2026-10-11", "domain": None}, data)
+    assert everything["fitness"] == result["fitness"] and "reading" in everything and "watching" in everything
+    quiet, _ = run_tool("history_between", {"from": "2026-08-01", "to": "2026-08-07", "domain": None}, data)
+    assert "fitness" not in quiet
+    reading_only, _ = run_tool("history_between", {"from": "2026-10-05", "to": "2026-10-11", "domain": "reading"}, data)
+    assert "fitness" not in reading_only
+
+
+def test_fitness_is_read_only_for_sunny(data):
+    history = next(t for t in TOOL_DEFINITIONS if t["name"] == "history_between")
+    allowed = history["input_schema"]["properties"]["domain"]["anyOf"][0]["enum"]
+    assert allowed == ["reading", "watching", "fitness"]
+    for tool in TOOL_DEFINITIONS:
+        if tool["strict"]:  # the write tools keep their own domains: no way to change fitness
+            assert "fitness" not in str(tool["input_schema"])
+    with pytest.raises(KeyError):
+        data.handler("fitness")
 
 
 def test_item_history_includes_earlier_removed_versions(data):

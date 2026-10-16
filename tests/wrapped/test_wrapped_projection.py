@@ -1,7 +1,9 @@
 """Wrapped: the year in review, built from the existing events of all trackers."""
 from datetime import date, datetime, timedelta
 
+from app import clock
 from app.eventstore import EventStore
+from app.fitness.events import GymArrived, GymLeft, StepsRecorded
 from app.listening.events import TrackPlayed
 from app.event_types import ALL_EVENT_TYPES
 from app.reading.events import GenresChanged, Kind, ProgressLogged, SeriesRemoved, SeriesStarted, Status, StatusChanged
@@ -288,3 +290,21 @@ def test_rebuilt_equals_live_with_re_added_series():
     assert rebuilt.year(2025) == live.year(2025)
     [(title, chapters)] = live.year(2025).top_series
     assert (title.cover, chapters, live.year(2025).reading_genres) == ("ss.webp", 60, [("Fantasy", 60)])
+
+
+# ---- Fitness ----
+
+def test_fitness_counts_gym_visits_hours_and_steps(monkeypatch):
+    monkeypatch.setattr(clock, "local_now", lambda: datetime(2026, 10, 20, 12, 0))
+    day = date(2026, 3, 3)
+    projection = given(
+        GymArrived(day, datetime(2026, 3, 3, 18, 0)), GymLeft(day, datetime(2026, 3, 3, 19, 30)),
+        GymArrived(day, datetime(2026, 3, 3, 20, 0)), GymLeft(day, datetime(2026, 3, 3, 20, 5)),  # walking past
+        GymArrived(date(2025, 12, 31), datetime(2025, 12, 31, 18, 0)), GymLeft(date(2025, 12, 31), datetime(2025, 12, 31, 19, 0)),
+        StepsRecorded(day, 6000), StepsRecorded(day, 9000), StepsRecorded(date(2026, 3, 4), 4000),
+    )
+    review = projection.year(2026)
+    assert (review.gym_visits, review.gym_hours, review.steps_total) == (1, 1.5, 13_000)
+    assert review.best_steps_day == (day, 9000)  # the last number for a day counts
+    assert review.has_data and projection.years() == [2026, 2025]  # 2025 has only a gym visit
+    assert projection.year(2024).best_steps_day is None and not projection.year(2024).has_data
