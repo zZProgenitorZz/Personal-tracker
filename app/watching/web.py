@@ -13,7 +13,7 @@ from ..cover_search import CoverSearch
 from ..charts import genre_bars, percent
 from ..covers import CoverError, CoverStore, with_cover
 from ..domain import DomainError
-from ..web import Backlog, cover_search_response, pick_from_backlog, render, save_cover, templates, toast
+from ..web import Backlog, cover_search_response, keep_order, pick_from_backlog, render, save_cover, templates, toast
 from .commands import AddShow, ChangeShowStatus, RemoveShow, SetShowGenres, WatchingCommandHandler
 from .events import WATCH_KIND_LABELS, WATCH_STATUS_LABELS, WatchKind, WatchStatus
 from .genres import WATCH_GENRES
@@ -96,11 +96,12 @@ def create_watching_web_router(
     # Reading
 
     @router.get("/dashboard")
-    def dashboard(request: Request):
+    def dashboard(request: Request, order: str = ""):
         summary = watching_summary(watchlist, activity)
         now = clock.utc_now()
+        ordered = keep_order(watchlist.currently_watching(), order, lambda e: e.show_id)
         return render(request, "watching_dashboard.html", summary=summary,
-                      current=watchlist.currently_watching()[:6], counts=counts(),
+                      current=ordered[:6], order=",".join(e.show_id for e in ordered), counts=counts(),
                       dust=watchlist.stale(now, STALE_WATCHING_DAYS), dust_days=STALE_WATCHING_DAYS,
                       dust_shown=DUST_SHOWN, now=now)
 

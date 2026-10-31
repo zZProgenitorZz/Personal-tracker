@@ -12,7 +12,7 @@ from .. import clock
 from ..covers import CoverError, CoverStore, with_cover
 from ..domain import DomainError
 from ..charts import genre_bars, last_days, last_weeks, with_height
-from ..web import Backlog, cover_search_response, pick_from_backlog, render, save_cover, toast, templates
+from ..web import Backlog, cover_search_response, keep_order, pick_from_backlog, render, save_cover, toast, templates
 from ..cover_search import CoverSearch
 from .commands import ChangeStatus, LogProgress, ReadingCommandHandler, RemoveSeries, SetGenres, StartSeries
 from .events import KIND_LABELS, STATUS_LABELS, Kind, Status, StatusChanged
@@ -106,13 +106,14 @@ def create_reading_web_router(
     # Reading
 
     @router.get("/dashboard")
-    def dashboard(request: Request):
+    def dashboard(request: Request, order: str = ""):
         today = clock.today()
         now = clock.utc_now()
+        ordered = keep_order(library.currently_reading(), order, lambda e: e.series_id)
         return render(
             request, "reading_dashboard.html",
             stats=overview(today),
-            current=library.currently_reading()[:6],
+            current=ordered[:6], order=",".join(e.series_id for e in ordered),
             week=with_height(last_days(activity.per_day(), today, 7)),
             counts=status_counts(),
             library_size=len(library.all()),

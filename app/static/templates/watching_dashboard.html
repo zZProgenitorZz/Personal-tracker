@@ -1,5 +1,6 @@
 {% import "_macros.html" as ui %}
-<div class="page" hx-disinherit="*" hx-get="/ui/watching/dashboard" hx-trigger="watching-changed from:body" hx-swap="outerHTML">
+{# A refresh keeps the order of the cards on screen (keep_order in app/web.py); navigating starts fresh. #}
+<div class="page" hx-disinherit="*" hx-get="/ui/watching/dashboard{% if order %}?order={{ order }}{% endif %}" hx-trigger="watching-changed from:body" hx-swap="outerHTML">
   {{ ui.tracker_tabs('watching', 'dashboard') }}
   <header class="page-head">
     <div>

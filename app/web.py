@@ -137,6 +137,19 @@ def toast(request: Request, message: str, *, error: bool = False, changed: str |
     return response
 
 
+def keep_order(entries: list, order: str, item_id: Callable[[object], str]) -> list:
+    """`entries` in their normal order (latest update first), unless `order` is given: the ids of the
+    cards as they were on screen, comma-separated. Then those cards keep their place, new entries come
+    in front and entries that are gone drop out. A dashboard refreshing itself after your own action
+    sends it, so the card you just updated doesn't jump to the top; navigating sends nothing."""
+    place = {known_id: n for n, known_id in enumerate(i for i in order.split(",") if i)}
+    if not place:
+        return entries
+    new = [e for e in entries if item_id(e) not in place]
+    known = sorted((e for e in entries if item_id(e) in place), key=lambda e: place[item_id(e)])
+    return new + known
+
+
 @dataclass
 class Backlog:
     """One tracker's Plan to Read/Watch, for the "Pick something" button in the Library."""
